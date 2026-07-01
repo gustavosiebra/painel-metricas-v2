@@ -12,6 +12,7 @@ import {
 } from "../services/studyService.js";
 import { getState } from "../state.js";
 import { navigate } from "../router.js";
+import { getWeight, upsertWeight } from "../services/weightService.js";
 
 const STUDY_TYPES = [
   { value: "questao", label: "Questões" },
@@ -96,6 +97,22 @@ export async function renderStudyFormPage(container, params) {
             ${disciplines.map((d) => `<option value="${d.id}" ${existingSession?.discipline_id === d.id ? "selected" : ""}>${escapeHtml(d.name)}</option>`).join("")}
           </select>
         </div>
+        <div class="card" id="weight-shortcut-box" style="display:none; margin:8px 0; padding:12px; background:var(--color-bg-subtle, #f5f5f5);">
+          <p style="margin:0 0 8px 0;">Ainda não há peso definido para esta disciplina neste concurso.</p>
+          <div class="form-field">
+            <label for="shortcut_weight">Peso</label>
+            <select id="shortcut_weight">
+              <option value="baixo">Baixo</option>
+              <option value="alto">Alto</option>
+            </select>
+          </div>
+          <div class="form-field">
+            <label for="shortcut_expected_questions">Questões esperadas na prova (opcional)</label>
+            <input type="number" id="shortcut_expected_questions" min="0" step="1" />
+          </div>
+          <button type="button" id="shortcut_save_weight" class="btn-link">Salvar peso</button>
+          <span id="weight-shortcut-status" style="margin-left:8px;"></span>
+        </div>
         <div class="form-field" id="question-set-field" style="display:${existingSession?.discipline_id ? "block" : "none"};">
           <label for="question_set_id">Caderno</label>
           <select id="question_set_id">
@@ -156,7 +173,10 @@ export async function renderStudyFormPage(container, params) {
   }
 
   function wireForm() {
+    const examSelect = card.querySelector("#exam_id");
     const disciplineSelect = card.querySelector("#discipline_id");
+    const weightShortcutBox = card.querySelector("#weight-shortcut-box");
+    const weightShortcutStatus = card.querySelector("#weight-shortcut-status");
     const questionSetField = card.querySelector("#question-set-field");
     const questionSetSelect = card.querySelector("#question_set_id");
     const newCadernoBox = card.querySelector("#new-caderno-box");
@@ -184,12 +204,56 @@ export async function renderStudyFormPage(container, params) {
       }
       questionSetField.style.display = "block";
       populateQuestionSets(disciplineId, null);
+      checkWeightShortcut();
     });
 
     // Pré-popular caderno em modo edição, já com a disciplina existente.
     if (existingSession?.discipline_id) {
       populateQuestionSets(existingSession.discipline_id, existingSession.question_set_id);
     }
+
+    // Atalho de Peso: só faz sentido com concurso E disciplina escolhidos — sem
+    // concurso não há em que "pendurar" o peso (é por disciplina × edital).
+    // Some silenciosamente quando já existe peso salvo ou quando falta um dos dois.
+    async function checkWeightShortcut() {
+      const examId = examSelect.value;
+      const disciplineId = disciplineSelect.value;
+      weightShortcutStatus.textContent = "";
+      if (!examId || !disciplineId) {
+        weightShortcutBox.style.display = "none";
+        return;
+      }
+      try {
+        const existing = await getWeight({ examId, disciplineId });
+        weightShortcutBox.style.display = existing ? "none" : "block";
+      } catch (err) {
+        // Falha silenciosa: o atalho é conveniência, não deve travar o registro da sessão.
+        weightShortcutBox.style.display = "none";
+      }
+    }
+    examSelect.addEventListener("change", checkWeightShortcut);
+    if (existingSession?.exam_id && existingSession?.discipline_id) checkWeightShortcut();
+
+    card.querySelector("#shortcut_save_weight").addEventListener("click", async () => {
+      const { user } = getState();
+      const examId = examSelect.value;
+      const disciplineId = disciplineSelect.value;
+      const weight = card.querySelector("#shortcut_weight").value;
+      const expectedQuestions = card.querySelector("#shortcut_expected_questions").value;
+      try {
+        await upsertWeight({
+          userId: user.id,
+          examId,
+          disciplineId,
+          weight,
+          expectedQuestions: expectedQuestions ? Number(expectedQuestions) : null,
+        });
+        weightShortcutBox.style.display = "none";
+        weightShortcutStatus.textContent = "";
+      } catch (err) {
+        weightShortcutStatus.textContent = `Erro ao salvar peso: ${err.message}`;
+      }
+    });
 
     questionSetSelect.addEventListener("change", () => {
       newCadernoBox.style.display = questionSetSelect.value === "__new__" ? "block" : "none";

@@ -42,3 +42,16 @@ export async function deleteWeight(id) {
   const { error } = await supabase.from("exam_disciplines").delete().eq("id", id);
   if (error) throw error;
 }
+
+// Usado pelo atalho inline na Nova Sessão: existe peso salvo para esse par?
+// Retorna null se não existir (nem erro — ausência é esperada e normal).
+export async function getWeight({ examId, disciplineId }) {
+  const { data, error } = await supabase
+    .from("exam_disciplines")
+    .select("id, weight, expected_questions, target_accuracy")
+    .eq("exam_id", examId)
+    .eq("discipline_id", disciplineId)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}

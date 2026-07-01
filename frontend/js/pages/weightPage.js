@@ -10,7 +10,6 @@ import { getState } from "../state.js";
 
 const WEIGHT_OPTIONS = [
   { value: "baixo", label: "Baixo" },
-  { value: "medio", label: "Médio" },
   { value: "alto", label: "Alto" },
 ];
 
@@ -22,7 +21,7 @@ export async function renderWeightPage(container) {
         <main class="app-content">
           <h2 class="form-title">Peso por Disciplina × Concurso</h2>
           <p style="color:var(--color-text-muted); max-width:640px;">
-            Define o peso (Baixo/Médio/Alto) que uma disciplina tem em um concurso específico.
+            Define o peso (Baixo/Alto) que uma disciplina tem em um concurso específico.
             Usado pela métrica Prioridade (peso × Diagnóstico Wilson) — nunca entra no cálculo
             de desempenho histórico, só em priorização (NEG-001).
           </p>
