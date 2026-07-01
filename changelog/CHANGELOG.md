@@ -23,3 +23,7 @@
 - Tela de Login/Cadastro/Recuperação (loginPage.js) e placeholder de Dashboard (dashboardPage.js) para validar o fluxo ponta a ponta.
 - 2 contas de teste criadas via Supabase Auth; trigger `handle_new_user` confirmado criando `profiles` automaticamente para ambas.
 - gustavosiebra@gmail.com promovida a `is_admin = true` (superusuário do catálogo).
+
+### Fase 3 — Cadastros base (em andamento)
+- Catálogo inicial aplicado (`database/seeds/0001_catalogo_inicial.sql`): 10 bancas, 12 disciplinas, 5 concursos (só nome do órgão — banca/ano/cargo a completar depois).
+- Situação, Peso, Risco e Confiança da planilha V1 não foram migrados — eram legenda de valores possíveis, não dado por disciplina; Situação vive no Caderno (ainda não criado) e Peso vive em exam_disciplines (edital × disciplina), a preencher quando houver vínculo real.
