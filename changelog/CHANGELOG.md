@@ -41,7 +41,7 @@
 - Decisão confirmada em 01/07/2026: status de `study_sessions` (ativo/inativo) é independente do status de `question_sets` (o caderno). Arquivar uma sessão não altera o caderno — status do caderno é decisão própria, feita na tela de Catálogo (ação ainda não construída).
 - Decisão confirmada em 01/07/2026, vale para a Fase 5: toda view/função de métrica filtra `study_sessions.status = 'ativo'` — sessão arquivada nunca entra em Diagnóstico, Eficiência, Estabilidade ou qualquer outra métrica.
 
-### Fase 5 — Camada Analítica (em andamento)
+### Fase 5 — Camada Analítica (concluída)
 - `get_user_param(user_id, key, default)`: parametrização centralizada (NEG-005) sem pré-popular `user_parameters` — cai no default embutido no código se o usuário não tiver sobrescrito nada.
 - `wilson_lower_bound(correct, total)`: limite inferior de Wilson, z≈1,2816 fixo (80% de confiança bilateral, NEG-002). Validado com casos conhecidos (N=30/90% bruto → 80,78%, cruzando o corte 80% como o Doc. Único previa).
 - `v_diagnostico_caderno` / `v_diagnostico_disciplina`: Wilson por caderno e soma bruta por disciplina, classificação preliminar/crítico/atenção/consolidado. Validado com dado real e isolamento RLS (0 linhas para o outro usuário).
@@ -56,3 +56,13 @@
 - Tela **Peso** (`/pesos`, `weightService.js`) — antecipada da Fase 7 por decisão do usuário: sem peso real, a métrica Prioridade ficaria sem dado até a Fase 7 ter uma tela completa de parâmetros. Define `weight`/meta de acerto/questões esperadas por disciplina × concurso (`exam_disciplines`).
 - Hardening: todas as views com `security_invoker = true`; todas as funções `SECURITY INVOKER` (nenhuma `SECURITY DEFINER` nova); `EXECUTE`/`SELECT` revogados de `anon`/`public`, concedidos só a `authenticated`. Validado com Security e Performance Advisors (nenhum achado novo) e com isolamento RLS real nas 10 views/funções novas (0 linhas para o segundo usuário de teste em todas elas).
 - Migrations 0023 a 0030 (0027 é correção de ordenação da 0026, não uma métrica nova).
+- Decisão de 01/07/2026: `weight_level` passa de 3 níveis (baixo/medio/alto) para binário (baixo/alto) — peso só serve para priorização (nunca pontuação, NEG-001), e 3 níveis tendiam a virar "todo mundo marca médio" (viés de tendência central). Migration 0031 recria o enum (0 linhas afetadas, tabela ainda vazia).
+- `v_prioridade` recriada (migration 0032) com `peso_numerico_pct`: quando `expected_questions` está preenchido (edital publica distribuição real de questões por disciplina), esse número tem precedência sobre o rótulo alto/baixo — participação real calculada sobre o total de questões conhecidas do concurso. Sem `expected_questions`, o rótulo categórico continua sendo o sinal disponível.
+- Atalho de Peso na Nova Sessão (`studyFormPage.js` + `weightService.getWeight`): ao escolher Concurso + Disciplina, se aquele par ainda não tem peso salvo, aparece um bloco inline para definir peso (e opcionalmente questões esperadas) sem sair da tela — resolve o risco de a Prioridade ficar muda por esquecimento, sem duplicar o campo em cada sessão registrada.
+- Testado pelo usuário em 01/07/2026: tela de Peso (só Baixo/Alto) e atalho inline na Nova Sessão — "testado, deu certo".
+
+### Fase 6 — Dashboard (em andamento)
+- `v_diagnostico_geral` (migration 0033): Wilson agregado de todas as disciplinas do usuário (soma bruta, mesmo princípio da 3.3) — alimenta o KPI de topo. Validado com dado real (235 questões, 166 acertos → Wilson 66,7%, "atenção") e isolamento RLS.
+- `dashboardService.js`: getKpis (horas totais, sessões ativas, disciplinas em estudo, Diagnóstico geral), getRankingRisco (junta `v_diagnostico_disciplina` com `v_prioridade`, ordena por severidade — crítico > atenção > preliminar > consolidado — e Wilson crescente), getMediaMovelSemanal (RPC de `media_movel_semanal`), pickProximaAcao (seleção em JS: prioriza disciplinas com peso "alto", sem nenhuma cai para a pior classificação geral — não é uma fórmula estatística nova, só ordena o que o banco já calculou, TEC-006).
+- Dashboard reconstruído (`dashboardPage.js`): KPIs, caixa de Próxima Ação, Ranking de Risco (tabela com badges de classificação e peso), gráfico de linha (Chart.js, via CDN — TEC-003) da Média Móvel Semanal (% do dia vs. média de 7 dias).
+- Advisors rodados de novo após a nova view: nenhum achado novo.

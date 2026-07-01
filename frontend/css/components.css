@@ -135,3 +135,57 @@
   font-size: 12px;
   text-transform: uppercase;
 }
+
+/* Fase 6 — Dashboard */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--spacing-3);
+  margin-bottom: var(--spacing-4);
+}
+
+.kpi-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: var(--spacing-3);
+}
+
+.kpi-card__label {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  margin: 0 0 4px;
+}
+
+.kpi-card__value {
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--color-primary);
+  margin: 0;
+}
+
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.badge--critico { background: #fdecea; color: #b91c1c; }
+.badge--atencao { background: #fff4e5; color: #b45309; }
+.badge--preliminar { background: #eceff1; color: #546e7a; }
+.badge--consolidado { background: #eaf6ea; color: #2e7d32; }
+
+.badge--peso-alto { background: #e3f2fd; color: #1565c0; }
+.badge--peso-baixo { background: #eceff1; color: #607d8b; }
+
+.proxima-acao {
+  border-left: 4px solid var(--color-primary);
+  background: var(--color-surface);
+  border-radius: var(--radius);
+  padding: var(--spacing-3);
+  margin-bottom: var(--spacing-4);
+}
