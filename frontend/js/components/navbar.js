@@ -11,6 +11,7 @@ export function renderNavbar(activeRoute) {
     { path: "/sessoes/nova", label: "Nova Sessão" },
     { path: "/sessoes", label: "Sessões" },
     { path: "/catalogo", label: "Catálogo" },
+    { path: "/pesos", label: "Peso" },
   ];
 
   const linksHtml = links

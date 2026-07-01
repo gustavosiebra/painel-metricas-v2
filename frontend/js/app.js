@@ -7,12 +7,14 @@ import { renderDashboardPage } from "./pages/dashboardPage.js";
 import { renderCatalogPage } from "./pages/catalogPage.js";
 import { renderStudyFormPage } from "./pages/studyFormPage.js";
 import { renderSessionsPage } from "./pages/sessionsPage.js";
+import { renderWeightPage } from "./pages/weightPage.js";
 
 registerRoute("/login", renderLoginPage);
 registerRoute("/dashboard", renderDashboardPage);
 registerRoute("/catalogo", renderCatalogPage);
 registerRoute("/sessoes/nova", renderStudyFormPage);
 registerRoute("/sessoes", renderSessionsPage);
+registerRoute("/pesos", renderWeightPage);
 registerRoute("/", renderDashboardPage);
 
 async function bootstrap() {
