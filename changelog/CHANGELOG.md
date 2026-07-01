@@ -38,3 +38,5 @@
 - router.js passou a suportar querystring simples (`#/sessoes/nova?id=...`), necessário para reaproveitar o formulário em modo edição.
 - studyService.js expandido: listSessions (filtro por disciplina/status), getSessionById, updateStudySession (ajusta session_results conforme o tipo muda), setSessionStatus (arquivar/reativar).
 - Tela "Sessões" (sessionsPage.js): lista com filtro por disciplina e status (ativas/arquivadas/todas), editar (reabre o formulário preenchido) e arquivar/reativar — sem exclusão física em nenhum momento.
+- Decisão confirmada em 01/07/2026: status de `study_sessions` (ativo/inativo) é independente do status de `question_sets` (o caderno). Arquivar uma sessão não altera o caderno — status do caderno é decisão própria, feita na tela de Catálogo (ação ainda não construída).
+- Decisão confirmada em 01/07/2026, vale para a Fase 5: toda view/função de métrica filtra `study_sessions.status = 'ativo'` — sessão arquivada nunca entra em Diagnóstico, Eficiência, Estabilidade ou qualquer outra métrica.

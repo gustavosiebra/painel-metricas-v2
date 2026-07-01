@@ -104,7 +104,10 @@ export async function getSessionById(sessionId) {
   return data;
 }
 
-export async function listSessions({ disciplineId, status = "ativo", limit = 100 } = {}) {
+// status: "ativo" | "inativo" | undefined (undefined = sem filtro, todas).
+// Sem valor padrão de propósito — "Todas" no formulário manda undefined, e um
+// default aqui faria "Todas" se comportar como "Ativas" por acidente.
+export async function listSessions({ disciplineId, status, limit = 100 } = {}) {
   let query = supabase
     .from("study_sessions")
     .select(
