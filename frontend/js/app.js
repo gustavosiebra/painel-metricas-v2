@@ -4,9 +4,11 @@ import { registerRoute, startRouter, navigate } from "./router.js";
 import { initAuth, guardRoute } from "./auth.js";
 import { renderLoginPage } from "./pages/loginPage.js";
 import { renderDashboardPage } from "./pages/dashboardPage.js";
+import { renderCatalogPage } from "./pages/catalogPage.js";
 
 registerRoute("/login", renderLoginPage);
 registerRoute("/dashboard", renderDashboardPage);
+registerRoute("/catalogo", renderCatalogPage);
 registerRoute("/", renderDashboardPage);
 
 async function bootstrap() {

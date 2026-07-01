@@ -1,36 +1,29 @@
-// Placeholder do Dashboard — só para provar autenticação + isolamento ponta a ponta
-// na Fase 2. O Dashboard real (KPIs, gráficos, ranking) é construído na Fase 6.
+// Placeholder do Dashboard — prova autenticação + isolamento ponta a ponta na
+// Fase 2. O Dashboard real (KPIs, gráficos, ranking) é construído na Fase 6.
 
 import { getState } from "../state.js";
-import { signOut } from "../services/authService.js";
+import { renderNavbar, wireNavbar } from "../components/navbar.js";
 
 export function renderDashboardPage(container) {
-  const { user, isAdmin } = getState();
+  const { user } = getState();
 
   container.innerHTML = `
     <div class="app-shell">
       <div style="flex:1; display:flex; flex-direction:column;">
-        <header class="app-topbar">
-          <strong>Painel de Métricas dos Estudos</strong>
-          <div>
-            <span style="margin-right:16px;">${user ? escapeHtml(user.email) : ""} ${isAdmin ? " (admin)" : ""}</span>
-            <button id="logout-btn" class="btn-link" style="color:#fff;">Sair</button>
-          </div>
-        </header>
+        ${renderNavbar("/dashboard")}
         <main class="app-content">
           <div class="card">
             <h2 class="form-title">Login funcionando</h2>
             <p>Você está autenticado como <strong>${user ? escapeHtml(user.email) : "?"}</strong>.</p>
             <p>Este é um placeholder da Fase 2 — o Dashboard real (KPIs, gráficos, ranking de risco) entra na Fase 6.</p>
+            <p>Enquanto isso, veja o <a href="#/catalogo">Catálogo</a> já cadastrado (Fase 3).</p>
           </div>
         </main>
       </div>
     </div>
   `;
 
-  container.querySelector("#logout-btn").addEventListener("click", async () => {
-    await signOut();
-  });
+  wireNavbar(container);
 
   function escapeHtml(str) {
     const div = document.createElement("div");
