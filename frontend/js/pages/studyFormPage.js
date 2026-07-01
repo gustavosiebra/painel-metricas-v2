@@ -1,9 +1,15 @@
-// Tela "Nova Sessão" (Doc. 16, T03) — registro agregado por caderno.
-// Cadernos são criados sob demanda aqui mesmo (Fase 4, decisão de 01/07/2026).
+// Tela "Nova Sessão" / "Editar Sessão" (Doc. 16, T03) — registro agregado por
+// caderno. Cadernos são criados sob demanda aqui mesmo (Fase 4, decisão de
+// 01/07/2026). Mesma tela serve os dois modos: params.get("id") define edição.
 
 import { renderNavbar, wireNavbar } from "../components/navbar.js";
 import { listDisciplines, listExams, listExamBoards, listQuestionSets, createQuestionSet } from "../services/catalogService.js";
-import { createStudySession, hasMeasurableResult } from "../services/studyService.js";
+import {
+  createStudySession,
+  updateStudySession,
+  getSessionById,
+  hasMeasurableResult,
+} from "../services/studyService.js";
 import { getState } from "../state.js";
 import { navigate } from "../router.js";
 
@@ -17,14 +23,16 @@ const STUDY_TYPES = [
   { value: "videoaula", label: "Videoaula" },
 ];
 
-export async function renderStudyFormPage(container) {
+export async function renderStudyFormPage(container, params) {
+  const editingId = params?.get ? params.get("id") : null;
+
   container.innerHTML = `
     <div class="app-shell">
       <div style="flex:1; display:flex; flex-direction:column;">
         ${renderNavbar("/sessoes/nova")}
         <main class="app-content">
           <div class="card" style="max-width:560px;">
-            <h2 class="form-title">Nova Sessão</h2>
+            <h2 class="form-title">${editingId ? "Editar Sessão" : "Nova Sessão"}</h2>
             <div id="alert-box"></div>
             <p>Carregando catálogo…</p>
           </div>
@@ -41,52 +49,54 @@ export async function renderStudyFormPage(container) {
   let exams = [];
   let boards = [];
   let questionSets = [];
+  let existingSession = null;
 
   try {
-    [disciplines, exams, boards, questionSets] = await Promise.all([
-      listDisciplines(),
-      listExams(),
-      listExamBoards(),
-      listQuestionSets(),
-    ]);
+    const loads = [listDisciplines(), listExams(), listExamBoards(), listQuestionSets()];
+    if (editingId) loads.push(getSessionById(editingId));
+    const results = await Promise.all(loads);
+    [disciplines, exams, boards, questionSets] = results;
+    if (editingId) existingSession = results[4];
   } catch (err) {
-    card.innerHTML += `<div class="alert alert--error">Erro ao carregar catálogo: ${escapeHtml(err.message)}</div>`;
+    card.innerHTML += `<div class="alert alert--error">Erro ao carregar dados: ${escapeHtml(err.message)}</div>`;
     return;
   }
 
   renderForm();
 
   function renderForm() {
+    const result = existingSession?.session_results?.[0] || existingSession?.session_results || null;
+
     card.innerHTML = `
-      <h2 class="form-title">Nova Sessão</h2>
+      <h2 class="form-title">${editingId ? "Editar Sessão" : "Nova Sessão"}</h2>
       <div id="alert-box"></div>
       <form id="study-form">
         <div class="form-field">
           <label for="occurred_at">Data</label>
-          <input type="date" id="occurred_at" required value="${todayISO()}" />
+          <input type="date" id="occurred_at" required value="${existingSession ? existingSession.occurred_at.slice(0, 10) : todayISO()}" />
         </div>
         <div class="form-field">
           <label for="exam_id">Concurso (opcional)</label>
           <select id="exam_id">
             <option value="">— Estudo geral, sem concurso específico —</option>
-            ${exams.map((e) => `<option value="${e.id}">${escapeHtml(e.name)}</option>`).join("")}
+            ${exams.map((e) => `<option value="${e.id}" ${existingSession?.exam_id === e.id ? "selected" : ""}>${escapeHtml(e.name)}</option>`).join("")}
           </select>
         </div>
         <div class="form-field">
           <label for="board_id">Banca (opcional)</label>
           <select id="board_id">
             <option value="">— Não informar —</option>
-            ${boards.map((b) => `<option value="${b.id}">${escapeHtml(b.name)}</option>`).join("")}
+            ${boards.map((b) => `<option value="${b.id}" ${existingSession?.board_id === b.id ? "selected" : ""}>${escapeHtml(b.name)}</option>`).join("")}
           </select>
         </div>
         <div class="form-field">
           <label for="discipline_id">Disciplina</label>
           <select id="discipline_id" required>
             <option value="">Selecione…</option>
-            ${disciplines.map((d) => `<option value="${d.id}">${escapeHtml(d.name)}</option>`).join("")}
+            ${disciplines.map((d) => `<option value="${d.id}" ${existingSession?.discipline_id === d.id ? "selected" : ""}>${escapeHtml(d.name)}</option>`).join("")}
           </select>
         </div>
-        <div class="form-field" id="question-set-field" style="display:none;">
+        <div class="form-field" id="question-set-field" style="display:${existingSession?.discipline_id ? "block" : "none"};">
           <label for="question_set_id">Caderno</label>
           <select id="question_set_id">
             <option value="">Selecione a disciplina primeiro…</option>
@@ -98,47 +108,47 @@ export async function renderStudyFormPage(container) {
         <div class="form-field">
           <label for="study_type">Tipo de estudo</label>
           <select id="study_type" required>
-            ${STUDY_TYPES.map((t) => `<option value="${t.value}">${t.label}</option>`).join("")}
+            ${STUDY_TYPES.map((t) => `<option value="${t.value}" ${existingSession?.study_type === t.value ? "selected" : ""}>${t.label}</option>`).join("")}
           </select>
         </div>
 
         <div id="measurable-fields" style="display:none;">
           <div class="form-field">
             <label for="questions_total">Questões</label>
-            <input type="number" id="questions_total" min="0" step="1" />
+            <input type="number" id="questions_total" min="0" step="1" value="${result?.questions_total ?? ""}" />
           </div>
           <div class="form-field">
             <label for="correct_total">Acertos</label>
-            <input type="number" id="correct_total" min="0" step="1" />
+            <input type="number" id="correct_total" min="0" step="1" value="${result?.correct_total ?? ""}" />
           </div>
           <div class="form-field">
             <label>Erros (calculado)</label>
-            <input type="text" id="wrong_total_display" disabled value="0" />
+            <input type="text" id="wrong_total_display" disabled value="${result?.wrong_total ?? 0}" />
           </div>
           <div class="form-field" id="score-field" style="display:none;">
             <label for="score">Nota (0–100)</label>
-            <input type="number" id="score" min="0" max="100" step="0.01" />
+            <input type="number" id="score" min="0" max="100" step="0.01" value="${result?.score ?? ""}" />
           </div>
           <div class="form-field">
             <label for="self_confidence">Confiança autodeclarada</label>
             <select id="self_confidence">
               <option value="">Não informar</option>
-              <option value="baixa">Baixa</option>
-              <option value="media">Média</option>
-              <option value="alta">Alta</option>
+              <option value="baixa" ${existingSession?.self_confidence === "baixa" ? "selected" : ""}>Baixa</option>
+              <option value="media" ${existingSession?.self_confidence === "media" ? "selected" : ""}>Média</option>
+              <option value="alta" ${existingSession?.self_confidence === "alta" ? "selected" : ""}>Alta</option>
             </select>
           </div>
         </div>
 
         <div class="form-field">
           <label for="duration_minutes">Tempo líquido (minutos)</label>
-          <input type="number" id="duration_minutes" min="0" step="1" required />
+          <input type="number" id="duration_minutes" min="0" step="1" required value="${existingSession?.duration_minutes ?? ""}" />
         </div>
         <div class="form-field">
           <label for="notes">Observações (opcional)</label>
-          <input type="text" id="notes" />
+          <input type="text" id="notes" value="${existingSession?.notes ? escapeHtml(existingSession.notes) : ""}" />
         </div>
-        <button type="submit" class="btn">Salvar sessão</button>
+        <button type="submit" class="btn">${editingId ? "Salvar alterações" : "Salvar sessão"}</button>
       </form>
     `;
 
@@ -150,13 +160,21 @@ export async function renderStudyFormPage(container) {
     const questionSetField = card.querySelector("#question-set-field");
     const questionSetSelect = card.querySelector("#question_set_id");
     const newCadernoBox = card.querySelector("#new-caderno-box");
-    const newCadernoInput = card.querySelector("#new_caderno_name");
     const studyTypeSelect = card.querySelector("#study_type");
     const measurableFields = card.querySelector("#measurable-fields");
     const scoreField = card.querySelector("#score-field");
     const questionsTotalInput = card.querySelector("#questions_total");
     const correctTotalInput = card.querySelector("#correct_total");
     const wrongTotalDisplay = card.querySelector("#wrong_total_display");
+
+    function populateQuestionSets(disciplineId, selectedId) {
+      const filtered = questionSets.filter((q) => q.discipline_id === disciplineId);
+      questionSetSelect.innerHTML = `
+        <option value="">— Nenhum caderno específico —</option>
+        ${filtered.map((q) => `<option value="${q.id}" ${selectedId === q.id ? "selected" : ""}>${escapeHtml(q.name)}</option>`).join("")}
+        <option value="__new__">+ Criar novo caderno…</option>
+      `;
+    }
 
     disciplineSelect.addEventListener("change", () => {
       const disciplineId = disciplineSelect.value;
@@ -165,13 +183,13 @@ export async function renderStudyFormPage(container) {
         return;
       }
       questionSetField.style.display = "block";
-      const filtered = questionSets.filter((q) => q.discipline_id === disciplineId);
-      questionSetSelect.innerHTML = `
-        <option value="">— Nenhum caderno específico —</option>
-        ${filtered.map((q) => `<option value="${q.id}">${escapeHtml(q.name)}</option>`).join("")}
-        <option value="__new__">+ Criar novo caderno…</option>
-      `;
+      populateQuestionSets(disciplineId, null);
     });
+
+    // Pré-popular caderno em modo edição, já com a disciplina existente.
+    if (existingSession?.discipline_id) {
+      populateQuestionSets(existingSession.discipline_id, existingSession.question_set_id);
+    }
 
     questionSetSelect.addEventListener("change", () => {
       newCadernoBox.style.display = questionSetSelect.value === "__new__" ? "block" : "none";
@@ -240,7 +258,7 @@ export async function renderStudyFormPage(container) {
 
       const scoreValue = card.querySelector("#score").value;
 
-      await createStudySession({
+      const payload = {
         userId: user.id,
         // meio-dia local evita o input <date> (sem horário) cair no dia anterior
         // ao converter para UTC em fusos negativos (ex.: America/Fortaleza).
@@ -258,10 +276,16 @@ export async function renderStudyFormPage(container) {
         wrongTotal,
         score: scoreValue ? Number(scoreValue) : null,
         scoreIsEstimate: studyType === "simulado",
-      });
+      };
 
-      alertBox.innerHTML = `<div class="alert alert--success">Sessão registrada com sucesso.</div>`;
-      setTimeout(() => navigate("/dashboard"), 800);
+      if (editingId) {
+        await updateStudySession(editingId, payload);
+        alertBox.innerHTML = `<div class="alert alert--success">Sessão atualizada com sucesso.</div>`;
+      } else {
+        await createStudySession(payload);
+        alertBox.innerHTML = `<div class="alert alert--success">Sessão registrada com sucesso.</div>`;
+      }
+      setTimeout(() => navigate("/sessoes"), 800);
     } catch (err) {
       alertBox.innerHTML = `<div class="alert alert--error">Erro ao salvar: ${escapeHtml(err.message)}</div>`;
     }

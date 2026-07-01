@@ -9,6 +9,7 @@ export function renderNavbar(activeRoute) {
   const links = [
     { path: "/dashboard", label: "Dashboard" },
     { path: "/sessoes/nova", label: "Nova Sessão" },
+    { path: "/sessoes", label: "Sessões" },
     { path: "/catalogo", label: "Catálogo" },
   ];
 

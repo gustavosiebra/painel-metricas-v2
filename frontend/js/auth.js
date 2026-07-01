@@ -19,7 +19,8 @@ async function checkIsAdmin(userId) {
 }
 
 function currentRoute() {
-  return window.location.hash.replace(/^#/, "") || "/";
+  const hash = window.location.hash.replace(/^#/, "") || "/";
+  return hash.split("?")[0] || "/";
 }
 
 export function guardRoute(navigate) {

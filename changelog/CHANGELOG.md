@@ -34,3 +34,7 @@
 - studyService.js (createStudySession, hasMeasurableResult) e catalogService.createQuestionSet (caderno criado sob demanda: global se admin, pessoal se usuário comum).
 - Tela "Nova Sessão" (studyFormPage.js) com campos condicionais por tipo de estudo, Erros calculado automaticamente (Questões − Acertos), e correção de fuso horário no campo Data (meio-dia local evita virar o dia anterior em UTC).
 - Ajuste: `study_sessions.board_id` adicionado (migration 0021) — Banca selecionável na sessão independente de Concurso, para treinar no estilo de uma banca sem mirar edital específico.
+- Ajuste: `study_sessions.status` adicionado (migration 0022) — faltava coluna para exclusão lógica (Doc. 16 exige "nunca apagar, só arquivar"; RN-009).
+- router.js passou a suportar querystring simples (`#/sessoes/nova?id=...`), necessário para reaproveitar o formulário em modo edição.
+- studyService.js expandido: listSessions (filtro por disciplina/status), getSessionById, updateStudySession (ajusta session_results conforme o tipo muda), setSessionStatus (arquivar/reativar).
+- Tela "Sessões" (sessionsPage.js): lista com filtro por disciplina e status (ativas/arquivadas/todas), editar (reabre o formulário preenchido) e arquivar/reativar — sem exclusão física em nenhum momento.
