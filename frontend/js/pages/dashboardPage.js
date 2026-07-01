@@ -16,7 +16,7 @@ export function renderDashboardPage(container) {
             <h2 class="form-title">Login funcionando</h2>
             <p>Você está autenticado como <strong>${user ? escapeHtml(user.email) : "?"}</strong>.</p>
             <p>Este é um placeholder da Fase 2 — o Dashboard real (KPIs, gráficos, ranking de risco) entra na Fase 6.</p>
-            <p>Enquanto isso, veja o <a href="#/catalogo">Catálogo</a> já cadastrado (Fase 3).</p>
+            <p>Enquanto isso, veja o <a href="#/catalogo">Catálogo</a> já cadastrado (Fase 3), ou <a href="#/sessoes/nova">registre uma sessão de estudo</a> (Fase 4).</p>
           </div>
         </main>
       </div>

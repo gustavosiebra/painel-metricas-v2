@@ -15,15 +15,21 @@
 - RLS habilitado e políticas aplicadas nas 12 tabelas.
 - Security Advisor: 2 achados corrigidos (função com search_path mutável; funções de trigger expostas como RPC); restam 2 aceitos (função interna do Supabase fora de escopo; `is_admin()` executável por `authenticated`, intencional — necessário para as políticas de catálogo).
 - Performance Advisor: corrigido índice ausente (`questions.user_id`) e recriadas todas as políticas RLS com `(select auth.uid())` / `(select public.is_admin())` para evitar reavaliação por linha.
-- Teste de isolamento com 2 usuários reais (gustavosiebra@gmail.com e @hotmail.com): confirmado — cada conta só vê o próprio perfil; usuário comum bloqueado ao tentar criar registro global de catálogo (erro 42501 esperado); admin consegue criar registro global; usuário comum consegue criar registro pessoal. Nenhum dado de teste ficou no banco (transações revertidas).
+- Teste de isolamento com 2 usuários reais (@gmail.com e @hotmail.com): confirmado — cada conta só vê o próprio perfil; usuário comum bloqueado ao tentar criar registro global de catálogo (erro 42501 esperado); admin consegue criar registro global; usuário comum consegue criar registro pessoal. Nenhum dado de teste ficou no banco (transações revertidas).
 
 ### Fase 2 — Autenticação
 - Frontend inicial: index.html, app.js, router.js (hash-based), auth.js (proteção de rota + checagem de is_admin), state.js.
 - supabaseClient.js + authService.js (login, cadastro, logout, recuperação de senha).
 - Tela de Login/Cadastro/Recuperação (loginPage.js) e placeholder de Dashboard (dashboardPage.js) para validar o fluxo ponta a ponta.
 - 2 contas de teste criadas via Supabase Auth; trigger `handle_new_user` confirmado criando `profiles` automaticamente para ambas.
-- gustavosiebra@gmail.com promovida a `is_admin = true` (superusuário do catálogo).
+- fulanodetal@gmail.com promovida a `is_admin = true` (superusuário do catálogo).
 
-### Fase 3 — Cadastros base (em andamento)
+### Fase 3 — Cadastros base
 - Catálogo inicial aplicado (`database/seeds/0001_catalogo_inicial.sql`): 10 bancas, 12 disciplinas, 5 concursos (só nome do órgão — banca/ano/cargo a completar depois).
 - Situação, Peso, Risco e Confiança da planilha V1 não foram migrados — eram legenda de valores possíveis, não dado por disciplina; Situação vive no Caderno (ainda não criado) e Peso vive em exam_disciplines (edital × disciplina), a preencher quando houver vínculo real.
+- Tela de consulta do Catálogo (catalogPage.js) + navbar compartilhada entre telas autenticadas.
+
+### Fase 4 — Registro de Estudos (em andamento)
+- Decisão de 01/07/2026: registro agregado por caderno (não questão por questão). session_results só é criado para study_type com resultado mensurável (questao/simulado/discursiva); question_attempts fica sem uso por ora, sem quebrar o schema.
+- studyService.js (createStudySession, hasMeasurableResult) e catalogService.createQuestionSet (caderno criado sob demanda: global se admin, pessoal se usuário comum).
+- Tela "Nova Sessão" (studyFormPage.js) com campos condicionais por tipo de estudo, Erros calculado automaticamente (Questões − Acertos), e correção de fuso horário no campo Data (meio-dia local evita virar o dia anterior em UTC).

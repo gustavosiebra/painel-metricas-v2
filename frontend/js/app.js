@@ -5,10 +5,12 @@ import { initAuth, guardRoute } from "./auth.js";
 import { renderLoginPage } from "./pages/loginPage.js";
 import { renderDashboardPage } from "./pages/dashboardPage.js";
 import { renderCatalogPage } from "./pages/catalogPage.js";
+import { renderStudyFormPage } from "./pages/studyFormPage.js";
 
 registerRoute("/login", renderLoginPage);
 registerRoute("/dashboard", renderDashboardPage);
 registerRoute("/catalogo", renderCatalogPage);
+registerRoute("/sessoes/nova", renderStudyFormPage);
 registerRoute("/", renderDashboardPage);
 
 async function bootstrap() {

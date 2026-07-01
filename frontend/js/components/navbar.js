@@ -8,6 +8,7 @@ export function renderNavbar(activeRoute) {
   const { user, isAdmin } = getState();
   const links = [
     { path: "/dashboard", label: "Dashboard" },
+    { path: "/sessoes/nova", label: "Nova Sessão" },
     { path: "/catalogo", label: "Catálogo" },
   ];
 
