@@ -25,6 +25,7 @@ export async function createStudySession(payload) {
       user_id: payload.userId,
       occurred_at: payload.occurredAt,
       exam_id: payload.examId || null,
+      board_id: payload.boardId || null,
       discipline_id: payload.disciplineId,
       question_set_id: payload.questionSetId || null,
       study_type: payload.studyType,

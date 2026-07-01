@@ -33,3 +33,4 @@
 - Decisão de 01/07/2026: registro agregado por caderno (não questão por questão). session_results só é criado para study_type com resultado mensurável (questao/simulado/discursiva); question_attempts fica sem uso por ora, sem quebrar o schema.
 - studyService.js (createStudySession, hasMeasurableResult) e catalogService.createQuestionSet (caderno criado sob demanda: global se admin, pessoal se usuário comum).
 - Tela "Nova Sessão" (studyFormPage.js) com campos condicionais por tipo de estudo, Erros calculado automaticamente (Questões − Acertos), e correção de fuso horário no campo Data (meio-dia local evita virar o dia anterior em UTC).
+- Ajuste: `study_sessions.board_id` adicionado (migration 0021) — Banca selecionável na sessão independente de Concurso, para treinar no estilo de uma banca sem mirar edital específico.

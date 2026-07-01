@@ -2,7 +2,7 @@
 // Cadernos são criados sob demanda aqui mesmo (Fase 4, decisão de 01/07/2026).
 
 import { renderNavbar, wireNavbar } from "../components/navbar.js";
-import { listDisciplines, listExams, listQuestionSets, createQuestionSet } from "../services/catalogService.js";
+import { listDisciplines, listExams, listExamBoards, listQuestionSets, createQuestionSet } from "../services/catalogService.js";
 import { createStudySession, hasMeasurableResult } from "../services/studyService.js";
 import { getState } from "../state.js";
 import { navigate } from "../router.js";
@@ -39,10 +39,16 @@ export async function renderStudyFormPage(container) {
 
   let disciplines = [];
   let exams = [];
+  let boards = [];
   let questionSets = [];
 
   try {
-    [disciplines, exams, questionSets] = await Promise.all([listDisciplines(), listExams(), listQuestionSets()]);
+    [disciplines, exams, boards, questionSets] = await Promise.all([
+      listDisciplines(),
+      listExams(),
+      listExamBoards(),
+      listQuestionSets(),
+    ]);
   } catch (err) {
     card.innerHTML += `<div class="alert alert--error">Erro ao carregar catálogo: ${escapeHtml(err.message)}</div>`;
     return;
@@ -64,6 +70,13 @@ export async function renderStudyFormPage(container) {
           <select id="exam_id">
             <option value="">— Estudo geral, sem concurso específico —</option>
             ${exams.map((e) => `<option value="${e.id}">${escapeHtml(e.name)}</option>`).join("")}
+          </select>
+        </div>
+        <div class="form-field">
+          <label for="board_id">Banca (opcional)</label>
+          <select id="board_id">
+            <option value="">— Não informar —</option>
+            ${boards.map((b) => `<option value="${b.id}">${escapeHtml(b.name)}</option>`).join("")}
           </select>
         </div>
         <div class="form-field">
@@ -233,6 +246,7 @@ export async function renderStudyFormPage(container) {
         // ao converter para UTC em fusos negativos (ex.: America/Fortaleza).
         occurredAt: new Date(`${card.querySelector("#occurred_at").value}T12:00:00`).toISOString(),
         examId: examId || null,
+        boardId: card.querySelector("#board_id").value || null,
         disciplineId,
         questionSetId: questionSetId || null,
         studyType,
