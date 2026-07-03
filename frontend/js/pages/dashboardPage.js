@@ -133,10 +133,11 @@ function renderSituacao(situacao) {
 }
 
 // Produtividade e Eficiência (Fase 6-B). Eficiência Estrita = acertos/hora só
-// nas horas com resultado mensurável (questão/simulado/discursiva). Eficiência
-// Global = acertos/hora contando TODO o tempo (inclui revisão/flashcard/
-// leitura/videoaula) — mostra se o tempo "não mensurável" está diluindo o
-// retorno. Produtividade = questões/hora mensurável.
+// nas horas com resultado mensurável (questão/simulado/discursiva).
+// Produtividade = questões/hora mensurável. Eficiência Global (acertos/hora
+// TOTAL) foi removida por decisão do usuário — misturar acerto com horas que
+// incluem tipos sem acerto nenhum (revisão/flashcard/leitura/videoaula) causa
+// viés; horas totais continuam só no KPI "Horas estudadas", sem cruzar com acerto.
 function renderProdutividade(p) {
   const fmt = (v) => (v == null ? "—" : v);
   return `
@@ -145,10 +146,6 @@ function renderProdutividade(p) {
       <div class="kpi-card">
         <p class="kpi-card__label">Eficiência Estrita (acertos/h mensurável)</p>
         <p class="kpi-card__value">${fmt(p.eficienciaEstrita)}</p>
-      </div>
-      <div class="kpi-card">
-        <p class="kpi-card__label">Eficiência Global (acertos/h total)</p>
-        <p class="kpi-card__value">${fmt(p.eficienciaGlobal)}</p>
       </div>
       <div class="kpi-card">
         <p class="kpi-card__label">Produtividade (questões/h)</p>

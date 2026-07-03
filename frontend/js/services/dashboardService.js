@@ -106,6 +106,13 @@ export async function getContadoresSituacao() {
 // de todos os cadernos e dividimos uma única vez, para não cair em média de
 // médias (evita viés tipo paradoxo de Simpson — caderno com poucas horas não
 // pode pesar igual a um com muitas).
+//
+// Eficiência Global (acertos/hora TOTAL, incluindo revisão/flashcard/leitura/
+// videoaula) foi removida daqui por decisão do usuário (03/07/2026): misturar
+// acerto (que só existe pra questão/simulado/discursiva) com horas totais
+// (que incluem tipos sem acerto nenhum) produz um número enviesado — parece
+// "eficiência" mas na prática mede outra coisa. Horas totais continuam
+// disponíveis sozinhas (KPI "Horas estudadas"), sem cruzar com acerto.
 export async function getProdutividadeGeral() {
   const { data, error } = await supabase.rpc("eficiencia_caderno", { p_dias: null });
   if (error) throw error;
@@ -113,18 +120,15 @@ export async function getProdutividadeGeral() {
   const rows = data || [];
   let acertos = 0;
   let horasMensuravel = 0;
-  let horasTotais = 0;
   let questoes = 0;
   for (const r of rows) {
     acertos += Number(r.acertos_mensuravel || 0);
     horasMensuravel += Number(r.horas_mensuravel || 0);
-    horasTotais += Number(r.horas_totais || 0);
     questoes += Number(r.questoes_total || 0);
   }
 
   return {
     eficienciaEstrita: horasMensuravel > 0 ? Math.round((acertos / horasMensuravel) * 100) / 100 : null,
-    eficienciaGlobal: horasTotais > 0 ? Math.round((acertos / horasTotais) * 100) / 100 : null,
     produtividade: horasMensuravel > 0 ? Math.round((questoes / horasMensuravel) * 100) / 100 : null,
   };
 }
