@@ -14,19 +14,31 @@ export function hasMeasurableResult(studyType) {
 }
 
 // payload: {
-//   userId, occurredAt, examId, boardId, disciplineId, questionSetId, studyType,
+//   userId, occurredAt, examId, boardId, boardIds, disciplineId, questionSetId, studyType,
 //   durationMinutes, selfConfidence, notes,
 //   // só quando hasMeasurableResult(studyType):
 //   questionsTotal, correctTotal, wrongTotal, score, scoreIsEstimate
 // }
+// boardIds (array, opcional): sessão "multibancas" (decisão de 02/07/2026).
+// Com length <= 1, board_id (coluna legada) continua preenchido normalmente
+// (compatibilidade com views existentes, ex. v_comparativo_banca). Com
+// length > 1, board_id fica null — study_session_boards passa a ser a fonte
+// de verdade (não dá pra representar "mais de uma banca" numa FK única).
+function resolveBoardIds(payload) {
+  if (Array.isArray(payload.boardIds)) return payload.boardIds.filter(Boolean);
+  return payload.boardId ? [payload.boardId] : [];
+}
+
 export async function createStudySession(payload) {
+  const boardIds = resolveBoardIds(payload);
+
   const { data: session, error: sessionError } = await supabase
     .from("study_sessions")
     .insert({
       user_id: payload.userId,
       occurred_at: payload.occurredAt,
       exam_id: payload.examId || null,
-      board_id: payload.boardId || null,
+      board_id: boardIds.length === 1 ? boardIds[0] : null,
       discipline_id: payload.disciplineId,
       question_set_id: payload.questionSetId || null,
       study_type: payload.studyType,
@@ -38,6 +50,13 @@ export async function createStudySession(payload) {
     .single();
 
   if (sessionError) throw sessionError;
+
+  if (boardIds.length > 0) {
+    const { error: boardsError } = await supabase
+      .from("study_session_boards")
+      .insert(boardIds.map((boardId) => ({ user_id: payload.userId, session_id: session.id, board_id: boardId })));
+    if (boardsError) throw boardsError;
+  }
 
   if (hasMeasurableResult(payload.studyType)) {
     const { error: resultError } = await supabase.from("session_results").insert({
@@ -57,13 +76,17 @@ export async function createStudySession(payload) {
 
 // Atualiza sessão existente. Se o tipo mudar de mensurável para não-mensurável
 // (ou vice-versa), ajusta session_results de acordo (upsert ou remove).
+// boardIds: mesma regra de createStudySession — recria do zero as linhas de
+// study_session_boards (mais simples e seguro que tentar diff incremental).
 export async function updateStudySession(sessionId, payload) {
+  const boardIds = resolveBoardIds(payload);
+
   const { error: sessionError } = await supabase
     .from("study_sessions")
     .update({
       occurred_at: payload.occurredAt,
       exam_id: payload.examId || null,
-      board_id: payload.boardId || null,
+      board_id: boardIds.length === 1 ? boardIds[0] : null,
       discipline_id: payload.disciplineId,
       question_set_id: payload.questionSetId || null,
       study_type: payload.studyType,
@@ -73,6 +96,15 @@ export async function updateStudySession(sessionId, payload) {
     })
     .eq("id", sessionId);
   if (sessionError) throw sessionError;
+
+  const { error: deleteBoardsError } = await supabase.from("study_session_boards").delete().eq("session_id", sessionId);
+  if (deleteBoardsError) throw deleteBoardsError;
+  if (boardIds.length > 0) {
+    const { error: boardsError } = await supabase
+      .from("study_session_boards")
+      .insert(boardIds.map((boardId) => ({ user_id: payload.userId, session_id: sessionId, board_id: boardId })));
+    if (boardsError) throw boardsError;
+  }
 
   if (hasMeasurableResult(payload.studyType)) {
     const { error: upsertError } = await supabase.from("session_results").upsert(
@@ -97,7 +129,7 @@ export async function updateStudySession(sessionId, payload) {
 export async function getSessionById(sessionId) {
   const { data, error } = await supabase
     .from("study_sessions")
-    .select("*, session_results(*)")
+    .select("*, session_results(*), study_session_boards(board_id)")
     .eq("id", sessionId)
     .single();
   if (error) throw error;

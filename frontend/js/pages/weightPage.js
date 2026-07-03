@@ -50,6 +50,11 @@ export async function renderWeightPage(container) {
               <div class="form-field">
                 <label for="expected_questions">Questões esperadas na prova (opcional)</label>
                 <input type="number" id="expected_questions" min="0" step="1" />
+                <small style="color:var(--color-text-muted); display:block; margin-top:4px;">
+                  Preencha só se o edital publicar quantas questões essa disciplina terá. Quando preenchido,
+                  esse número tem precedência sobre o Peso (Baixo/Alto) no cálculo de Prioridade — não precisa
+                  escolher entre um ou outro, o mais preciso disponível é usado automaticamente.
+                </small>
               </div>
               <button type="submit" class="btn">Salvar peso</button>
             </form>

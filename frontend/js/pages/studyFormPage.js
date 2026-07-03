@@ -63,10 +63,26 @@ export async function renderStudyFormPage(container, params) {
     return;
   }
 
+  // Multibancas: reaproveita a banca "Multibanca" já existente no catálogo
+  // como gatilho — não é uma banca real, é a opção que revela os checkboxes
+  // de seleção. Fica de fora da lista de checkboxes (não faz sentido marcar
+  // "Multibanca" como uma das bancas dentro de uma sessão multibancas).
+  // Calculado aqui (escopo de renderStudyFormPage) para ficar acessível em
+  // renderForm/wireForm/handleSubmit, que são funções irmãs, não aninhadas.
+  const multibancaBoard = boards.find((b) => b.name === "Multibanca");
+  const boardOptions = boards.filter((b) => b.id !== multibancaBoard?.id);
+
   renderForm();
 
   function renderForm() {
     const result = existingSession?.session_results?.[0] || existingSession?.session_results || null;
+    // Se a sessão já tem >1 banca vinculada, abre em modo multibanca por
+    // padrão; com 0 ou 1, mantém o modo single-select atual.
+    const initialBoardIds = existingSession?.study_session_boards?.length
+      ? existingSession.study_session_boards.map((x) => x.board_id)
+      : existingSession?.board_id
+        ? [existingSession.board_id]
+        : [];
 
     card.innerHTML = `
       <h2 class="form-title">${editingId ? "Editar Sessão" : "Nova Sessão"}</h2>
@@ -87,8 +103,23 @@ export async function renderStudyFormPage(container, params) {
           <label for="board_id">Banca (opcional)</label>
           <select id="board_id">
             <option value="">— Não informar —</option>
-            ${boards.map((b) => `<option value="${b.id}" ${existingSession?.board_id === b.id ? "selected" : ""}>${escapeHtml(b.name)}</option>`).join("")}
+            ${boardOptions.map((b) => `<option value="${b.id}" ${existingSession?.board_id === b.id && initialBoardIds.length <= 1 ? "selected" : ""}>${escapeHtml(b.name)}</option>`).join("")}
+            ${multibancaBoard ? `<option value="${multibancaBoard.id}" ${initialBoardIds.length > 1 ? "selected" : ""}>${escapeHtml(multibancaBoard.name)}</option>` : ""}
           </select>
+        </div>
+        <div class="form-field" id="board-multi-field" style="display:none;">
+          <label class="form-field-heading">Bancas</label>
+          <div id="board-multi-checkboxes" class="checkbox-list">
+            ${boardOptions
+              .map(
+                (b) => `
+              <label>
+                <input type="checkbox" class="board-multi-checkbox" value="${b.id}" ${initialBoardIds.includes(b.id) ? "checked" : ""} />
+                ${escapeHtml(b.name)}
+              </label>`
+              )
+              .join("")}
+          </div>
         </div>
         <div class="form-field">
           <label for="discipline_id">Disciplina</label>
@@ -175,6 +206,8 @@ export async function renderStudyFormPage(container, params) {
   function wireForm() {
     const examSelect = card.querySelector("#exam_id");
     const disciplineSelect = card.querySelector("#discipline_id");
+    const boardSelect = card.querySelector("#board_id");
+    const boardMultiField = card.querySelector("#board-multi-field");
     const weightShortcutBox = card.querySelector("#weight-shortcut-box");
     const weightShortcutStatus = card.querySelector("#weight-shortcut-status");
     const questionSetField = card.querySelector("#question-set-field");
@@ -186,6 +219,14 @@ export async function renderStudyFormPage(container, params) {
     const questionsTotalInput = card.querySelector("#questions_total");
     const correctTotalInput = card.querySelector("#correct_total");
     const wrongTotalDisplay = card.querySelector("#wrong_total_display");
+
+    // "Multibanca" é uma opção dentro do próprio select de Banca (RN de
+    // 02/07/2026) — só ao selecioná-la aparece a lista de checkboxes.
+    function updateMultibancasUI() {
+      boardMultiField.style.display = multibancaBoard && boardSelect.value === multibancaBoard.id ? "block" : "none";
+    }
+    boardSelect.addEventListener("change", updateMultibancasUI);
+    updateMultibancasUI();
 
     function populateQuestionSets(disciplineId, selectedId) {
       const filtered = questionSets.filter((q) => q.discipline_id === disciplineId);
@@ -322,13 +363,21 @@ export async function renderStudyFormPage(container, params) {
 
       const scoreValue = card.querySelector("#score").value;
 
+      const boardSelectValue = card.querySelector("#board_id").value;
+      const boardIds =
+        multibancaBoard && boardSelectValue === multibancaBoard.id
+          ? Array.from(card.querySelectorAll(".board-multi-checkbox:checked")).map((cb) => cb.value)
+          : boardSelectValue
+            ? [boardSelectValue]
+            : [];
+
       const payload = {
         userId: user.id,
         // meio-dia local evita o input <date> (sem horário) cair no dia anterior
         // ao converter para UTC em fusos negativos (ex.: America/Fortaleza).
         occurredAt: new Date(`${card.querySelector("#occurred_at").value}T12:00:00`).toISOString(),
         examId: examId || null,
-        boardId: card.querySelector("#board_id").value || null,
+        boardIds,
         disciplineId,
         questionSetId: questionSetId || null,
         studyType,

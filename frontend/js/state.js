@@ -5,6 +5,7 @@ const state = {
   session: null,
   user: null,
   isAdmin: false,
+  displayName: null,
   ready: false,
 };
 

@@ -8,6 +8,8 @@ import { renderCatalogPage } from "./pages/catalogPage.js";
 import { renderStudyFormPage } from "./pages/studyFormPage.js";
 import { renderSessionsPage } from "./pages/sessionsPage.js";
 import { renderWeightPage } from "./pages/weightPage.js";
+import { renderHistoryPage } from "./pages/historyPage.js";
+import { renderParametersPage } from "./pages/parametersPage.js";
 
 registerRoute("/login", renderLoginPage);
 registerRoute("/dashboard", renderDashboardPage);
@@ -15,6 +17,8 @@ registerRoute("/catalogo", renderCatalogPage);
 registerRoute("/sessoes/nova", renderStudyFormPage);
 registerRoute("/sessoes", renderSessionsPage);
 registerRoute("/pesos", renderWeightPage);
+registerRoute("/historico", renderHistoryPage);
+registerRoute("/parametros", renderParametersPage);
 registerRoute("/", renderDashboardPage);
 
 async function bootstrap() {

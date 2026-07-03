@@ -15,6 +15,11 @@ export function renderLoginPage(container) {
           <h1 class="form-title">${titleFor(mode)}</h1>
           <div id="alert-box"></div>
           <form id="auth-form">
+            ${mode === MODE.SIGNUP ? `
+            <div class="form-field">
+              <label for="display-name">Nome</label>
+              <input type="text" id="display-name" required autocomplete="name" placeholder="Como quer ser chamado no app" />
+            </div>` : ""}
             <div class="form-field">
               <label for="email">E-mail</label>
               <input type="email" id="email" required autocomplete="email" />
@@ -65,7 +70,8 @@ export function renderLoginPage(container) {
 
     try {
       if (mode === MODE.SIGNUP) {
-        await signUp(email, password);
+        const displayName = container.querySelector("#display-name").value.trim();
+        await signUp(email, password, displayName);
         alertBox.innerHTML = `<div class="alert alert--success">Conta criada. Verifique seu e-mail para confirmar o cadastro.</div>`;
       } else if (mode === MODE.RECOVER) {
         await requestPasswordReset(email);

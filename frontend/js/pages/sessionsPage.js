@@ -64,19 +64,52 @@ export async function renderSessionsPage(container) {
   disciplineSelect.addEventListener("change", loadSessions);
   statusSelect.addEventListener("change", loadSessions);
 
+  let currentSessions = [];
+  // Ordenação é só em memória, sobre o que já foi carregado — não refaz a
+  // consulta ao trocar de coluna/direção, só reordena o array atual.
+  const sortState = { column: "occurred_at", direction: "desc" };
+
   await loadSessions();
 
   async function loadSessions() {
     content.innerHTML = "<p>Carregando…</p>";
     try {
-      const sessions = await listSessions({
+      currentSessions = await listSessions({
         disciplineId: disciplineSelect.value || undefined,
         status: statusSelect.value || undefined,
       });
-      renderTable(sessions);
+      renderTable(sortSessions(currentSessions));
     } catch (err) {
       content.innerHTML = `<div class="alert alert--error">Erro ao carregar sessões: ${escapeHtml(err.message)}</div>`;
     }
+  }
+
+  function sortSessions(sessions) {
+    const { column, direction } = sortState;
+    const factor = direction === "asc" ? 1 : -1;
+    const sorted = [...sessions];
+    sorted.sort((a, b) => {
+      let va, vb;
+      if (column === "discipline") {
+        va = disciplinesById[a.discipline_id] || "";
+        vb = disciplinesById[b.discipline_id] || "";
+      } else if (column === "study_type") {
+        va = STUDY_TYPE_LABELS[a.study_type] || a.study_type || "";
+        vb = STUDY_TYPE_LABELS[b.study_type] || b.study_type || "";
+      } else {
+        va = a.occurred_at || "";
+        vb = b.occurred_at || "";
+      }
+      if (va < vb) return -1 * factor;
+      if (va > vb) return 1 * factor;
+      return 0;
+    });
+    return sorted;
+  }
+
+  function sortIndicator(column) {
+    if (sortState.column !== column) return "";
+    return sortState.direction === "asc" ? " ▲" : " ▼";
   }
 
   function renderTable(sessions) {
@@ -118,11 +151,31 @@ export async function renderSessionsPage(container) {
     content.innerHTML = `
       <div class="card">
         <table class="data-table">
-          <tr><th>Data</th><th>Disciplina</th><th>Tipo</th><th>Desempenho</th><th>Tempo</th><th>Ações</th></tr>
+          <tr>
+            <th data-sort-col="occurred_at" style="cursor:pointer;">Data${sortIndicator("occurred_at")}</th>
+            <th data-sort-col="discipline" style="cursor:pointer;">Disciplina${sortIndicator("discipline")}</th>
+            <th data-sort-col="study_type" style="cursor:pointer;">Tipo${sortIndicator("study_type")}</th>
+            <th>Desempenho</th>
+            <th>Tempo</th>
+            <th>Ações</th>
+          </tr>
           ${rows}
         </table>
       </div>
     `;
+
+    content.querySelectorAll("[data-sort-col]").forEach((th) => {
+      th.addEventListener("click", () => {
+        const column = th.dataset.sortCol;
+        if (sortState.column === column) {
+          sortState.direction = sortState.direction === "asc" ? "desc" : "asc";
+        } else {
+          sortState.column = column;
+          sortState.direction = "asc";
+        }
+        renderTable(sortSessions(currentSessions));
+      });
+    });
 
     content.querySelectorAll("[data-edit]").forEach((btn) => {
       btn.addEventListener("click", () => navigate("/sessoes/nova", { id: btn.dataset.edit }));
