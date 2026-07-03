@@ -3,7 +3,14 @@
 // cálculo estatístico é refeito aqui (TEC-006).
 
 import { renderNavbar, wireNavbar } from "../components/navbar.js";
-import { getKpis, getRankingRisco, getMediaMovelSemanal, getContadoresSituacao, pickProximaAcao } from "../services/dashboardService.js";
+import {
+  getKpis,
+  getRankingRisco,
+  getMediaMovelSemanal,
+  getContadoresSituacao,
+  getProdutividadeGeral,
+  pickProximaAcao,
+} from "../services/dashboardService.js";
 
 const SITUACAO_LABELS = {
   consolidado: { label: "Consolidados", color: "var(--color-success)" },
@@ -30,13 +37,14 @@ export async function renderDashboardPage(container) {
 
   const content = container.querySelector("#dashboard-content");
 
-  let kpis, ranking, mediaMovel, situacao;
+  let kpis, ranking, mediaMovel, situacao, produtividade;
   try {
-    [kpis, ranking, mediaMovel, situacao] = await Promise.all([
+    [kpis, ranking, mediaMovel, situacao, produtividade] = await Promise.all([
       getKpis(),
       getRankingRisco(),
       getMediaMovelSemanal(),
       getContadoresSituacao(),
+      getProdutividadeGeral(),
     ]);
   } catch (err) {
     content.innerHTML = `<div class="alert alert--error">Erro ao carregar dashboard: ${escapeHtml(err.message)}</div>`;
@@ -48,6 +56,7 @@ export async function renderDashboardPage(container) {
   content.innerHTML = `
     ${renderKpis(kpis)}
     ${renderSituacao(situacao)}
+    ${renderProdutividade(produtividade)}
     ${renderProximaAcao(proximaAcao)}
     <div class="card" style="margin-bottom:16px;">
       <h3 style="margin-top:0;">Média Móvel Semanal (% de acerto)</h3>
@@ -120,6 +129,32 @@ function renderSituacao(situacao) {
   return `
     <h3 style="margin: 24px 0 8px;">Cadernos por Situação</h3>
     <div class="kpi-grid">${cards}</div>
+  `;
+}
+
+// Produtividade e Eficiência (Fase 6-B). Eficiência Estrita = acertos/hora só
+// nas horas com resultado mensurável (questão/simulado/discursiva). Eficiência
+// Global = acertos/hora contando TODO o tempo (inclui revisão/flashcard/
+// leitura/videoaula) — mostra se o tempo "não mensurável" está diluindo o
+// retorno. Produtividade = questões/hora mensurável.
+function renderProdutividade(p) {
+  const fmt = (v) => (v == null ? "—" : v);
+  return `
+    <h3 style="margin: 24px 0 8px;">Produtividade e Eficiência</h3>
+    <div class="kpi-grid">
+      <div class="kpi-card">
+        <p class="kpi-card__label">Eficiência Estrita (acertos/h mensurável)</p>
+        <p class="kpi-card__value">${fmt(p.eficienciaEstrita)}</p>
+      </div>
+      <div class="kpi-card">
+        <p class="kpi-card__label">Eficiência Global (acertos/h total)</p>
+        <p class="kpi-card__value">${fmt(p.eficienciaGlobal)}</p>
+      </div>
+      <div class="kpi-card">
+        <p class="kpi-card__label">Produtividade (questões/h)</p>
+        <p class="kpi-card__value">${fmt(p.produtividade)}</p>
+      </div>
+    </div>
   `;
 }
 

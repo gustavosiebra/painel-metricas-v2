@@ -100,6 +100,35 @@ export async function getContadoresSituacao() {
   return counts;
 }
 
+// Produtividade e Eficiência geral (Fase 6-B) — eficiencia_caderno() (Fase 5)
+// devolve uma linha por caderno já com as razões calculadas (acertos/hora,
+// questões/hora); aqui somamos os números BRUTOS (acertos, horas, questões)
+// de todos os cadernos e dividimos uma única vez, para não cair em média de
+// médias (evita viés tipo paradoxo de Simpson — caderno com poucas horas não
+// pode pesar igual a um com muitas).
+export async function getProdutividadeGeral() {
+  const { data, error } = await supabase.rpc("eficiencia_caderno", { p_dias: null });
+  if (error) throw error;
+
+  const rows = data || [];
+  let acertos = 0;
+  let horasMensuravel = 0;
+  let horasTotais = 0;
+  let questoes = 0;
+  for (const r of rows) {
+    acertos += Number(r.acertos_mensuravel || 0);
+    horasMensuravel += Number(r.horas_mensuravel || 0);
+    horasTotais += Number(r.horas_totais || 0);
+    questoes += Number(r.questoes_total || 0);
+  }
+
+  return {
+    eficienciaEstrita: horasMensuravel > 0 ? Math.round((acertos / horasMensuravel) * 100) / 100 : null,
+    eficienciaGlobal: horasTotais > 0 ? Math.round((acertos / horasTotais) * 100) / 100 : null,
+    produtividade: horasMensuravel > 0 ? Math.round((questoes / horasMensuravel) * 100) / 100 : null,
+  };
+}
+
 // Próxima Ação: seleção em JS (regra de ordenação, não fórmula estatística nova
 // — o número (Wilson, classificação) já vem pronto do banco). Prioriza
 // disciplinas com peso "alto"; sem nenhuma, cai para a pior classificação geral.
