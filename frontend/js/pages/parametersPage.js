@@ -7,9 +7,9 @@ import { renderNavbar, wireNavbar } from "../components/navbar.js";
 import { getState } from "../state.js";
 import { getAllParams, setParam, listRiskRules, upsertRiskRule, deleteRiskRule } from "../services/parameterService.js";
 
-const LEARNING_LEVELS = ["novo", "aprendendo", "consolidando", "dominado"];
+const LEARNING_LEVELS = ["novo", "critico", "aprendendo", "consolidando", "dominado"];
 const WEIGHTS = ["baixo", "alto"];
-const RISK_LEVELS = ["baixo", "medio", "alto", "muito_alto"];
+const RISK_LEVELS = ["muito_baixo", "baixo", "medio", "alto", "muito_alto"];
 
 export async function renderParametersPage(container) {
   container.innerHTML = `

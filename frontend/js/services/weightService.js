@@ -17,6 +17,19 @@ export async function listWeights() {
   return data;
 }
 
+// Painel só-leitura da aba Peso (decisão do usuário: a edição vive só no
+// atalho inline em Nova Sessão, para não duplicar o mesmo formulário em duas
+// telas). Lê de v_prioridade (Fase 5/6) — já cruza peso salvo com Wilson e
+// classificação por disciplina × concurso, sem precisar de outra query.
+export async function listWeightSummary() {
+  const { data, error } = await supabase
+    .from("v_prioridade")
+    .select("exam_id, concurso_nome, discipline_id, disciplina_nome, weight, target_accuracy, expected_questions, wilson_pct, classificacao, questoes_total")
+    .order("concurso_nome", { ascending: true });
+  if (error) throw error;
+  return data;
+}
+
 // Upsert por (user_id, exam_id, discipline_id) — unique constraint já existe no banco.
 export async function upsertWeight({ userId, examId, disciplineId, weight, targetAccuracy, expectedQuestions }) {
   const { data, error } = await supabase

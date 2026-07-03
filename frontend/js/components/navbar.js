@@ -11,8 +11,8 @@ export function renderNavbar(activeRoute) {
     { path: "/dashboard", label: "Dashboard" },
     { path: "/sessoes/nova", label: "Nova Sessão" },
     { path: "/sessoes", label: "Sessões" },
-    { path: "/catalogo", label: "Catálogo" },
     { path: "/pesos", label: "Peso" },
+    { path: "/prioridade", label: "Prioridade" },
     { path: "/historico", label: "Histórico" },
     { path: "/parametros", label: "Parâmetros" },
   ];

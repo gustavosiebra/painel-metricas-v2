@@ -230,9 +230,20 @@ export async function renderStudyFormPage(container, params) {
 
     function populateQuestionSets(disciplineId, selectedId) {
       const filtered = questionSets.filter((q) => q.discipline_id === disciplineId);
+      // CSS trunca a caixa fechada, mas a lista aberta de um <select> nativo
+      // ignora CSS de largura — o navegador sempre dimensiona o popup pelo
+      // texto mais longo. Cadernos importados do TEC passam de 100
+      // caracteres, então a única forma confiável de conter o popup é
+      // truncar o próprio texto da opção; o nome completo fica no atributo
+      // title (aparece ao passar o mouse) e o value continua sendo o id real.
       questionSetSelect.innerHTML = `
         <option value="">— Nenhum caderno específico —</option>
-        ${filtered.map((q) => `<option value="${q.id}" ${selectedId === q.id ? "selected" : ""}>${escapeHtml(q.name)}</option>`).join("")}
+        ${filtered
+          .map(
+            (q) =>
+              `<option value="${q.id}" title="${escapeHtml(q.name)}" ${selectedId === q.id ? "selected" : ""}>${escapeHtml(truncateLabel(q.name))}</option>`
+          )
+          .join("")}
         <option value="__new__">+ Criar novo caderno…</option>
       `;
     }
@@ -405,12 +416,24 @@ export async function renderStudyFormPage(container, params) {
   }
 }
 
+// new Date().toISOString() converte pra UTC — em fusos negativos (ex.:
+// America/Fortaleza, UTC-3) isso pode virar o dia seguinte à noite. Usa os
+// componentes locais (getFullYear/getMonth/getDate) em vez de toISOString().
 function todayISO() {
-  return new Date().toISOString().slice(0, 10);
+  const d = new Date();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 function escapeHtml(str) {
   const div = document.createElement("div");
   div.textContent = str;
   return div.innerHTML;
+}
+
+function truncateLabel(text, maxLen = 70) {
+  if (!text || text.length <= maxLen) return text;
+  return `${text.slice(0, maxLen - 1)}…`;
 }

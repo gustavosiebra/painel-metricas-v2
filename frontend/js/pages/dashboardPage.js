@@ -44,7 +44,17 @@ export async function renderDashboardPage(container) {
   `;
 
   if (mediaMovel.length > 0) {
-    renderChart(content.querySelector("#media-movel-chart"), mediaMovel);
+    try {
+      renderChart(content.querySelector("#media-movel-chart"), mediaMovel);
+    } catch (err) {
+      // Antes falhava em silêncio (canvas ficava em branco, sem pista
+      // nenhuma) — normalmente Chart.js não carregou (CDN bloqueado/rede),
+      // já que a lib vem de um <script> externo no index.html.
+      const canvasEl = content.querySelector("#media-movel-chart");
+      if (canvasEl) {
+        canvasEl.outerHTML = `<div class="alert alert--error">Erro ao desenhar o gráfico: ${escapeHtml(err.message)}. Verifique se o Chart.js carregou (console do navegador) — provável CDN bloqueado.</div>`;
+      }
+    }
   }
 }
 

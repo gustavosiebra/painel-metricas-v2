@@ -10,6 +10,7 @@ import { renderSessionsPage } from "./pages/sessionsPage.js";
 import { renderWeightPage } from "./pages/weightPage.js";
 import { renderHistoryPage } from "./pages/historyPage.js";
 import { renderParametersPage } from "./pages/parametersPage.js";
+import { renderPriorityPage } from "./pages/priorityPage.js";
 
 registerRoute("/login", renderLoginPage);
 registerRoute("/dashboard", renderDashboardPage);
@@ -19,6 +20,7 @@ registerRoute("/sessoes", renderSessionsPage);
 registerRoute("/pesos", renderWeightPage);
 registerRoute("/historico", renderHistoryPage);
 registerRoute("/parametros", renderParametersPage);
+registerRoute("/prioridade", renderPriorityPage);
 registerRoute("/", renderDashboardPage);
 
 async function bootstrap() {

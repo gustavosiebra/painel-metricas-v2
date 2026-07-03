@@ -30,15 +30,29 @@
   color: var(--color-text-muted);
 }
 
-.form-field input {
+.form-field input,
+.form-field select {
   width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
   padding: var(--spacing-2) var(--spacing-3);
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
   font-size: 15px;
 }
 
-.form-field input:focus {
+/* Sem isso, um <select> sem largura fixa se ajusta ao texto da opção mais
+   longa (ex.: nomes de caderno importados do TEC, que passam de 100
+   caracteres) e estica a caixa inteira. Trunca com "..." a opção selecionada
+   fechada; a lista aberta continua mostrando o texto completo normalmente. */
+.form-field select {
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.form-field input:focus,
+.form-field select:focus {
   outline: 2px solid var(--color-primary);
   outline-offset: 1px;
 }
