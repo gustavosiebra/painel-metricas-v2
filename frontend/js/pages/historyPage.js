@@ -9,6 +9,7 @@ import {
   getComparativoBanca,
   getComparativoConcurso,
 } from "../services/historyService.js";
+import { formatPct } from "../utils/format.js";
 
 const charts = {};
 
@@ -126,7 +127,7 @@ export async function renderHistoryPage(container) {
         (r) => `
         <tr>
           <td>${escapeHtml(r[nameKey])}</td>
-          <td>${r.wilson_pct}%</td>
+          <td>${formatPct(r.wilson_pct)}</td>
           <td>${r.questoes_total}</td>
         </tr>
       `
@@ -148,7 +149,11 @@ function renderBarChart(key, canvas, { labels, label, data }) {
   charts[key] = new Chart(canvas, {
     type: "bar",
     data: { labels, datasets: [{ label, data, backgroundColor: "#2e5395" }] },
-    options: { responsive: true, scales: { y: { min: 0, max: 100, ticks: { callback: (v) => v + "%" } } } },
+    options: {
+      responsive: true,
+      scales: { y: { min: 0, max: 100, ticks: { callback: (v) => formatPct(v) } } },
+      plugins: { tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${formatPct(ctx.parsed.y)}` } } },
+    },
   });
 }
 
@@ -159,7 +164,11 @@ function renderLineChart(key, canvas, { labels, datasets }) {
   charts[key] = new Chart(canvas, {
     type: "line",
     data: { labels, datasets },
-    options: { responsive: true, scales: { y: { min: 0, max: 100, ticks: { callback: (v) => v + "%" } } } },
+    options: {
+      responsive: true,
+      scales: { y: { min: 0, max: 100, ticks: { callback: (v) => formatPct(v) } } },
+      plugins: { tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${formatPct(ctx.parsed.y)}` } } },
+    },
   });
 }
 

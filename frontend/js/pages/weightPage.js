@@ -7,6 +7,7 @@
 
 import { renderNavbar, wireNavbar } from "../components/navbar.js";
 import { listWeightSummary } from "../services/weightService.js";
+import { formatPct } from "../utils/format.js";
 
 export async function renderWeightPage(container) {
   container.innerHTML = `
@@ -56,13 +57,13 @@ export async function renderWeightPage(container) {
 
     const trs = rows
       .map((r) => {
-        const wilsonText = r.wilson_pct != null ? `${Number(r.wilson_pct).toFixed(1)}%` : "—";
+        const wilsonText = formatPct(r.wilson_pct);
         return `
           <tr>
             <td>${escapeHtml(r.concurso_nome || "—")}</td>
             <td>${escapeHtml(r.disciplina_nome || "—")}</td>
             <td>${escapeHtml(r.weight || "—")}</td>
-            <td>${r.target_accuracy != null ? Number(r.target_accuracy).toFixed(2) + "%" : "—"}</td>
+            <td>${formatPct(r.target_accuracy)}</td>
             <td>${r.expected_questions ?? "—"}</td>
             <td>${wilsonText}</td>
             <td>${escapeHtml(r.classificacao || "—")}</td>

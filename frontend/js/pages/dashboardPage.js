@@ -3,8 +3,10 @@
 // cálculo estatístico é refeito aqui (TEC-006).
 
 import { renderNavbar, wireNavbar } from "../components/navbar.js";
+import { formatPct, formatDeltaPct } from "../utils/format.js";
 import {
   getKpis,
+  getCadernosEstudados,
   getRankingRisco,
   getMediaMovelSemanal,
   getContadoresSituacao,
@@ -18,24 +20,29 @@ import {
   pickProximaAcao,
 } from "../services/dashboardService.js";
 
+// "Preliminares" foi trocado por "Poucos dados" (pedido do usuário,
+// 03/07/2026) — o termo técnico não deixava claro que só significa "ainda não
+// há questões suficientes pra classificar", não é uma categoria de resultado.
 const SITUACAO_LABELS = {
   consolidado: { label: "Consolidados", color: "var(--color-success)" },
   atencao: { label: "Atenção", color: "#b45309" },
   critico: { label: "Críticos", color: "var(--color-error)" },
-  preliminar: { label: "Preliminares", color: "var(--color-text-muted)" },
+  preliminar: { label: "Poucos dados", color: "var(--color-text-muted)" },
 };
 
-let chartTendenciaInstance = null;
+let chartMediaMovelInstance = null;
+let chartAcertosErrosInstance = null;
 let chartHorasInstance = null;
 let chartRetencaoInstance = null;
 
 export async function renderDashboardPage(container) {
+  // Sem H2 "Dashboard" na página (pedido do usuário, 03/07/2026) — o nome já
+  // está na aba de navegação, repetir aqui só ocupa espaço sem dizer nada novo.
   container.innerHTML = `
     <div class="app-shell">
       <div style="flex:1; display:flex; flex-direction:column;">
         ${renderNavbar("/dashboard")}
         <main class="app-content">
-          <h2 class="form-title">Dashboard</h2>
           <div id="dashboard-content"><p>Carregando…</p></div>
         </main>
       </div>
@@ -45,10 +52,11 @@ export async function renderDashboardPage(container) {
 
   const content = container.querySelector("#dashboard-content");
 
-  let kpis, ranking, mediaMovelDiaria, situacao, produtividade, janelaDisciplina, janelaCaderno, transferencia, retencaoGeral, horasPorDisciplina;
+  let kpis, cadernosEstudados, ranking, mediaMovelDiaria, situacao, produtividade, janelaDisciplina, janelaCaderno, transferencia, retencaoGeral, horasPorDisciplina;
   try {
-    [kpis, ranking, mediaMovelDiaria, situacao, produtividade, janelaDisciplina, janelaCaderno, transferencia, retencaoGeral, horasPorDisciplina] = await Promise.all([
+    [kpis, cadernosEstudados, ranking, mediaMovelDiaria, situacao, produtividade, janelaDisciplina, janelaCaderno, transferencia, retencaoGeral, horasPorDisciplina] = await Promise.all([
       getKpis(),
+      getCadernosEstudados(),
       getRankingRisco(),
       getMediaMovelSemanal(),
       getContadoresSituacao(),
@@ -67,24 +75,29 @@ export async function renderDashboardPage(container) {
   const proximaAcao = pickProximaAcao(ranking);
   const tendenciaSemanal = getTendenciaSemanal(mediaMovelDiaria);
 
+  // Ordem por impacto de decisão (03/07/2026), não pela ordem em que cada
+  // métrica foi construída: 1) visão geral (KPIs + Cadernos por Situação),
+  // 2) ação concreta (Próxima Ação + Ranking), 3) tendência ao longo do tempo,
+  // 4) aprofundamento (Janela, Transferência, Retenção) pra quem quer investigar mais.
   content.innerHTML = `
-    ${renderKpis(kpis)}
+    ${renderKpis(kpis, produtividade, cadernosEstudados)}
     ${renderSituacao(situacao)}
-    ${renderProdutividade(produtividade)}
     ${renderProximaAcao(proximaAcao)}
-    ${renderTendenciaSemanal(tendenciaSemanal)}
+    ${renderRanking(ranking)}
+    ${renderMediaMovelSemanal(tendenciaSemanal)}
+    ${renderAcertosErrosSemana(tendenciaSemanal)}
     ${renderHorasPorDisciplina(horasPorDisciplina)}
     ${renderJanelaTendenciaDisciplina(janelaDisciplina)}
     ${renderJanelaTendenciaCaderno(janelaCaderno)}
     ${renderTransferencia(transferencia)}
     ${renderRetencaoGeral(retencaoGeral)}
-    ${renderRanking(ranking)}
   `;
 
   // Cada gráfico é isolado no próprio try/catch: um erro de desenho (ex.:
   // Chart.js não carregado) não pode derrubar os outros gráficos do dashboard.
   if (tendenciaSemanal.semanas.length > 0) {
-    tentarDesenhar(content, "media-movel-chart", () => renderChartTendencia(content.querySelector("#media-movel-chart"), tendenciaSemanal.semanas));
+    tentarDesenhar(content, "media-movel-chart", () => renderChartMediaMovel(content.querySelector("#media-movel-chart"), tendenciaSemanal.semanas));
+    tentarDesenhar(content, "acertos-erros-chart", () => renderChartAcertosErros(content.querySelector("#acertos-erros-chart"), tendenciaSemanal.semanas));
   }
   if (horasPorDisciplina.length > 0) {
     tentarDesenhar(content, "horas-disciplina-chart", () => renderChartHoras(content.querySelector("#horas-disciplina-chart"), horasPorDisciplina));
@@ -108,27 +121,44 @@ function tentarDesenhar(content, canvasId, desenhar) {
   }
 }
 
-function renderKpis(kpis) {
+// KPIs de topo (Fase 6-E, 03/07/2026): um grid único, sem títulos de seção
+// separados. "Diagnóstico geral" virou "Desempenho geral" (termo mais direto).
+// "Sessões ativas" saiu (contagem bruta não ajuda a decidir nada). "Cadernos
+// estudados" e as duas métricas que antes viviam em "Produtividade e
+// Eficiência" (Eficiência Estrita → "Acertos por hora"; Produtividade →
+// "Questões por hora") entraram aqui, sem o rótulo técnico entre parênteses —
+// Eficiência Global continua fora por decisão anterior do usuário (mistura
+// acerto com horas não mensuráveis, vicia o número).
+function renderKpis(kpis, produtividade, cadernosEstudados) {
   const diag = kpis.diagnosticoGeral;
-  const diagLabel = diag ? `${diag.wilson_pct}%` : "—";
+  const diagLabel = diag ? formatPct(diag.wilson_pct) : "—";
   const diagBadge = diag ? renderBadge(diag.classificacao) : "";
+  const fmt = (v) => (v == null ? "—" : v);
   return `
     <div class="kpi-grid">
+      <div class="kpi-card">
+        <p class="kpi-card__label">Desempenho geral</p>
+        <p class="kpi-card__value">${diagLabel} ${diagBadge}</p>
+      </div>
       <div class="kpi-card">
         <p class="kpi-card__label">Horas estudadas</p>
         <p class="kpi-card__value">${kpis.horasTotais}h</p>
       </div>
       <div class="kpi-card">
-        <p class="kpi-card__label">Sessões ativas</p>
-        <p class="kpi-card__value">${kpis.sessoesAtivas}</p>
+        <p class="kpi-card__label">Cadernos estudados</p>
+        <p class="kpi-card__value">${cadernosEstudados}</p>
       </div>
       <div class="kpi-card">
         <p class="kpi-card__label">Disciplinas em estudo</p>
         <p class="kpi-card__value">${kpis.disciplinasComSessao}</p>
       </div>
       <div class="kpi-card">
-        <p class="kpi-card__label">Diagnóstico geral</p>
-        <p class="kpi-card__value">${diagLabel} ${diagBadge}</p>
+        <p class="kpi-card__label">Acertos por hora</p>
+        <p class="kpi-card__value">${fmt(produtividade.eficienciaEstrita)}</p>
+      </div>
+      <div class="kpi-card">
+        <p class="kpi-card__label">Questões por hora</p>
+        <p class="kpi-card__value">${fmt(produtividade.produtividade)}</p>
       </div>
     </div>
   `;
@@ -136,8 +166,9 @@ function renderKpis(kpis) {
 
 // Contadores por Situação (Fase 6-B) — quantos cadernos caem em cada
 // classificação de Diagnóstico Wilson. Responde "como estou" no nível mais
-// granular (caderno), complementando o KPI de Diagnóstico Geral (agregado
-// total) e o Ranking de Risco (por disciplina).
+// granular (caderno), complementando o KPI de Desempenho Geral (agregado
+// total) e o Ranking de Risco (por disciplina). Sem título de seção (pedido
+// do usuário, 03/07/2026) — fica como continuação natural do grid de cima.
 function renderSituacao(situacao) {
   const total = Object.values(situacao).reduce((a, b) => a + b, 0);
   if (total === 0) {
@@ -154,47 +185,20 @@ function renderSituacao(situacao) {
       `;
     })
     .join("");
-  return `
-    <h3 style="margin: 24px 0 8px;">Cadernos por Situação</h3>
-    <div class="kpi-grid">${cards}</div>
-  `;
+  return `<div class="kpi-grid" style="margin-top:12px;">${cards}</div>`;
 }
 
-// Produtividade e Eficiência (Fase 6-B). Eficiência Estrita = acertos/hora só
-// nas horas com resultado mensurável (questão/simulado/discursiva).
-// Produtividade = questões/hora mensurável. Eficiência Global (acertos/hora
-// TOTAL) foi removida por decisão do usuário — misturar acerto com horas que
-// incluem tipos sem acerto nenhum (revisão/flashcard/leitura/videoaula) causa
-// viés; horas totais continuam só no KPI "Horas estudadas", sem cruzar com acerto.
-function renderProdutividade(p) {
-  const fmt = (v) => (v == null ? "—" : v);
-  return `
-    <h3 style="margin: 24px 0 8px;">Produtividade e Eficiência</h3>
-    <div class="kpi-grid">
-      <div class="kpi-card">
-        <p class="kpi-card__label">Eficiência Estrita (acertos/h mensurável)</p>
-        <p class="kpi-card__value">${fmt(p.eficienciaEstrita)}</p>
-      </div>
-      <div class="kpi-card">
-        <p class="kpi-card__label">Produtividade (questões/h)</p>
-        <p class="kpi-card__value">${fmt(p.produtividade)}</p>
-      </div>
-    </div>
-  `;
-}
-
-// Tendência Semanal (Fase 6-C/6-D) — substitui o gráfico diário (400 pontos,
-// ilegível) por 12 blocos semanais. O gráfico mostra volume BRUTO de acertos
-// e erros (área empilhada), não só %, pra responder também "o volume de
-// erros está encolhendo" e não só a razão — pedido do usuário (03/07/2026),
-// referência: dashboards de Gran Cursos/Deltinha/Aprovado. O texto de delta
-// (semana atual vs anterior) continua sendo a resposta direta a "melhorou ou
-// piorou em relação à semana passada?".
-function renderTendenciaSemanal(t) {
+// Tendência Semanal (Fase 6-C) — substitui o gráfico diário original (400
+// pontos, ilegível) por 12 blocos semanais + comparação explícita semana
+// atual vs anterior. Continua sendo a resposta direta a "melhorou ou piorou
+// em relação à semana passada?". O usuário pediu de volta (03/07/2026) —
+// tinha sido trocado pelo card de Acertos vs Erros por engano; os dois
+// ficam, não é um ou outro.
+function renderMediaMovelSemanal(t) {
   if (!t.semanas || t.semanas.length === 0) {
     return `
       <div class="card" style="margin-bottom:16px;">
-        <h3 style="margin-top:0;">Acertos vs. Erros por Semana</h3>
+        <h3 style="margin-top:0;">Tendência Semanal (% de acerto)</h3>
         <p style="color:var(--color-text-muted);">Sem sessões mensuráveis suficientes ainda.</p>
       </div>
     `;
@@ -209,17 +213,32 @@ function renderTendenciaSemanal(t) {
     const seta = t.deltaSemana > 0 ? "▲" : t.deltaSemana < 0 ? "▼" : "＝";
     deltaHtml = `
       <p style="margin: 4px 0 12px;">
-        Semana atual (${fmtData(t.semanaAtual.inicio)}–${fmtData(t.semanaAtual.fim)}): <strong>${t.semanaAtual.pct ?? "—"}%</strong>
-        vs. semana anterior (${fmtData(t.semanaAnterior.inicio)}–${fmtData(t.semanaAnterior.fim)}): <strong>${t.semanaAnterior.pct ?? "—"}%</strong>
-        — <strong style="color:${cor};">${seta} ${Math.abs(t.deltaSemana)} p.p.</strong>
+        Semana atual (${fmtData(t.semanaAtual.inicio)}–${fmtData(t.semanaAtual.fim)}): <strong>${formatPct(t.semanaAtual.pct)}</strong>
+        vs. semana anterior (${fmtData(t.semanaAnterior.inicio)}–${fmtData(t.semanaAnterior.fim)}): <strong>${formatPct(t.semanaAnterior.pct)}</strong>
+        — <strong style="color:${cor};">${seta} ${Math.abs(t.deltaSemana).toFixed(2)} p.p.</strong>
       </p>
     `;
   }
   return `
     <div class="card" style="margin-bottom:16px;">
-      <h3 style="margin-top:0;">Acertos vs. Erros por Semana</h3>
+      <h3 style="margin-top:0;">Tendência Semanal (% de acerto)</h3>
       ${deltaHtml}
       <canvas id="media-movel-chart" height="90"></canvas>
+    </div>
+  `;
+}
+
+// Acertos vs. Erros por Semana (Fase 6-D) — card adicional, não substitui o
+// de cima. Mostra volume BRUTO (não %) pra responder também "o volume de
+// erros está encolhendo", complementando a razão do gráfico de %. Referência:
+// dashboards de Gran Cursos/Deltinha/Aprovado.
+function renderAcertosErrosSemana(t) {
+  if (!t.semanas || t.semanas.length === 0) return "";
+  return `
+    <div class="card" style="margin-bottom:16px;">
+      <h3 style="margin-top:0;">Acertos vs. Erros por Semana (volume)</h3>
+      <p style="color:var(--color-text-muted); margin-top:0;">Número bruto de questões, não %. Mostra se o volume de erros está encolhendo em termos absolutos, não só na razão.</p>
+      <canvas id="acertos-erros-chart" height="90"></canvas>
     </div>
   `;
 }
@@ -231,12 +250,35 @@ function renderTendenciaSemanal(t) {
 function renderHorasPorDisciplina(linhas) {
   if (!linhas || linhas.length === 0) return "";
   const total = linhas.reduce((acc, l) => acc + l.horas, 0);
+  // Tabela com % exato ao lado do gráfico: com 9 disciplinas e horas muito
+  // desiguais, uma fatia com <1h num total de ~2000h vira uma fatia de menos
+  // de 1 grau — visualmente imperceptível na rosca (não é bug, é matemática
+  // de pizza), mas o número exato precisa continuar visível em algum lugar.
+  const rows = linhas
+    .map(
+      (l) => `
+      <tr>
+        <td>${escapeHtml(l.disciplinaNome)}</td>
+        <td>${l.horas}h</td>
+        <td>${formatPct(total > 0 ? (l.horas / total) * 100 : null)}</td>
+      </tr>
+    `
+    )
+    .join("");
   return `
     <div class="card" style="margin-bottom:16px;">
       <h3 style="margin-top:0;">Horas por Disciplina</h3>
-      <p style="color:var(--color-text-muted); margin-top:0;">Total: ${Math.round(total * 10) / 10}h, todos os tipos de estudo.</p>
-      <div style="max-width:420px;">
-        <canvas id="horas-disciplina-chart" height="260"></canvas>
+      <p style="color:var(--color-text-muted); margin-top:0;">Total: ${Math.round(total * 10) / 10}h, todos os tipos de estudo. Disciplinas com fatia muito pequena podem não aparecer visível na rosca — a tabela abaixo tem o número exato de todas.</p>
+      <div style="display:flex; gap:24px; flex-wrap:wrap; align-items:flex-start;">
+        <div style="max-width:340px; flex:1; min-width:280px;">
+          <canvas id="horas-disciplina-chart" height="260"></canvas>
+        </div>
+        <div style="flex:1; min-width:280px;">
+          <table class="data-table">
+            <tr><th>Disciplina</th><th>Horas</th><th>%</th></tr>
+            ${rows}
+          </table>
+        </div>
       </div>
     </div>
   `;
@@ -258,9 +300,9 @@ function renderJanelaTendenciaDisciplina(linhas) {
       return `
         <tr>
           <td>${escapeHtml(l.disciplinaNome)}</td>
-          <td>${l.pctCurta ?? "—"}% (${l.questoesCurta ?? 0}q)</td>
-          <td>${l.pctLonga ?? "—"}% (${l.questoesLonga ?? 0}q)</td>
-          <td style="color:${cor};"><strong>${l.delta != null ? (l.delta > 0 ? "+" : "") + l.delta : "—"} p.p. — ${label}</strong></td>
+          <td>${formatPct(l.pctCurta)} (${l.questoesCurta ?? 0}q)</td>
+          <td>${formatPct(l.pctLonga)} (${l.questoesLonga ?? 0}q)</td>
+          <td style="color:${cor};"><strong>${formatDeltaPct(l.delta)} — ${label}</strong></td>
         </tr>
       `;
     })
@@ -284,9 +326,9 @@ function renderJanelaTendenciaCaderno(dados) {
   const linha = (l) => `
     <tr>
       <td>${escapeHtml(l.cadernoNome)}</td>
-      <td>${l.pctCurta}%</td>
-      <td>${l.pctLonga}%</td>
-      <td>${l.delta > 0 ? "+" : ""}${l.delta} p.p.</td>
+      <td>${formatPct(l.pctCurta)}</td>
+      <td>${formatPct(l.pctLonga)}</td>
+      <td>${formatDeltaPct(l.delta)}</td>
     </tr>
   `;
   return `
@@ -330,14 +372,14 @@ function renderTransferencia(linhas) {
     .slice(0, 15)
     .map((item) => {
       const detalhe = item.concursos
-        .map((c) => `${escapeHtml(c.concursoNome)}: ${c.wilsonPct ?? "—"}% (${c.questoesTotal}q)`)
+        .map((c) => `${escapeHtml(c.concursoNome)}: ${formatPct(c.wilsonPct)} (${c.questoesTotal}q)`)
         .join(" · ");
       return `
         <tr>
           <td>${escapeHtml(item.cadernoNome)}</td>
           <td>${item.concursos.length}</td>
           <td>${detalhe}</td>
-          <td>${item.amplitude ?? "—"} p.p.</td>
+          <td>${item.amplitude != null ? item.amplitude.toFixed(2) : "—"} p.p.</td>
         </tr>
       `;
     })
@@ -367,7 +409,7 @@ function renderRetencaoGeral(linhas) {
       (l) => `
       <tr>
         <td>${escapeHtml(l.faixa)}</td>
-        <td>${l.pct ?? "—"}%</td>
+        <td>${formatPct(l.pct)}</td>
         <td>${l.questoes}</td>
       </tr>
     `
@@ -386,15 +428,33 @@ function renderRetencaoGeral(linhas) {
   `;
 }
 
+// Próxima Ação (reescrita 03/07/2026): antes expunha classificação técnica e
+// % Wilson direto ("Crítico — peso alto, Wilson 65,74%"), o que exige saber os
+// cortes de classificação pra fazer sentido — sem esse contexto, o número
+// parece arbitrário. Agora o motivo vem em texto simples, sem % nem badge;
+// os números completos continuam disponíveis no Ranking de Risco logo abaixo,
+// pra quem quiser ver o detalhe.
 function renderProximaAcao(item) {
   if (!item) {
-    return `<div class="proxima-acao"><strong>Próxima ação:</strong> ainda não há dado mensurável suficiente para sugerir foco.</div>`;
+    return `<div class="proxima-acao"><strong>Foco sugerido:</strong> ainda não há dado mensurável suficiente para sugerir foco.</div>`;
   }
-  const pesoTexto = item.weight ? ` — peso ${item.weight}` : " — peso não definido";
+  let motivo;
+  if (item.classificacao === "consolidado") {
+    motivo = item.usouPesoAlto
+      ? `está consolidada mesmo sendo peso alto — priorize manutenção, não é urgência.`
+      : `é a que está com o resultado mais discreto agora, mas seguindo bem.`;
+  } else if (item.classificacao === "preliminar") {
+    motivo = item.usouPesoAlto
+      ? `é peso alto e ainda não tem questões suficientes pra saber como você está indo — vale testar.`
+      : `ainda não tem questões suficientes pra saber como você está indo.`;
+  } else {
+    motivo = item.usouPesoAlto
+      ? `é a disciplina de peso alto com o resultado mais frágil agora.`
+      : `é a disciplina com o resultado mais frágil entre as que você estuda.`;
+  }
   return `
     <div class="proxima-acao">
-      <strong>Próxima ação:</strong> foco sugerido em <strong>${escapeHtml(item.disciplinaNome)}</strong>
-      (${renderBadge(item.classificacao)}${pesoTexto}, Wilson ${item.wilsonPct}%).
+      <strong>Foco sugerido:</strong> <strong>${escapeHtml(item.disciplinaNome)}</strong> ${motivo}
     </div>
   `;
 }
@@ -409,9 +469,9 @@ function renderRanking(ranking) {
       <tr>
         <td>${escapeHtml(r.disciplinaNome)}</td>
         <td>${renderBadge(r.classificacao)}</td>
-        <td>${r.wilsonPct}%</td>
+        <td>${formatPct(r.wilsonPct)}</td>
         <td>${r.questoesTotal}</td>
-        <td>${r.weight ? renderPesoBadge(r.weight) : "—"}${r.pesoNumericoPct != null ? ` (${r.pesoNumericoPct}%)` : ""}</td>
+        <td>${r.weight ? renderPesoBadge(r.weight) : "—"}${r.pesoNumericoPct != null ? ` (${formatPct(r.pesoNumericoPct)})` : ""}</td>
       </tr>
     `
     )
@@ -440,13 +500,45 @@ function renderPesoBadge(weight) {
 // Recebe os blocos semanais já agregados (getTendenciaSemanal) — no máximo
 // ~12 pontos, em vez dos ~400 dias corridos que tornavam o gráfico anterior
 // ilegível (muitos rótulos amontoados no eixo X, linha diária cheia de ruído
-// escondendo qualquer tendência). Duas áreas (acertos/erros) em volume bruto,
-// não %, no mesmo padrão de dashboards de apps de concurso (Gran/Deltinha/
-// Aprovado) — mostra se o volume de erros está encolhendo em número absoluto.
-function renderChartTendencia(canvas, semanas) {
-  if (chartTendenciaInstance) {
-    chartTendenciaInstance.destroy();
-    chartTendenciaInstance = null;
+// escondendo qualquer tendência). % de acerto por semana — o gráfico original
+// (Fase 6-C), restaurado como card próprio a pedido do usuário (03/07/2026).
+function renderChartMediaMovel(canvas, semanas) {
+  if (chartMediaMovelInstance) {
+    chartMediaMovelInstance.destroy();
+    chartMediaMovelInstance = null;
+  }
+  const fmtData = (iso) => {
+    const [, m, d] = iso.split("-");
+    return `${d}/${m}`;
+  };
+  const labels = semanas.map((s) => `${fmtData(s.inicio)}–${fmtData(s.fim)}`);
+  const dataPct = semanas.map((s) => s.pct);
+
+  chartMediaMovelInstance = new Chart(canvas, {
+    type: "bar",
+    data: {
+      labels,
+      datasets: [{ label: "% acerto na semana", data: dataPct, backgroundColor: "#1f3864" }],
+    },
+    options: {
+      responsive: true,
+      scales: { y: { min: 0, max: 100, ticks: { callback: (v) => formatPct(v) } } },
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${formatPct(ctx.parsed.y)}` } },
+      },
+    },
+  });
+}
+
+// Acertos vs. Erros por Semana (Fase 6-D) — duas áreas em volume bruto (não
+// %), no mesmo padrão de dashboards de apps de concurso (Gran/Deltinha/
+// Aprovado) — mostra se o volume de erros está encolhendo em número absoluto,
+// complementando (não substituindo) o gráfico de % acima.
+function renderChartAcertosErros(canvas, semanas) {
+  if (chartAcertosErrosInstance) {
+    chartAcertosErrosInstance.destroy();
+    chartAcertosErrosInstance = null;
   }
   const fmtData = (iso) => {
     const [, m, d] = iso.split("-");
@@ -456,7 +548,7 @@ function renderChartTendencia(canvas, semanas) {
   const dataAcertos = semanas.map((s) => s.acertos);
   const dataErros = semanas.map((s) => s.erros);
 
-  chartTendenciaInstance = new Chart(canvas, {
+  chartAcertosErrosInstance = new Chart(canvas, {
     type: "line",
     data: {
       labels,
@@ -495,6 +587,7 @@ function renderChartHoras(canvas, linhas) {
     chartHorasInstance = null;
   }
   const CORES = ["#1f3864", "#2e7d32", "#c0392b", "#b45309", "#6a1b9a", "#00838f", "#8d6e63", "#546e7a", "#ad1457"];
+  const total = linhas.reduce((acc, l) => acc + l.horas, 0);
   chartHorasInstance = new Chart(canvas, {
     type: "doughnut",
     data: {
@@ -510,7 +603,11 @@ function renderChartHoras(canvas, linhas) {
       responsive: true,
       plugins: {
         legend: { position: "right" },
-        tooltip: { callbacks: { label: (ctx) => `${ctx.label}: ${ctx.parsed}h` } },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => `${ctx.label}: ${ctx.parsed}h (${formatPct(total > 0 ? (ctx.parsed / total) * 100 : null)})`,
+          },
+        },
       },
     },
   });
@@ -541,8 +638,11 @@ function renderChartRetencao(canvas, linhas) {
     },
     options: {
       responsive: true,
-      scales: { y: { min: 0, max: 100, ticks: { callback: (v) => v + "%" } } },
-      plugins: { legend: { display: false } },
+      scales: { y: { min: 0, max: 100, ticks: { callback: (v) => formatPct(v) } } },
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: (ctx) => formatPct(ctx.parsed.y) } },
+      },
     },
   });
 }

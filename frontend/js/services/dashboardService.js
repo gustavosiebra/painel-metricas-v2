@@ -6,8 +6,11 @@ import { supabase } from "../supabaseClient.js";
 
 const TYPES_WITH_MEASURABLE_RESULT = ["questao", "simulado", "discursiva"];
 
-// KPIs de topo: horas totais, sessões ativas, disciplinas em estudo (qualquer
-// tipo, não só mensurável) e o Diagnóstico Wilson geral (v_diagnostico_geral).
+// KPIs de topo: horas totais, disciplinas em estudo (qualquer tipo, não só
+// mensurável) e o Diagnóstico Wilson geral (v_diagnostico_geral). "Sessões
+// ativas" foi removido do retorno (decisão do usuário, 03/07/2026): contagem
+// bruta de sessões não diz nada sobre qualidade nem direção, não ajuda a
+// decidir nada.
 export async function getKpis() {
   const [sessionsResult, diagGeralResult] = await Promise.all([
     supabase.from("study_sessions").select("duration_minutes, discipline_id").eq("status", "ativo"),
@@ -23,10 +26,22 @@ export async function getKpis() {
 
   return {
     horasTotais: Math.round(horasTotais * 10) / 10,
-    sessoesAtivas: sessions.length,
     disciplinasComSessao,
     diagnosticoGeral: diagGeralResult.data || null, // null = nenhuma sessão mensurável ainda
   };
+}
+
+// Cadernos Estudados (Fase 6-E, 03/07/2026) — quantos cadernos distintos já
+// têm pelo menos uma sessão registrada. Complementa "Disciplinas em estudo"
+// com uma visão mais granular de amplitude de cobertura.
+export async function getCadernosEstudados() {
+  const { data, error } = await supabase
+    .from("study_sessions")
+    .select("question_set_id")
+    .eq("status", "ativo")
+    .not("question_set_id", "is", null);
+  if (error) throw error;
+  return new Set((data || []).map((r) => r.question_set_id)).size;
 }
 
 // Ranking de Risco: junta Diagnóstico por Disciplina (sempre existe se houver
@@ -338,11 +353,15 @@ export async function getProdutividadeGeral() {
 // — o número (Wilson, classificação) já vem pronto do banco). Prioriza
 // disciplinas com peso "alto"; sem nenhuma, cai para a pior classificação geral.
 // Ordem de severidade: critico > atencao > preliminar (falta dado) > consolidado.
+// usouPesoAlto fica marcado no retorno pra a tela poder explicar o motivo em
+// linguagem simples (03/07/2026: texto não pode mais expor % Wilson/badge
+// técnico direto — quem não conhece os cortes de classificação não entenderia).
 export function pickProximaAcao(ranking) {
   if (!ranking || ranking.length === 0) return null;
   const comPesoAlto = ranking.filter((r) => r.weight === "alto");
-  const pool = comPesoAlto.length > 0 ? comPesoAlto : ranking;
-  return pool[0]; // ranking já vem ordenado por severidade/wilson (getRankingRisco)
+  const usouPesoAlto = comPesoAlto.length > 0;
+  const pool = usouPesoAlto ? comPesoAlto : ranking;
+  return { ...pool[0], usouPesoAlto }; // ranking já vem ordenado por severidade/wilson (getRankingRisco)
 }
 
 export function hasMeasurableResult(studyType) {

@@ -6,6 +6,7 @@
 import { renderNavbar, wireNavbar } from "../components/navbar.js";
 import { listDisciplines } from "../services/catalogService.js";
 import { listPriority } from "../services/priorityService.js";
+import { formatPct } from "../utils/format.js";
 
 const PRIORIDADE_LABELS = {
   prioridade_maxima: { label: "Prioridade máxima", color: "var(--color-error)" },
@@ -19,7 +20,10 @@ const PRIORIDADE_LABELS = {
 };
 
 const RECORRENCIA_LABELS = { alta: "Alta", media: "Média", baixa: "Baixa" };
-const WILSON_LABELS = { preliminar: "Preliminar", critico: "Crítico", atencao: "Atenção", consolidado: "Consolidado" };
+// "Preliminar" virou "Poucos dados" (pedido do usuário, 03/07/2026, mesmo
+// ajuste feito no Dashboard) — mais claro que só falta questão suficiente
+// pra classificar, não é um resultado.
+const WILSON_LABELS = { preliminar: "Poucos dados", critico: "Crítico", atencao: "Atenção", consolidado: "Consolidado" };
 const DISPERSAO_LABELS = {
   sem_dispersao: "Sem dado",
   estavel: "Estável",
@@ -115,7 +119,7 @@ export async function renderPriorityPage(container) {
     const trs = rows
       .map((r) => {
         const p = PRIORIDADE_LABELS[r.classificacao_prioridade] || { label: r.classificacao_prioridade, color: "var(--color-text-muted)" };
-        const wilsonText = r.wilson_pct != null ? `${Number(r.wilson_pct).toFixed(1)}%` : "—";
+        const wilsonText = formatPct(r.wilson_pct);
         return `
           <tr>
             <td><span style="color:${p.color}; font-weight:600;">${escapeHtml(p.label)}</span></td>
