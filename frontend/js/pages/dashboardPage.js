@@ -14,8 +14,8 @@ import {
   getTendenciaSemanal,
   getJanelaTendenciaDisciplina,
   getJanelaTendenciaCadernoDestaques,
-  getTransferenciaCadernos,
   getRetencaoGeral,
+  getRetencaoPorDisciplina,
   getHorasPorDisciplina,
   pickProximaAcao,
 } from "../services/dashboardService.js";
@@ -52,9 +52,9 @@ export async function renderDashboardPage(container) {
 
   const content = container.querySelector("#dashboard-content");
 
-  let kpis, cadernosEstudados, ranking, mediaMovelDiaria, situacao, produtividade, janelaDisciplina, janelaCaderno, transferencia, retencaoGeral, horasPorDisciplina;
+  let kpis, cadernosEstudados, ranking, mediaMovelDiaria, situacao, produtividade, janelaDisciplina, janelaCaderno, retencaoGeral, retencaoPorDisciplina, horasPorDisciplina;
   try {
-    [kpis, cadernosEstudados, ranking, mediaMovelDiaria, situacao, produtividade, janelaDisciplina, janelaCaderno, transferencia, retencaoGeral, horasPorDisciplina] = await Promise.all([
+    [kpis, cadernosEstudados, ranking, mediaMovelDiaria, situacao, produtividade, janelaDisciplina, janelaCaderno, retencaoGeral, retencaoPorDisciplina, horasPorDisciplina] = await Promise.all([
       getKpis(),
       getCadernosEstudados(),
       getRankingRisco(),
@@ -63,8 +63,8 @@ export async function renderDashboardPage(container) {
       getProdutividadeGeral(),
       getJanelaTendenciaDisciplina(),
       getJanelaTendenciaCadernoDestaques(),
-      getTransferenciaCadernos(),
       getRetencaoGeral(),
+      getRetencaoPorDisciplina(),
       getHorasPorDisciplina(),
     ]);
   } catch (err) {
@@ -89,8 +89,8 @@ export async function renderDashboardPage(container) {
     ${renderHorasPorDisciplina(horasPorDisciplina)}
     ${renderJanelaTendenciaDisciplina(janelaDisciplina)}
     ${renderJanelaTendenciaCaderno(janelaCaderno)}
-    ${renderTransferencia(transferencia)}
     ${renderRetencaoGeral(retencaoGeral)}
+    ${renderRetencaoPorDisciplina(retencaoPorDisciplina)}
   `;
 
   // Cada gráfico é isolado no próprio try/catch: um erro de desenho (ex.:
@@ -133,7 +133,6 @@ function renderKpis(kpis, produtividade, cadernosEstudados) {
   const diag = kpis.diagnosticoGeral;
   const diagLabel = diag ? formatPct(diag.wilson_pct) : "—";
   const diagBadge = diag ? renderBadge(diag.classificacao) : "";
-  const fmt = (v) => (v == null ? "—" : v);
   return `
     <div class="kpi-grid">
       <div class="kpi-card">
@@ -154,11 +153,11 @@ function renderKpis(kpis, produtividade, cadernosEstudados) {
       </div>
       <div class="kpi-card">
         <p class="kpi-card__label">Acertos por hora</p>
-        <p class="kpi-card__value">${fmt(produtividade.eficienciaEstrita)}</p>
+        <p class="kpi-card__value">${produtividade.eficienciaEstrita == null ? "—" : `${produtividade.eficienciaEstrita}/h`}</p>
       </div>
       <div class="kpi-card">
         <p class="kpi-card__label">Questões por hora</p>
-        <p class="kpi-card__value">${fmt(produtividade.produtividade)}</p>
+        <p class="kpi-card__value">${produtividade.produtividade == null ? "—" : `${produtividade.produtividade}/h`}</p>
       </div>
     </div>
   `;
@@ -185,7 +184,7 @@ function renderSituacao(situacao) {
       `;
     })
     .join("");
-  return `<div class="kpi-grid" style="margin-top:12px;">${cards}</div>`;
+  return `<div class="kpi-grid">${cards}</div>`;
 }
 
 // Tendência Semanal (Fase 6-C) — substitui o gráfico diário original (400
@@ -197,7 +196,7 @@ function renderSituacao(situacao) {
 function renderMediaMovelSemanal(t) {
   if (!t.semanas || t.semanas.length === 0) {
     return `
-      <div class="card" style="margin-bottom:16px;">
+      <div class="card" style="margin-bottom:24px;">
         <h3 style="margin-top:0;">Tendência Semanal (% de acerto)</h3>
         <p style="color:var(--color-text-muted);">Sem sessões mensuráveis suficientes ainda.</p>
       </div>
@@ -220,7 +219,7 @@ function renderMediaMovelSemanal(t) {
     `;
   }
   return `
-    <div class="card" style="margin-bottom:16px;">
+    <div class="card" style="margin-bottom:24px;">
       <h3 style="margin-top:0;">Tendência Semanal (% de acerto)</h3>
       ${deltaHtml}
       <canvas id="media-movel-chart" height="90"></canvas>
@@ -235,7 +234,7 @@ function renderMediaMovelSemanal(t) {
 function renderAcertosErrosSemana(t) {
   if (!t.semanas || t.semanas.length === 0) return "";
   return `
-    <div class="card" style="margin-bottom:16px;">
+    <div class="card" style="margin-bottom:24px;">
       <h3 style="margin-top:0;">Acertos vs. Erros por Semana (volume)</h3>
       <p style="color:var(--color-text-muted); margin-top:0;">Número bruto de questões, não %. Mostra se o volume de erros está encolhendo em termos absolutos, não só na razão.</p>
       <canvas id="acertos-erros-chart" height="90"></canvas>
@@ -266,7 +265,7 @@ function renderHorasPorDisciplina(linhas) {
     )
     .join("");
   return `
-    <div class="card" style="margin-bottom:16px;">
+    <div class="card" style="margin-bottom:24px;">
       <h3 style="margin-top:0;">Horas por Disciplina</h3>
       <p style="color:var(--color-text-muted); margin-top:0;">Total: ${Math.round(total * 10) / 10}h, todos os tipos de estudo. Disciplinas com fatia muito pequena podem não aparecer visível na rosca — a tabela abaixo tem o número exato de todas.</p>
       <div style="display:flex; gap:24px; flex-wrap:wrap; align-items:flex-start;">
@@ -308,7 +307,7 @@ function renderJanelaTendenciaDisciplina(linhas) {
     })
     .join("");
   return `
-    <div class="card" style="margin-bottom:16px;">
+    <div class="card" style="margin-bottom:24px;">
       <h3 style="margin-top:0;">Tendência por Disciplina (recente vs. mais antigo)</h3>
       <p style="color:var(--color-text-muted); margin-top:0;">Compara as últimas ~100 questões com as últimas ~300 — diferença até 3 p.p. é tratada como estável.</p>
       <table class="data-table">
@@ -332,7 +331,7 @@ function renderJanelaTendenciaCaderno(dados) {
     </tr>
   `;
   return `
-    <div class="card" style="margin-bottom:16px;">
+    <div class="card" style="margin-bottom:24px;">
       <h3 style="margin-top:0;">Cadernos que mais mudaram (recente vs. mais antigo)</h3>
       <p style="color:var(--color-text-muted); margin-top:0;">Só cadernos com pelo menos 20 questões na janela longa. Mostra os 5 maiores avanços e as 5 maiores quedas.</p>
       <div style="display:flex; gap:24px; flex-wrap:wrap;">
@@ -355,46 +354,8 @@ function renderJanelaTendenciaCaderno(dados) {
   `;
 }
 
-// Transferência entre Editais (Fase 6-C) — mesmo caderno reaproveitado em
-// concursos diferentes. Só entra quem tem >=2 concursos distintos. Amplitude
-// alta = desempenho disperso entre editais (sinal de transferência fraca);
-// não é rotulado automaticamente, só ordenado pela amplitude bruta.
-function renderTransferencia(linhas) {
-  if (!linhas || linhas.length === 0) {
-    return `
-      <div class="card" style="margin-bottom:16px;">
-        <h3 style="margin-top:0;">Transferência entre Concursos</h3>
-        <p style="color:var(--color-text-muted);">Nenhum caderno seu apareceu em 2+ concursos diferentes ainda — sem base de comparação.</p>
-      </div>
-    `;
-  }
-  const rows = linhas
-    .slice(0, 15)
-    .map((item) => {
-      const detalhe = item.concursos
-        .map((c) => `${escapeHtml(c.concursoNome)}: ${formatPct(c.wilsonPct)} (${c.questoesTotal}q)`)
-        .join(" · ");
-      return `
-        <tr>
-          <td>${escapeHtml(item.cadernoNome)}</td>
-          <td>${item.concursos.length}</td>
-          <td>${detalhe}</td>
-          <td>${item.amplitude != null ? item.amplitude.toFixed(2) : "—"} p.p.</td>
-        </tr>
-      `;
-    })
-    .join("");
-  return `
-    <div class="card" style="margin-bottom:16px;">
-      <h3 style="margin-top:0;">Transferência entre Concursos</h3>
-      <p style="color:var(--color-text-muted); margin-top:0;">Mesmo caderno, Wilson por concurso. Amplitude = maior menos menor Wilson entre os concursos — quanto maior, mais disperso o desempenho entre editais.</p>
-      <table class="data-table">
-        <tr><th>Caderno</th><th>Concursos</th><th>Wilson por concurso</th><th>Amplitude</th></tr>
-        ${rows}
-      </table>
-    </div>
-  `;
-}
+// Transferência entre Editais foi movida pra historyPage.js (03/07/2026 —
+// decisão do usuário: não é acionável no dia a dia, mais exploratória).
 
 // Retenção Geral por faixa de intervalo (Fase 6-C) — agrega v_retencao_caderno
 // (proxy por caderno, Fase 5) somando todos os cadernos por faixa. Responde
@@ -416,7 +377,7 @@ function renderRetencaoGeral(linhas) {
     )
     .join("");
   return `
-    <div class="card" style="margin-bottom:16px;">
+    <div class="card" style="margin-bottom:24px;">
       <h3 style="margin-top:0;">Retenção por Intervalo de Revisão</h3>
       <p style="color:var(--color-text-muted); margin-top:0;">Acerto médio agrupado pelo intervalo desde a última vez que você tocou naquele caderno (qualquer tipo de estudo conta como "toque"). Proxy por caderno — não por questão individual (question_attempts não é usado, registro é agregado desde a Fase 4). Curva no estilo da curva de esquecimento (Anki): se sobe da direita pra esquerda, revisão está segurando retenção.</p>
       <canvas id="retencao-geral-chart" height="80"></canvas>
@@ -424,6 +385,36 @@ function renderRetencaoGeral(linhas) {
         <tr><th>Intervalo desde o último toque</th><th>% acerto</th><th>Questões</th></tr>
         ${rows}
       </table>
+    </div>
+  `;
+}
+
+// Retenção por Disciplina (Fase 6-F, 03/07/2026) — resposta direta a "como vou
+// saber qual disciplina/caderno eu revisei": a curva geral acima soma tudo, aqui
+// quebra a mesma faixa por disciplina. Disciplina é o meio-termo — por caderno
+// individual (613 deles) seria uma tabela ilegível; por disciplina (9) cabe
+// numa tela só. Célula em branco = disciplina sem sessão naquela faixa ainda.
+function renderRetencaoPorDisciplina(dados) {
+  if (!dados || !dados.disciplinas || dados.disciplinas.length === 0) return "";
+  const headerFaixas = dados.faixasOrdenadas.map((f) => `<th>${escapeHtml(f)}</th>`).join("");
+  const rows = dados.disciplinas
+    .map((d) => {
+      const celulas = d.faixas
+        .map((f) => (f.questoes > 0 ? `<td>${formatPct(f.pct)} <span style="color:var(--color-text-muted); font-size:11px;">(${f.questoes}q)</span></td>` : `<td style="color:var(--color-text-muted);">—</td>`))
+        .join("");
+      return `<tr><td>${escapeHtml(d.disciplinaNome)}</td>${celulas}</tr>`;
+    })
+    .join("");
+  return `
+    <div class="card" style="margin-bottom:24px;">
+      <h3 style="margin-top:0;">Retenção por Disciplina</h3>
+      <p style="color:var(--color-text-muted); margin-top:0;">Mesma curva de cima, quebrada por disciplina — pra ver qual disciplina está puxando pra cima ou pra baixo cada faixa de intervalo.</p>
+      <div style="overflow-x:auto;">
+        <table class="data-table">
+          <tr><th>Disciplina</th>${headerFaixas}</tr>
+          ${rows}
+        </table>
+      </div>
     </div>
   `;
 }
@@ -461,7 +452,7 @@ function renderProximaAcao(item) {
 
 function renderRanking(ranking) {
   if (ranking.length === 0) {
-    return `<div class="card"><p style="color:var(--color-text-muted);">Nenhuma disciplina com sessão mensurável ainda.</p></div>`;
+    return `<div class="card" style="margin-bottom:24px;"><p style="color:var(--color-text-muted);">Nenhuma disciplina com sessão mensurável ainda.</p></div>`;
   }
   const rows = ranking
     .map(
@@ -478,7 +469,7 @@ function renderRanking(ranking) {
     .join("");
 
   return `
-    <div class="card">
+    <div class="card" style="margin-bottom:24px;">
       <h3 style="margin-top:0;">Ranking de Risco</h3>
       <table class="data-table">
         <tr><th>Disciplina</th><th>Diagnóstico</th><th>Wilson</th><th>Questões</th><th>Peso</th></tr>

@@ -193,6 +193,7 @@
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
   padding: var(--spacing-3);
+  text-align: center;
 }
 
 .kpi-card__label {

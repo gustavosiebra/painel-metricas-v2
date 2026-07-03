@@ -8,6 +8,7 @@ import {
   getMediaMovelSemanal,
   getComparativoBanca,
   getComparativoConcurso,
+  getTransferenciaCadernos,
 } from "../services/historyService.js";
 import { formatPct } from "../utils/format.js";
 
@@ -98,9 +99,13 @@ export async function renderHistoryPage(container) {
   }
 
   async function renderComparativos() {
-    let porBanca, porConcurso;
+    let porBanca, porConcurso, transferencia;
     try {
-      [porBanca, porConcurso] = await Promise.all([getComparativoBanca(), getComparativoConcurso()]);
+      [porBanca, porConcurso, transferencia] = await Promise.all([
+        getComparativoBanca(),
+        getComparativoConcurso(),
+        getTransferenciaCadernos(),
+      ]);
     } catch (err) {
       comparativosSection.innerHTML = `<div class="alert alert--error">Erro ao carregar comparativos: ${escapeHtml(err.message)}</div>`;
       return;
@@ -114,6 +119,49 @@ export async function renderHistoryPage(container) {
       <div class="card" style="margin-bottom:16px;">
         <h3 style="margin-top:0;">Comparativo por Concurso</h3>
         ${renderComparativoTable(porConcurso, "concurso_nome")}
+      </div>
+      ${renderTransferencia(transferencia)}
+    `;
+  }
+
+  // Transferência entre Editais (movido do Dashboard, 03/07/2026 — mesmo
+  // caderno reaproveitado em concursos diferentes; compara Wilson por
+  // concurso). Só entra quem tem >=2 concursos distintos. Amplitude alta =
+  // desempenho disperso entre editais (sinal de transferência fraca); não é
+  // rotulado automaticamente, só ordenado pela amplitude bruta.
+  function renderTransferencia(linhas) {
+    if (!linhas || linhas.length === 0) {
+      return `
+        <div class="card" style="margin-bottom:16px;">
+          <h3 style="margin-top:0;">Transferência entre Concursos</h3>
+          <p style="color:var(--color-text-muted);">Nenhum caderno seu apareceu em 2+ concursos diferentes ainda — sem base de comparação.</p>
+        </div>
+      `;
+    }
+    const rows = linhas
+      .slice(0, 15)
+      .map((item) => {
+        const detalhe = item.concursos
+          .map((c) => `${escapeHtml(c.concursoNome)}: ${formatPct(c.wilsonPct)} (${c.questoesTotal}q)`)
+          .join(" · ");
+        return `
+          <tr>
+            <td>${escapeHtml(item.cadernoNome)}</td>
+            <td>${item.concursos.length}</td>
+            <td>${detalhe}</td>
+            <td>${item.amplitude != null ? item.amplitude.toFixed(2) : "—"} p.p.</td>
+          </tr>
+        `;
+      })
+      .join("");
+    return `
+      <div class="card" style="margin-bottom:16px;">
+        <h3 style="margin-top:0;">Transferência entre Concursos</h3>
+        <p style="color:var(--color-text-muted); margin-top:0;">Mesmo caderno, Wilson por concurso. Amplitude = maior menos menor Wilson entre os concursos — quanto maior, mais disperso o desempenho entre editais.</p>
+        <table class="data-table">
+          <tr><th>Caderno</th><th>Concursos</th><th>Wilson por concurso</th><th>Amplitude</th></tr>
+          ${rows}
+        </table>
       </div>
     `;
   }

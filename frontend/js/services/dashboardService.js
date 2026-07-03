@@ -207,40 +207,9 @@ export async function getJanelaTendenciaCadernoDestaques(nDestaques = 5) {
   return { subindo, caindo };
 }
 
-// Transferência entre Editais (view nova) — o MESMO caderno reaproveitado em
-// concursos diferentes; compara Wilson por concurso. Só entra na lista quem
-// tem >=2 concursos distintos — com 1 só não há o que comparar. Amplitude =
-// maior Wilson - menor Wilson entre os concursos daquele caderno (maior
-// amplitude = desempenho mais disperso entre editais, sinal de transferência
-// fraca; não fazemos julgamento automático, só ordenamos pelo dado bruto).
-export async function getTransferenciaCadernos() {
-  const { data, error } = await supabase
-    .from("v_transferencia_caderno")
-    .select("question_set_id, caderno_nome, discipline_id, exam_id, concurso_nome, questoes_total, wilson_pct");
-  if (error) throw error;
-
-  const porCaderno = new Map();
-  for (const r of data || []) {
-    if (!porCaderno.has(r.question_set_id)) {
-      porCaderno.set(r.question_set_id, { cadernoNome: r.caderno_nome, disciplineId: r.discipline_id, concursos: [] });
-    }
-    porCaderno.get(r.question_set_id).concursos.push({
-      concursoNome: r.concurso_nome,
-      questoesTotal: r.questoes_total,
-      wilsonPct: r.wilson_pct != null ? Number(r.wilson_pct) : null,
-    });
-  }
-
-  const resultado = [];
-  for (const item of porCaderno.values()) {
-    if (item.concursos.length < 2) continue;
-    const wilsons = item.concursos.map((c) => c.wilsonPct).filter((v) => v != null);
-    const amplitude = wilsons.length > 0 ? Math.round((Math.max(...wilsons) - Math.min(...wilsons)) * 10) / 10 : null;
-    resultado.push({ ...item, amplitude });
-  }
-  resultado.sort((a, b) => (b.amplitude ?? 0) - (a.amplitude ?? 0));
-  return resultado;
-}
+// Transferência entre Editais foi movida pra historyService.js (03/07/2026 —
+// decisão do usuário: não é acionável no dia a dia, mais exploratória, mesmo
+// espírito do Comparativo por Concurso que já vive no Histórico).
 
 // Retenção agregada por faixa de intervalo (Fase 6-C) — v_retencao_caderno já
 // existia por caderno individual (proxy, não por questão — question_attempts
@@ -267,6 +236,60 @@ export async function getRetencaoGeral() {
   }));
   linhas.sort((a, b) => a.faixaOrdem - b.faixaOrdem);
   return linhas;
+}
+
+// Retenção por Disciplina (Fase 6-F, 03/07/2026) — a curva geral acima
+// responde "minhas revisões aumentam retenção", mas esconde QUAL disciplina/
+// caderno está por trás de cada faixa. Aqui agrega a mesma v_retencao_caderno
+// por disciplina em vez de somar tudo junto — permite ver, por exemplo, se
+// "30+ dias" está sendo puxado pra baixo por uma disciplina específica.
+// Ainda não é por caderno individual (613 cadernos numa tabela seria
+// ilegível) — disciplina é o meio-termo entre "geral demais" e "granular demais".
+export async function getRetencaoPorDisciplina() {
+  const [retencaoResult, disciplinesResult] = await Promise.all([
+    supabase.from("v_retencao_caderno").select("discipline_id, faixa, faixa_ordem, questoes_total, acertos_total"),
+    supabase.from("disciplines").select("id, name"),
+  ]);
+  if (retencaoResult.error) throw retencaoResult.error;
+  if (disciplinesResult.error) throw disciplinesResult.error;
+
+  const nomePorId = new Map((disciplinesResult.data || []).map((d) => [d.id, d.name]));
+  const chave = (disciplineId, faixa) => `${disciplineId}|${faixa}`;
+  const porCelula = new Map();
+  const faixasVistas = new Map(); // faixa -> faixaOrdem
+  const disciplinasVistas = new Map(); // disciplineId -> nome
+
+  for (const r of retencaoResult.data || []) {
+    const nome = nomePorId.get(r.discipline_id) || "Sem disciplina";
+    disciplinasVistas.set(r.discipline_id, nome);
+    faixasVistas.set(r.faixa, r.faixa_ordem);
+    const k = chave(r.discipline_id, r.faixa);
+    const atual = porCelula.get(k) || { questoes: 0, acertos: 0 };
+    atual.questoes += Number(r.questoes_total || 0);
+    atual.acertos += Number(r.acertos_total || 0);
+    porCelula.set(k, atual);
+  }
+
+  const faixasOrdenadas = Array.from(faixasVistas.entries())
+    .sort((a, b) => a[1] - b[1])
+    .map(([faixa]) => faixa);
+
+  const disciplinas = Array.from(disciplinasVistas.entries())
+    .map(([id, nome]) => {
+      const faixas = faixasOrdenadas.map((faixa) => {
+        const cel = porCelula.get(chave(id, faixa));
+        const questoes = cel ? cel.questoes : 0;
+        return {
+          faixa,
+          questoes,
+          pct: questoes > 0 ? Math.round((cel.acertos / questoes) * 1000) / 10 : null,
+        };
+      });
+      return { disciplinaNome: nome, faixas };
+    })
+    .sort((a, b) => a.disciplinaNome.localeCompare(b.disciplinaNome));
+
+  return { faixasOrdenadas, disciplinas };
 }
 
 // Horas por Disciplina (Fase 6-D, 03/07/2026) — quebra do KPI único "Horas
