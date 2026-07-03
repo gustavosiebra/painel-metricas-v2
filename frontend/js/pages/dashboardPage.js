@@ -14,6 +14,7 @@ import {
   getJanelaTendenciaCadernoDestaques,
   getTransferenciaCadernos,
   getRetencaoGeral,
+  getHorasPorDisciplina,
   pickProximaAcao,
 } from "../services/dashboardService.js";
 
@@ -24,7 +25,9 @@ const SITUACAO_LABELS = {
   preliminar: { label: "Preliminares", color: "var(--color-text-muted)" },
 };
 
-let chartInstance = null;
+let chartTendenciaInstance = null;
+let chartHorasInstance = null;
+let chartRetencaoInstance = null;
 
 export async function renderDashboardPage(container) {
   container.innerHTML = `
@@ -42,9 +45,9 @@ export async function renderDashboardPage(container) {
 
   const content = container.querySelector("#dashboard-content");
 
-  let kpis, ranking, mediaMovelDiaria, situacao, produtividade, janelaDisciplina, janelaCaderno, transferencia, retencaoGeral;
+  let kpis, ranking, mediaMovelDiaria, situacao, produtividade, janelaDisciplina, janelaCaderno, transferencia, retencaoGeral, horasPorDisciplina;
   try {
-    [kpis, ranking, mediaMovelDiaria, situacao, produtividade, janelaDisciplina, janelaCaderno, transferencia, retencaoGeral] = await Promise.all([
+    [kpis, ranking, mediaMovelDiaria, situacao, produtividade, janelaDisciplina, janelaCaderno, transferencia, retencaoGeral, horasPorDisciplina] = await Promise.all([
       getKpis(),
       getRankingRisco(),
       getMediaMovelSemanal(),
@@ -54,6 +57,7 @@ export async function renderDashboardPage(container) {
       getJanelaTendenciaCadernoDestaques(),
       getTransferenciaCadernos(),
       getRetencaoGeral(),
+      getHorasPorDisciplina(),
     ]);
   } catch (err) {
     content.innerHTML = `<div class="alert alert--error">Erro ao carregar dashboard: ${escapeHtml(err.message)}</div>`;
@@ -69,6 +73,7 @@ export async function renderDashboardPage(container) {
     ${renderProdutividade(produtividade)}
     ${renderProximaAcao(proximaAcao)}
     ${renderTendenciaSemanal(tendenciaSemanal)}
+    ${renderHorasPorDisciplina(horasPorDisciplina)}
     ${renderJanelaTendenciaDisciplina(janelaDisciplina)}
     ${renderJanelaTendenciaCaderno(janelaCaderno)}
     ${renderTransferencia(transferencia)}
@@ -76,17 +81,29 @@ export async function renderDashboardPage(container) {
     ${renderRanking(ranking)}
   `;
 
+  // Cada gráfico é isolado no próprio try/catch: um erro de desenho (ex.:
+  // Chart.js não carregado) não pode derrubar os outros gráficos do dashboard.
   if (tendenciaSemanal.semanas.length > 0) {
-    try {
-      renderChart(content.querySelector("#media-movel-chart"), tendenciaSemanal.semanas);
-    } catch (err) {
-      // Antes falhava em silêncio (canvas ficava em branco, sem pista
-      // nenhuma) — normalmente Chart.js não carregou (CDN bloqueado/rede),
-      // já que a lib vem de um <script> externo no index.html.
-      const canvasEl = content.querySelector("#media-movel-chart");
-      if (canvasEl) {
-        canvasEl.outerHTML = `<div class="alert alert--error">Erro ao desenhar o gráfico: ${escapeHtml(err.message)}. Verifique se o Chart.js carregou (console do navegador) — provável CDN bloqueado.</div>`;
-      }
+    tentarDesenhar(content, "media-movel-chart", () => renderChartTendencia(content.querySelector("#media-movel-chart"), tendenciaSemanal.semanas));
+  }
+  if (horasPorDisciplina.length > 0) {
+    tentarDesenhar(content, "horas-disciplina-chart", () => renderChartHoras(content.querySelector("#horas-disciplina-chart"), horasPorDisciplina));
+  }
+  if (retencaoGeral.length > 0) {
+    tentarDesenhar(content, "retencao-geral-chart", () => renderChartRetencao(content.querySelector("#retencao-geral-chart"), retencaoGeral));
+  }
+}
+
+// Antes falhava em silêncio (canvas ficava em branco, sem pista nenhuma) —
+// normalmente Chart.js não carregou (CDN bloqueado/rede), já que a lib vem
+// de um <script> externo no index.html.
+function tentarDesenhar(content, canvasId, desenhar) {
+  try {
+    desenhar();
+  } catch (err) {
+    const canvasEl = content.querySelector(`#${canvasId}`);
+    if (canvasEl) {
+      canvasEl.outerHTML = `<div class="alert alert--error">Erro ao desenhar o gráfico: ${escapeHtml(err.message)}. Verifique se o Chart.js carregou (console do navegador) — provável CDN bloqueado.</div>`;
     }
   }
 }
@@ -166,15 +183,18 @@ function renderProdutividade(p) {
   `;
 }
 
-// Tendência Semanal (Fase 6-C) — substitui o gráfico diário (400 pontos,
-// ilegível) por 12 blocos semanais + um número explícito de comparação
-// semana atual x anterior, que é a pergunta literal do usuário ("melhorou ou
-// piorou em relação à semana passada?").
+// Tendência Semanal (Fase 6-C/6-D) — substitui o gráfico diário (400 pontos,
+// ilegível) por 12 blocos semanais. O gráfico mostra volume BRUTO de acertos
+// e erros (área empilhada), não só %, pra responder também "o volume de
+// erros está encolhendo" e não só a razão — pedido do usuário (03/07/2026),
+// referência: dashboards de Gran Cursos/Deltinha/Aprovado. O texto de delta
+// (semana atual vs anterior) continua sendo a resposta direta a "melhorou ou
+// piorou em relação à semana passada?".
 function renderTendenciaSemanal(t) {
   if (!t.semanas || t.semanas.length === 0) {
     return `
       <div class="card" style="margin-bottom:16px;">
-        <h3 style="margin-top:0;">Tendência Semanal (% de acerto)</h3>
+        <h3 style="margin-top:0;">Acertos vs. Erros por Semana</h3>
         <p style="color:var(--color-text-muted);">Sem sessões mensuráveis suficientes ainda.</p>
       </div>
     `;
@@ -197,9 +217,27 @@ function renderTendenciaSemanal(t) {
   }
   return `
     <div class="card" style="margin-bottom:16px;">
-      <h3 style="margin-top:0;">Tendência Semanal (% de acerto)</h3>
+      <h3 style="margin-top:0;">Acertos vs. Erros por Semana</h3>
       ${deltaHtml}
       <canvas id="media-movel-chart" height="90"></canvas>
+    </div>
+  `;
+}
+
+// Horas por Disciplina (Fase 6-D) — rosca (doughnut) de alocação de tempo.
+// Preenche a lacuna do KPI único "Horas estudadas" (não quebrado por nada).
+// Todos os tipos de estudo contam (mesmo critério do KPI) — é tempo, não
+// acerto, sem risco de viés tipo Eficiência Global.
+function renderHorasPorDisciplina(linhas) {
+  if (!linhas || linhas.length === 0) return "";
+  const total = linhas.reduce((acc, l) => acc + l.horas, 0);
+  return `
+    <div class="card" style="margin-bottom:16px;">
+      <h3 style="margin-top:0;">Horas por Disciplina</h3>
+      <p style="color:var(--color-text-muted); margin-top:0;">Total: ${Math.round(total * 10) / 10}h, todos os tipos de estudo.</p>
+      <div style="max-width:420px;">
+        <canvas id="horas-disciplina-chart" height="260"></canvas>
+      </div>
     </div>
   `;
 }
@@ -338,8 +376,9 @@ function renderRetencaoGeral(linhas) {
   return `
     <div class="card" style="margin-bottom:16px;">
       <h3 style="margin-top:0;">Retenção por Intervalo de Revisão</h3>
-      <p style="color:var(--color-text-muted); margin-top:0;">Acerto médio agrupado pelo intervalo desde a última vez que você tocou naquele caderno (qualquer tipo de estudo conta como "toque"). Proxy por caderno — não por questão individual (question_attempts não é usado, registro é agregado desde a Fase 4).</p>
-      <table class="data-table">
+      <p style="color:var(--color-text-muted); margin-top:0;">Acerto médio agrupado pelo intervalo desde a última vez que você tocou naquele caderno (qualquer tipo de estudo conta como "toque"). Proxy por caderno — não por questão individual (question_attempts não é usado, registro é agregado desde a Fase 4). Curva no estilo da curva de esquecimento (Anki): se sobe da direita pra esquerda, revisão está segurando retenção.</p>
+      <canvas id="retencao-geral-chart" height="80"></canvas>
+      <table class="data-table" style="margin-top:16px;">
         <tr><th>Intervalo desde o último toque</th><th>% acerto</th><th>Questões</th></tr>
         ${rows}
       </table>
@@ -401,24 +440,104 @@ function renderPesoBadge(weight) {
 // Recebe os blocos semanais já agregados (getTendenciaSemanal) — no máximo
 // ~12 pontos, em vez dos ~400 dias corridos que tornavam o gráfico anterior
 // ilegível (muitos rótulos amontoados no eixo X, linha diária cheia de ruído
-// escondendo qualquer tendência).
-function renderChart(canvas, semanas) {
-  if (chartInstance) {
-    chartInstance.destroy();
-    chartInstance = null;
+// escondendo qualquer tendência). Duas áreas (acertos/erros) em volume bruto,
+// não %, no mesmo padrão de dashboards de apps de concurso (Gran/Deltinha/
+// Aprovado) — mostra se o volume de erros está encolhendo em número absoluto.
+function renderChartTendencia(canvas, semanas) {
+  if (chartTendenciaInstance) {
+    chartTendenciaInstance.destroy();
+    chartTendenciaInstance = null;
   }
   const fmtData = (iso) => {
     const [, m, d] = iso.split("-");
     return `${d}/${m}`;
   };
   const labels = semanas.map((s) => `${fmtData(s.inicio)}–${fmtData(s.fim)}`);
-  const dataPct = semanas.map((s) => s.pct);
+  const dataAcertos = semanas.map((s) => s.acertos);
+  const dataErros = semanas.map((s) => s.erros);
 
-  chartInstance = new Chart(canvas, {
-    type: "bar",
+  chartTendenciaInstance = new Chart(canvas, {
+    type: "line",
     data: {
       labels,
-      datasets: [{ label: "% acerto na semana", data: dataPct, backgroundColor: "#1f3864" }],
+      datasets: [
+        {
+          label: "Acertos",
+          data: dataAcertos,
+          borderColor: "#1e7e34",
+          backgroundColor: "rgba(30, 126, 52, 0.25)",
+          fill: "origin",
+          tension: 0.3,
+          pointRadius: 3,
+        },
+        {
+          label: "Erros",
+          data: dataErros,
+          borderColor: "#c0392b",
+          backgroundColor: "rgba(192, 57, 43, 0.25)",
+          fill: "origin",
+          tension: 0.3,
+          pointRadius: 3,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      scales: { y: { beginAtZero: true, title: { display: true, text: "Questões" } } },
+    },
+  });
+}
+
+// Rosca de horas por disciplina (Fase 6-D).
+function renderChartHoras(canvas, linhas) {
+  if (chartHorasInstance) {
+    chartHorasInstance.destroy();
+    chartHorasInstance = null;
+  }
+  const CORES = ["#1f3864", "#2e7d32", "#c0392b", "#b45309", "#6a1b9a", "#00838f", "#8d6e63", "#546e7a", "#ad1457"];
+  chartHorasInstance = new Chart(canvas, {
+    type: "doughnut",
+    data: {
+      labels: linhas.map((l) => l.disciplinaNome),
+      datasets: [
+        {
+          data: linhas.map((l) => l.horas),
+          backgroundColor: linhas.map((_, i) => CORES[i % CORES.length]),
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { position: "right" },
+        tooltip: { callbacks: { label: (ctx) => `${ctx.label}: ${ctx.parsed}h` } },
+      },
+    },
+  });
+}
+
+// Curva de Retenção (Fase 6-D) — estilo curva de esquecimento (Anki):
+// intervalo desde o último toque no eixo X, % acerto no eixo Y.
+function renderChartRetencao(canvas, linhas) {
+  if (chartRetencaoInstance) {
+    chartRetencaoInstance.destroy();
+    chartRetencaoInstance = null;
+  }
+  chartRetencaoInstance = new Chart(canvas, {
+    type: "line",
+    data: {
+      labels: linhas.map((l) => l.faixa),
+      datasets: [
+        {
+          label: "% acerto",
+          data: linhas.map((l) => l.pct),
+          borderColor: "#1f3864",
+          backgroundColor: "rgba(31, 56, 100, 0.15)",
+          fill: true,
+          tension: 0.3,
+          pointRadius: 4,
+        },
+      ],
     },
     options: {
       responsive: true,

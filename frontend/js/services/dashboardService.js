@@ -111,6 +111,7 @@ export function getTendenciaSemanal(diario, nSemanas = 12) {
       fim: fim.toISOString().slice(0, 10),
       questoes,
       acertos,
+      erros: questoes - acertos, // volume bruto, não % — pedido do usuário (03/07/2026): ver acertos/erros crescendo/encolhendo em número absoluto, não só razão
       pct: questoes > 0 ? Math.round((acertos / questoes) * 1000) / 10 : null,
     });
   }
@@ -250,6 +251,34 @@ export async function getRetencaoGeral() {
     pct: f.questoes > 0 ? Math.round((f.acertos / f.questoes) * 1000) / 10 : null,
   }));
   linhas.sort((a, b) => a.faixaOrdem - b.faixaOrdem);
+  return linhas;
+}
+
+// Horas por Disciplina (Fase 6-D, 03/07/2026) — quebra do KPI único "Horas
+// estudadas" por disciplina. Usa TODOS os tipos de estudo (mesmo critério do
+// KPI de horas totais) — é alocação de tempo, não razão de acerto, então não
+// tem o risco de viés da Eficiência Global (não mistura acerto com hora não
+// mensurável, só soma hora bruta).
+export async function getHorasPorDisciplina() {
+  const [sessionsResult, disciplinesResult] = await Promise.all([
+    supabase.from("study_sessions").select("duration_minutes, discipline_id").eq("status", "ativo"),
+    supabase.from("disciplines").select("id, name"),
+  ]);
+  if (sessionsResult.error) throw sessionsResult.error;
+  if (disciplinesResult.error) throw disciplinesResult.error;
+
+  const nomePorId = new Map((disciplinesResult.data || []).map((d) => [d.id, d.name]));
+  const porDisciplina = new Map();
+  for (const r of sessionsResult.data || []) {
+    const nome = nomePorId.get(r.discipline_id) || "Sem disciplina";
+    const atual = porDisciplina.get(nome) || 0;
+    porDisciplina.set(nome, atual + Number(r.duration_minutes || 0));
+  }
+  const linhas = Array.from(porDisciplina.entries()).map(([disciplinaNome, minutos]) => ({
+    disciplinaNome,
+    horas: Math.round((minutos / 60) * 10) / 10,
+  }));
+  linhas.sort((a, b) => b.horas - a.horas);
   return linhas;
 }
 
