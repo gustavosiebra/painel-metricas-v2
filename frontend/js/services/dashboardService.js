@@ -81,6 +81,25 @@ export async function getMediaMovelSemanal() {
   return data || [];
 }
 
+// Contadores por Situação (Fase 6-B) — quantos CADERNOS caem em cada
+// classificação de Diagnóstico Wilson (v_diagnostico_caderno). Não usa
+// question_sets.learning_level (campo nunca ficou de fato preenchido pela
+// interface — todas as 1025 linhas do catálogo continuam no valor padrão
+// "novo", sem sinal real). Situação real e viva do sistema hoje é a
+// classificação Wilson por caderno: preliminar/critico/atencao/consolidado.
+const CLASSIFICACOES = ["consolidado", "atencao", "critico", "preliminar"];
+
+export async function getContadoresSituacao() {
+  const { data, error } = await supabase.from("v_diagnostico_caderno").select("classificacao");
+  if (error) throw error;
+
+  const counts = Object.fromEntries(CLASSIFICACOES.map((c) => [c, 0]));
+  for (const row of data || []) {
+    if (row.classificacao in counts) counts[row.classificacao] += 1;
+  }
+  return counts;
+}
+
 // Próxima Ação: seleção em JS (regra de ordenação, não fórmula estatística nova
 // — o número (Wilson, classificação) já vem pronto do banco). Prioriza
 // disciplinas com peso "alto"; sem nenhuma, cai para a pior classificação geral.

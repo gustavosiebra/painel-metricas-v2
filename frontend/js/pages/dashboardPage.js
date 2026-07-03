@@ -3,7 +3,14 @@
 // cálculo estatístico é refeito aqui (TEC-006).
 
 import { renderNavbar, wireNavbar } from "../components/navbar.js";
-import { getKpis, getRankingRisco, getMediaMovelSemanal, pickProximaAcao } from "../services/dashboardService.js";
+import { getKpis, getRankingRisco, getMediaMovelSemanal, getContadoresSituacao, pickProximaAcao } from "../services/dashboardService.js";
+
+const SITUACAO_LABELS = {
+  consolidado: { label: "Consolidados", color: "var(--color-success)" },
+  atencao: { label: "Atenção", color: "#b45309" },
+  critico: { label: "Críticos", color: "var(--color-error)" },
+  preliminar: { label: "Preliminares", color: "var(--color-text-muted)" },
+};
 
 let chartInstance = null;
 
@@ -23,9 +30,14 @@ export async function renderDashboardPage(container) {
 
   const content = container.querySelector("#dashboard-content");
 
-  let kpis, ranking, mediaMovel;
+  let kpis, ranking, mediaMovel, situacao;
   try {
-    [kpis, ranking, mediaMovel] = await Promise.all([getKpis(), getRankingRisco(), getMediaMovelSemanal()]);
+    [kpis, ranking, mediaMovel, situacao] = await Promise.all([
+      getKpis(),
+      getRankingRisco(),
+      getMediaMovelSemanal(),
+      getContadoresSituacao(),
+    ]);
   } catch (err) {
     content.innerHTML = `<div class="alert alert--error">Erro ao carregar dashboard: ${escapeHtml(err.message)}</div>`;
     return;
@@ -35,6 +47,7 @@ export async function renderDashboardPage(container) {
 
   content.innerHTML = `
     ${renderKpis(kpis)}
+    ${renderSituacao(situacao)}
     ${renderProximaAcao(proximaAcao)}
     <div class="card" style="margin-bottom:16px;">
       <h3 style="margin-top:0;">Média Móvel Semanal (% de acerto)</h3>
@@ -81,6 +94,32 @@ function renderKpis(kpis) {
         <p class="kpi-card__value">${diagLabel} ${diagBadge}</p>
       </div>
     </div>
+  `;
+}
+
+// Contadores por Situação (Fase 6-B) — quantos cadernos caem em cada
+// classificação de Diagnóstico Wilson. Responde "como estou" no nível mais
+// granular (caderno), complementando o KPI de Diagnóstico Geral (agregado
+// total) e o Ranking de Risco (por disciplina).
+function renderSituacao(situacao) {
+  const total = Object.values(situacao).reduce((a, b) => a + b, 0);
+  if (total === 0) {
+    return "";
+  }
+  const cards = Object.entries(SITUACAO_LABELS)
+    .map(([key, meta]) => {
+      const count = situacao[key] ?? 0;
+      return `
+        <div class="kpi-card">
+          <p class="kpi-card__label">${escapeHtml(meta.label)}</p>
+          <p class="kpi-card__value" style="color:${meta.color};">${count}</p>
+        </div>
+      `;
+    })
+    .join("");
+  return `
+    <h3 style="margin: 24px 0 8px;">Cadernos por Situação</h3>
+    <div class="kpi-grid">${cards}</div>
   `;
 }
 
