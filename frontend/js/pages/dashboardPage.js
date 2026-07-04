@@ -80,8 +80,7 @@ export async function renderDashboardPage(container) {
   // 2) ação concreta (Próxima Ação + Ranking), 3) tendência ao longo do tempo,
   // 4) aprofundamento (Janela, Transferência, Retenção) pra quem quer investigar mais.
   content.innerHTML = `
-    ${renderKpis(kpis, produtividade, cadernosEstudados)}
-    ${renderSituacao(situacao)}
+    ${renderVisaoGeral(kpis, produtividade, cadernosEstudados, situacao)}
     ${renderProximaAcao(proximaAcao)}
     ${renderRanking(ranking)}
     ${renderMediaMovelSemanal(tendenciaSemanal)}
@@ -121,70 +120,67 @@ function tentarDesenhar(content, canvasId, desenhar) {
   }
 }
 
-// KPIs de topo (Fase 6-E, 03/07/2026): um grid único, sem títulos de seção
-// separados. "Diagnóstico geral" virou "Desempenho geral" (termo mais direto).
-// "Sessões ativas" saiu (contagem bruta não ajuda a decidir nada). "Cadernos
-// estudados" e as duas métricas que antes viviam em "Produtividade e
-// Eficiência" (Eficiência Estrita → "Acertos por hora"; Produtividade →
-// "Questões por hora") entraram aqui, sem o rótulo técnico entre parênteses —
-// Eficiência Global continua fora por decisão anterior do usuário (mistura
-// acerto com horas não mensuráveis, vicia o número).
-function renderKpis(kpis, produtividade, cadernosEstudados) {
+// Visão Geral (Fase 6-G, 04/07/2026): KPIs + Contadores por Situação num
+// ÚNICO grid, não dois grids empilhados. Antes cada bloco tinha seu próprio
+// <div class="kpi-grid">, e como um tinha 6 cartões e o outro 4, o auto-fit do
+// CSS gerava colunas de largura DIFERENTE em cada bloco — as colunas não
+// alinhavam entre as duas fileiras. Num grid só, os cartões compartilham as
+// mesmas trilhas de coluna, garantindo alinhamento vertical e horizontal.
+// "Diagnóstico geral" virou "Desempenho geral". "Sessões ativas" saiu
+// (contagem bruta não ajuda a decidir nada). "Cadernos estudados" e as duas
+// métricas que antes viviam em "Produtividade e Eficiência" (Eficiência
+// Estrita → "Acertos por hora"; Produtividade → "Questões por hora") entraram
+// aqui, sem rótulo técnico — Eficiência Global continua fora (decisão
+// anterior: mistura acerto com horas não mensuráveis, vicia o número).
+function renderVisaoGeral(kpis, produtividade, cadernosEstudados, situacao) {
   const diag = kpis.diagnosticoGeral;
   const diagLabel = diag ? formatPct(diag.wilson_pct) : "—";
   const diagBadge = diag ? renderBadge(diag.classificacao) : "";
-  return `
-    <div class="kpi-grid">
-      <div class="kpi-card">
-        <p class="kpi-card__label">Desempenho geral</p>
-        <p class="kpi-card__value">${diagLabel} ${diagBadge}</p>
-      </div>
-      <div class="kpi-card">
-        <p class="kpi-card__label">Horas estudadas</p>
-        <p class="kpi-card__value">${kpis.horasTotais}h</p>
-      </div>
-      <div class="kpi-card">
-        <p class="kpi-card__label">Cadernos estudados</p>
-        <p class="kpi-card__value">${cadernosEstudados}</p>
-      </div>
-      <div class="kpi-card">
-        <p class="kpi-card__label">Disciplinas em estudo</p>
-        <p class="kpi-card__value">${kpis.disciplinasComSessao}</p>
-      </div>
-      <div class="kpi-card">
-        <p class="kpi-card__label">Acertos por hora</p>
-        <p class="kpi-card__value">${produtividade.eficienciaEstrita == null ? "—" : `${produtividade.eficienciaEstrita}/h`}</p>
-      </div>
-      <div class="kpi-card">
-        <p class="kpi-card__label">Questões por hora</p>
-        <p class="kpi-card__value">${produtividade.produtividade == null ? "—" : `${produtividade.produtividade}/h`}</p>
-      </div>
+
+  const cartoesKpi = `
+    <div class="kpi-card">
+      <p class="kpi-card__label">Desempenho geral</p>
+      <p class="kpi-card__value">${diagLabel} ${diagBadge}</p>
+    </div>
+    <div class="kpi-card">
+      <p class="kpi-card__label">Horas estudadas</p>
+      <p class="kpi-card__value">${kpis.horasTotais}h</p>
+    </div>
+    <div class="kpi-card">
+      <p class="kpi-card__label">Cadernos estudados</p>
+      <p class="kpi-card__value">${cadernosEstudados}</p>
+    </div>
+    <div class="kpi-card">
+      <p class="kpi-card__label">Disciplinas em estudo</p>
+      <p class="kpi-card__value">${kpis.disciplinasComSessao}</p>
+    </div>
+    <div class="kpi-card">
+      <p class="kpi-card__label">Acertos por hora</p>
+      <p class="kpi-card__value">${produtividade.eficienciaEstrita == null ? "—" : `${produtividade.eficienciaEstrita}/h`}</p>
+    </div>
+    <div class="kpi-card">
+      <p class="kpi-card__label">Questões por hora</p>
+      <p class="kpi-card__value">${produtividade.produtividade == null ? "—" : `${produtividade.produtividade}/h`}</p>
     </div>
   `;
-}
 
-// Contadores por Situação (Fase 6-B) — quantos cadernos caem em cada
-// classificação de Diagnóstico Wilson. Responde "como estou" no nível mais
-// granular (caderno), complementando o KPI de Desempenho Geral (agregado
-// total) e o Ranking de Risco (por disciplina). Sem título de seção (pedido
-// do usuário, 03/07/2026) — fica como continuação natural do grid de cima.
-function renderSituacao(situacao) {
-  const total = Object.values(situacao).reduce((a, b) => a + b, 0);
-  if (total === 0) {
-    return "";
-  }
-  const cards = Object.entries(SITUACAO_LABELS)
-    .map(([key, meta]) => {
-      const count = situacao[key] ?? 0;
-      return `
-        <div class="kpi-card">
-          <p class="kpi-card__label">${escapeHtml(meta.label)}</p>
-          <p class="kpi-card__value" style="color:${meta.color};">${count}</p>
-        </div>
-      `;
-    })
-    .join("");
-  return `<div class="kpi-grid">${cards}</div>`;
+  const totalSituacao = Object.values(situacao).reduce((a, b) => a + b, 0);
+  const cartoesSituacao =
+    totalSituacao === 0
+      ? ""
+      : Object.entries(SITUACAO_LABELS)
+          .map(([key, meta]) => {
+            const count = situacao[key] ?? 0;
+            return `
+              <div class="kpi-card">
+                <p class="kpi-card__label">${escapeHtml(meta.label)}</p>
+                <p class="kpi-card__value" style="color:${meta.color};">${count}</p>
+              </div>
+            `;
+          })
+          .join("");
+
+  return `<div class="kpi-grid">${cartoesKpi}${cartoesSituacao}</div>`;
 }
 
 // Tendência Semanal (Fase 6-C) — substitui o gráfico diário original (400
