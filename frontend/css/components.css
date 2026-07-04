@@ -180,12 +180,22 @@
   text-transform: uppercase;
 }
 
-/* Fase 6 — Dashboard */
+/* Fase 6 — Dashboard. 10 cartões fixos (6 KPI + 4 Situação): 5 colunas fixas
+   (não auto-fit) garantem sempre 2 fileiras de 5, centralizadas na tela —
+   pedido do usuário (04/07/2026). Abaixo de 900px cai pra 2 colunas pra não
+   espremer os cartões em telas estreitas. */
 .kpi-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 200px));
+  justify-content: center;
   gap: var(--spacing-3);
   margin-bottom: var(--spacing-4);
+}
+
+@media (max-width: 900px) {
+  .kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 200px));
+  }
 }
 
 .kpi-card {
@@ -221,7 +231,6 @@
   border-radius: 999px;
   font-size: 12px;
   font-weight: 600;
-  text-transform: capitalize;
 }
 
 .badge--critico { background: #fdecea; color: #b91c1c; }

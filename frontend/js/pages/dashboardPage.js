@@ -30,6 +30,16 @@ const SITUACAO_LABELS = {
   preliminar: { label: "Poucos dados", color: "var(--color-text-muted)" },
 };
 
+// Rótulo no singular/acentuado da mesma classificação acima (04/07/2026) —
+// usado no badge de Próxima Ação e no Ranking de Risco, onde o texto aparece
+// junto de UM item ("Edificações (Crítico)"), não uma contagem plural.
+const CLASSIFICACAO_LABEL = {
+  consolidado: "Consolidado",
+  atencao: "Atenção",
+  critico: "Crítico",
+  preliminar: "Poucos dados",
+};
+
 let chartMediaMovelInstance = null;
 let chartAcertosErrosInstance = null;
 let chartHorasInstance = null;
@@ -415,33 +425,19 @@ function renderRetencaoPorDisciplina(dados) {
   `;
 }
 
-// Próxima Ação (reescrita 03/07/2026): antes expunha classificação técnica e
-// % Wilson direto ("Crítico — peso alto, Wilson 65,74%"), o que exige saber os
-// cortes de classificação pra fazer sentido — sem esse contexto, o número
-// parece arbitrário. Agora o motivo vem em texto simples, sem % nem badge;
-// os números completos continuam disponíveis no Ranking de Risco logo abaixo,
-// pra quem quiser ver o detalhe.
+// Próxima Ação (reescrita 04/07/2026, formato definitivo pedido pelo usuário):
+// "Ação recomendada: [Disciplina] (Situação)" — direto, sem % Wilson nem peso
+// exposto (decisão de 03/07/2026 mantida: quem não conhece os cortes de
+// classificação não entenderia o número). A Situação usa o mesmo rótulo
+// acentuado do Ranking de Risco logo abaixo, onde quem quiser o detalhe
+// completo (Wilson %, peso) encontra.
 function renderProximaAcao(item) {
   if (!item) {
-    return `<div class="proxima-acao"><strong>Foco sugerido:</strong> ainda não há dado mensurável suficiente para sugerir foco.</div>`;
-  }
-  let motivo;
-  if (item.classificacao === "consolidado") {
-    motivo = item.usouPesoAlto
-      ? `está consolidada mesmo sendo peso alto — priorize manutenção, não é urgência.`
-      : `é a que está com o resultado mais discreto agora, mas seguindo bem.`;
-  } else if (item.classificacao === "preliminar") {
-    motivo = item.usouPesoAlto
-      ? `é peso alto e ainda não tem questões suficientes pra saber como você está indo — vale testar.`
-      : `ainda não tem questões suficientes pra saber como você está indo.`;
-  } else {
-    motivo = item.usouPesoAlto
-      ? `é a disciplina de peso alto com o resultado mais frágil agora.`
-      : `é a disciplina com o resultado mais frágil entre as que você estuda.`;
+    return `<div class="proxima-acao"><strong>Ação recomendada:</strong> ainda não há dado mensurável suficiente para sugerir foco.</div>`;
   }
   return `
     <div class="proxima-acao">
-      <strong>Foco sugerido:</strong> <strong>${escapeHtml(item.disciplinaNome)}</strong> ${motivo}
+      <strong>Ação recomendada:</strong> <strong>${escapeHtml(item.disciplinaNome)}</strong> (${renderBadge(item.classificacao)})
     </div>
   `;
 }
@@ -477,7 +473,8 @@ function renderRanking(ranking) {
 
 function renderBadge(classificacao) {
   if (!classificacao) return "";
-  return `<span class="badge badge--${classificacao}">${classificacao}</span>`;
+  const label = CLASSIFICACAO_LABEL[classificacao] ?? classificacao;
+  return `<span class="badge badge--${classificacao}">${label}</span>`;
 }
 
 function renderPesoBadge(weight) {
