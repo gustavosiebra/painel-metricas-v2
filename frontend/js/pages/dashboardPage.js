@@ -57,8 +57,8 @@ export async function renderDashboardPage(container) {
             <h1>Painel de Métricas — Dashboard</h1>
             <p>Exportado em ${escapeHtml(new Date().toLocaleString("pt-BR"))}</p>
           </div>
-          <div class="dashboard-toolbar" style="display:flex; justify-content:flex-end; margin-bottom:var(--spacing-3);">
-            <button id="export-pdf-btn" class="btn" style="width:auto; padding:8px 16px;">Exportar PDF</button>
+          <div class="dashboard-toolbar" style="display:flex; justify-content:flex-end; gap:8px; margin-bottom:var(--spacing-3);">
+            <button id="export-img-btn" class="btn" style="width:auto; padding:8px 16px; background:var(--color-surface); color:var(--color-primary); border:1px solid var(--color-border);">Exportar Imagem</button>
           </div>
           <div id="dashboard-content"><p>Carregando…</p></div>
         </main>
@@ -67,21 +67,46 @@ export async function renderDashboardPage(container) {
   `;
   wireNavbar(container);
 
-  // Nome sugerido do arquivo (pedido do usuário, 04/07/2026): o Chrome/Edge
-  // usa document.title como sugestão de nome ao "Salvar como PDF" — trocamos
-  // o título só durante a impressão e restauramos depois (afterprint).
-  const exportBtn = container.querySelector("#export-pdf-btn");
-  if (exportBtn) {
-    exportBtn.addEventListener("click", () => {
-      const tituloOriginal = document.title;
-      const hoje = new Date().toISOString().slice(0, 10); // AAAA-MM-DD
-      document.title = `metricas-${hoje}`;
-      const restaurarTitulo = () => {
-        document.title = tituloOriginal;
-        window.removeEventListener("afterprint", restaurarTitulo);
-      };
-      window.addEventListener("afterprint", restaurarTitulo);
-      window.print();
+  // Exportar PDF foi removido (pedido do usuário, 05/07/2026) — a Exportar
+  // Imagem abaixo cobre o caso de uso real (compartilhar de forma fluida),
+  // e evita manter duas opções redundantes na tela.
+
+  // Exportar Imagem (Fase 10, 05/07/2026) — pedido do usuário pra compartilhar
+  // num grupo de WhatsApp: uma única imagem PNG contínua, sem paginação
+  // nenhuma (diferente do PDF, que sempre corta em folhas). Usa html2canvas
+  // (vendorizada localmente, mesmo padrão do Chart.js) pra capturar o
+  // dashboard inteiro como está na tela. onclone só mexe numa cópia
+  // temporária do DOM feita pela própria lib — a tela real do usuário não é
+  // alterada em nenhum momento.
+  const exportImgBtn = container.querySelector("#export-img-btn");
+  if (exportImgBtn) {
+    exportImgBtn.addEventListener("click", async () => {
+      const textoOriginal = exportImgBtn.textContent;
+      exportImgBtn.disabled = true;
+      exportImgBtn.textContent = "Gerando imagem…";
+      try {
+        const alvo = container.querySelector(".app-content");
+        const canvasImagem = await html2canvas(alvo, {
+          backgroundColor: "#f5f6f8",
+          scale: 2,
+          useCORS: true,
+          ignoreElements: (el) => el.classList?.contains("dashboard-toolbar"),
+          onclone: (clonedDoc) => {
+            const header = clonedDoc.querySelector(".print-header");
+            if (header) header.style.display = "block";
+          },
+        });
+        const hoje = new Date().toISOString().slice(0, 10);
+        const link = document.createElement("a");
+        link.href = canvasImagem.toDataURL("image/png");
+        link.download = `metricas-${hoje}.png`;
+        link.click();
+      } catch (err) {
+        window.alert("Erro ao gerar imagem: " + (err.message || "desconhecido"));
+      } finally {
+        exportImgBtn.disabled = false;
+        exportImgBtn.textContent = textoOriginal;
+      }
     });
   }
 

@@ -3,7 +3,16 @@
 // 01/07/2026). Mesma tela serve os dois modos: params.get("id") define edição.
 
 import { renderNavbar, wireNavbar } from "../components/navbar.js";
-import { listDisciplines, listExams, listExamBoards, listQuestionSets, createQuestionSet } from "../services/catalogService.js";
+import {
+  listDisciplines,
+  listExams,
+  listExamBoards,
+  listQuestionSets,
+  createQuestionSet,
+  createExam,
+  createExamBoard,
+  createDiscipline,
+} from "../services/catalogService.js";
 import {
   createStudySession,
   updateStudySession,
@@ -97,7 +106,11 @@ export async function renderStudyFormPage(container, params) {
           <select id="exam_id">
             <option value="">— Estudo geral, sem concurso específico —</option>
             ${exams.map((e) => `<option value="${e.id}" ${existingSession?.exam_id === e.id ? "selected" : ""}>${escapeHtml(e.name)}</option>`).join("")}
+            <option value="__new__">+ Cadastrar novo concurso…</option>
           </select>
+          <div id="new-exam-box" style="display:none; margin-top:8px;">
+            <input type="text" id="new_exam_name" placeholder="Nome do novo concurso" />
+          </div>
         </div>
         <div class="form-field">
           <label for="board_id">Banca (opcional)</label>
@@ -105,7 +118,11 @@ export async function renderStudyFormPage(container, params) {
             <option value="">— Não informar —</option>
             ${boardOptions.map((b) => `<option value="${b.id}" ${existingSession?.board_id === b.id && initialBoardIds.length <= 1 ? "selected" : ""}>${escapeHtml(b.name)}</option>`).join("")}
             ${multibancaBoard ? `<option value="${multibancaBoard.id}" ${initialBoardIds.length > 1 ? "selected" : ""}>${escapeHtml(multibancaBoard.name)}</option>` : ""}
+            <option value="__new__">+ Cadastrar nova banca…</option>
           </select>
+          <div id="new-board-box" style="display:none; margin-top:8px;">
+            <input type="text" id="new_board_name" placeholder="Nome da nova banca" />
+          </div>
         </div>
         <div class="form-field" id="board-multi-field" style="display:none;">
           <label class="form-field-heading">Bancas</label>
@@ -126,7 +143,11 @@ export async function renderStudyFormPage(container, params) {
           <select id="discipline_id" required>
             <option value="">Selecione…</option>
             ${disciplines.map((d) => `<option value="${d.id}" ${existingSession?.discipline_id === d.id ? "selected" : ""}>${escapeHtml(d.name)}</option>`).join("")}
+            <option value="__new__">+ Cadastrar nova disciplina…</option>
           </select>
+          <div id="new-discipline-box" style="display:none; margin-top:8px;">
+            <input type="text" id="new_discipline_name" placeholder="Nome da nova disciplina" />
+          </div>
         </div>
         <div class="card" id="weight-shortcut-box" style="display:none; margin:8px 0; padding:12px; background:var(--color-bg-subtle, #f5f5f5);">
           <p style="margin:0 0 8px 0;">Ainda não há peso definido para esta disciplina neste concurso.</p>
@@ -213,6 +234,9 @@ export async function renderStudyFormPage(container, params) {
     const questionSetField = card.querySelector("#question-set-field");
     const questionSetSelect = card.querySelector("#question_set_id");
     const newCadernoBox = card.querySelector("#new-caderno-box");
+    const newExamBox = card.querySelector("#new-exam-box");
+    const newBoardBox = card.querySelector("#new-board-box");
+    const newDisciplineBox = card.querySelector("#new-discipline-box");
     const studyTypeSelect = card.querySelector("#study_type");
     const measurableFields = card.querySelector("#measurable-fields");
     const scoreField = card.querySelector("#score-field");
@@ -227,6 +251,23 @@ export async function renderStudyFormPage(container, params) {
     }
     boardSelect.addEventListener("change", updateMultibancasUI);
     updateMultibancasUI();
+
+    // Cadastro sob demanda de Concurso, Banca e Disciplina (05/07/2026) — mesmo
+    // padrão do "+ Criar novo caderno…" que já existia: escolher "__new__"
+    // revela um campo de texto pro nome; a criação de fato só acontece no
+    // submit (handleSubmit), pra não gravar nada no catálogo se a pessoa
+    // desistir do formulário.
+    function updateNewExamUI() {
+      newExamBox.style.display = examSelect.value === "__new__" ? "block" : "none";
+    }
+    examSelect.addEventListener("change", updateNewExamUI);
+    updateNewExamUI();
+
+    function updateNewBoardUI() {
+      newBoardBox.style.display = boardSelect.value === "__new__" ? "block" : "none";
+    }
+    boardSelect.addEventListener("change", updateNewBoardUI);
+    updateNewBoardUI();
 
     function populateQuestionSets(disciplineId, selectedId) {
       const filtered = questionSets.filter((q) => q.discipline_id === disciplineId);
@@ -250,10 +291,14 @@ export async function renderStudyFormPage(container, params) {
 
     disciplineSelect.addEventListener("change", () => {
       const disciplineId = disciplineSelect.value;
+      newDisciplineBox.style.display = disciplineId === "__new__" ? "block" : "none";
       if (!disciplineId) {
         questionSetField.style.display = "none";
         return;
       }
+      // Disciplina nova ainda não existe (só é criada no submit) — filtro por
+      // disciplineId="__new__" naturalmente não bate com nenhum caderno real,
+      // então a lista aparece vazia, que é o esperado (disciplina sem histórico).
       questionSetField.style.display = "block";
       populateQuestionSets(disciplineId, null);
       checkWeightShortcut();
@@ -271,7 +316,9 @@ export async function renderStudyFormPage(container, params) {
       const examId = examSelect.value;
       const disciplineId = disciplineSelect.value;
       weightShortcutStatus.textContent = "";
-      if (!examId || !disciplineId) {
+      // "__new__" ainda não é um id real (só existe depois do submit) — não dá
+      // pra checar/salvar peso pra algo que ainda não foi criado no catálogo.
+      if (!examId || !disciplineId || examId === "__new__" || disciplineId === "__new__") {
         weightShortcutBox.style.display = "none";
         return;
       }
@@ -339,8 +386,8 @@ export async function renderStudyFormPage(container, params) {
     const { user, isAdmin } = getState();
     alertBox.innerHTML = "";
 
-    const disciplineId = card.querySelector("#discipline_id").value;
-    const examId = card.querySelector("#exam_id").value;
+    let disciplineId = card.querySelector("#discipline_id").value;
+    let examId = card.querySelector("#exam_id").value;
     const studyType = card.querySelector("#study_type").value;
     const questionSetSelect = card.querySelector("#question_set_id");
     let questionSetId = questionSetSelect.value;
@@ -355,6 +402,33 @@ export async function renderStudyFormPage(container, params) {
     }
 
     try {
+      // Cadastro sob demanda (05/07/2026): resolve Concurso e Disciplina ANTES
+      // do Caderno, porque um caderno novo sempre referencia disciplineId
+      // (obrigatório) e, opcionalmente, examId — se qualquer um dos dois
+      // ainda for "__new__" nesse ponto, o insert do caderno quebraria com um
+      // id inválido.
+      if (examId === "__new__") {
+        const name = card.querySelector("#new_exam_name").value.trim();
+        if (!name) {
+          alertBox.innerHTML = `<div class="alert alert--error">Informe o nome do novo concurso.</div>`;
+          return;
+        }
+        const created = await createExam({ name, isAdmin, userId: user.id });
+        exams.push(created);
+        examId = created.id;
+      }
+
+      if (disciplineId === "__new__") {
+        const name = card.querySelector("#new_discipline_name").value.trim();
+        if (!name) {
+          alertBox.innerHTML = `<div class="alert alert--error">Informe o nome da nova disciplina.</div>`;
+          return;
+        }
+        const created = await createDiscipline({ name, isAdmin, userId: user.id });
+        disciplines.push(created);
+        disciplineId = created.id;
+      }
+
       if (questionSetId === "__new__") {
         const name = card.querySelector("#new_caderno_name").value.trim();
         if (!name) {
@@ -375,12 +449,21 @@ export async function renderStudyFormPage(container, params) {
       const scoreValue = card.querySelector("#score").value;
 
       const boardSelectValue = card.querySelector("#board_id").value;
-      const boardIds =
-        multibancaBoard && boardSelectValue === multibancaBoard.id
-          ? Array.from(card.querySelectorAll(".board-multi-checkbox:checked")).map((cb) => cb.value)
-          : boardSelectValue
-            ? [boardSelectValue]
-            : [];
+      let boardIds;
+      if (multibancaBoard && boardSelectValue === multibancaBoard.id) {
+        boardIds = Array.from(card.querySelectorAll(".board-multi-checkbox:checked")).map((cb) => cb.value);
+      } else if (boardSelectValue === "__new__") {
+        const name = card.querySelector("#new_board_name").value.trim();
+        if (!name) {
+          alertBox.innerHTML = `<div class="alert alert--error">Informe o nome da nova banca.</div>`;
+          return;
+        }
+        const created = await createExamBoard({ name, isAdmin, userId: user.id });
+        boards.push(created);
+        boardIds = [created.id];
+      } else {
+        boardIds = boardSelectValue ? [boardSelectValue] : [];
+      }
 
       const payload = {
         userId: user.id,

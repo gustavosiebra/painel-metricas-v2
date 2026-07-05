@@ -60,3 +60,41 @@ export async function createQuestionSet({ name, disciplineId, examId, isAdmin, u
   if (error) throw error;
   return data;
 }
+
+// Cadastro sob demanda de Concurso, Banca e Disciplina (05/07/2026) — mesmo
+// padrão acima, estendido às outras 3 entidades do catálogo. A tela de
+// Catálogo foi removida da navbar (Fase 8), então sem isso a pessoa ficaria
+// travada em Nova Sessão sempre que precisasse de um concurso/banca/
+// disciplina que ainda não existe. RLS (disciplines_insert/exam_boards_insert/
+// exams_insert) segue a mesma regra de question_sets: user_id nulo só é aceito
+// se for admin (catálogo global); usuário comum sempre grava com seu próprio
+// user_id (item pessoal, só ele enxerga via *_select).
+export async function createExam({ name, isAdmin, userId }) {
+  const { data, error } = await supabase
+    .from("exams")
+    .insert({ name, user_id: isAdmin ? null : userId })
+    .select("id, name, year, role, area, exam_date, status, board_id")
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function createExamBoard({ name, isAdmin, userId }) {
+  const { data, error } = await supabase
+    .from("exam_boards")
+    .insert({ name, user_id: isAdmin ? null : userId })
+    .select("id, name")
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function createDiscipline({ name, isAdmin, userId }) {
+  const { data, error } = await supabase
+    .from("disciplines")
+    .insert({ name, user_id: isAdmin ? null : userId })
+    .select("id, name, category, status")
+    .single();
+  if (error) throw error;
+  return data;
+}

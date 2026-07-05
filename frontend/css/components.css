@@ -248,3 +248,25 @@
   padding: var(--spacing-3);
   margin-bottom: var(--spacing-4);
 }
+
+/* Cabeçalho exclusivo da Exportar Imagem (Fase 10, 04-05/07/2026) — some em
+   tela; o onclone do html2canvas (dashboardPage.js) vira display:block só na
+   cópia capturada, substituindo a navbar (que é ignorada na captura). A
+   exportação em PDF que usava isso via print.css foi removida (05/07/2026). */
+.print-header {
+  display: none;
+  padding-bottom: var(--spacing-3);
+  border-bottom: 2px solid var(--color-primary);
+}
+
+.print-header h1 {
+  margin: 0 0 4px;
+  font-size: 20px;
+  color: var(--color-primary);
+}
+
+.print-header p {
+  margin: 0;
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
