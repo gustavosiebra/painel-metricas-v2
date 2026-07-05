@@ -378,6 +378,13 @@ export async function renderStudyFormPage(container, params) {
     questionsTotalInput.addEventListener("input", recomputeWrong);
     correctTotalInput.addEventListener("input", recomputeWrong);
 
+    // Limpa o destaque vermelho assim que a pessoa mexe no campo de novo
+    // (nome duplicado, ver handleSubmit) — não fica preso até reenviar o form.
+    ["new_exam_name", "new_board_name", "new_discipline_name", "new_caderno_name"].forEach((id) => {
+      const input = card.querySelector(`#${id}`);
+      if (input) input.addEventListener("input", () => input.classList.remove("input-error"));
+    });
+
     card.querySelector("#study-form").addEventListener("submit", handleSubmit);
   }
 
@@ -408,9 +415,17 @@ export async function renderStudyFormPage(container, params) {
       // ainda for "__new__" nesse ponto, o insert do caderno quebraria com um
       // id inválido.
       if (examId === "__new__") {
-        const name = card.querySelector("#new_exam_name").value.trim();
+        const input = card.querySelector("#new_exam_name");
+        const name = input.value.trim();
+        input.classList.remove("input-error");
         if (!name) {
+          input.classList.add("input-error");
           alertBox.innerHTML = `<div class="alert alert--error">Informe o nome do novo concurso.</div>`;
+          return;
+        }
+        if (isDuplicateName(name, exams)) {
+          input.classList.add("input-error");
+          alertBox.innerHTML = `<div class="alert alert--error">Já existe um concurso chamado "${escapeHtml(name)}" — selecione-o na lista em vez de cadastrar de novo.</div>`;
           return;
         }
         const created = await createExam({ name, isAdmin, userId: user.id });
@@ -419,9 +434,17 @@ export async function renderStudyFormPage(container, params) {
       }
 
       if (disciplineId === "__new__") {
-        const name = card.querySelector("#new_discipline_name").value.trim();
+        const input = card.querySelector("#new_discipline_name");
+        const name = input.value.trim();
+        input.classList.remove("input-error");
         if (!name) {
+          input.classList.add("input-error");
           alertBox.innerHTML = `<div class="alert alert--error">Informe o nome da nova disciplina.</div>`;
+          return;
+        }
+        if (isDuplicateName(name, disciplines)) {
+          input.classList.add("input-error");
+          alertBox.innerHTML = `<div class="alert alert--error">Já existe uma disciplina chamada "${escapeHtml(name)}" — selecione-a na lista em vez de cadastrar de novo.</div>`;
           return;
         }
         const created = await createDiscipline({ name, isAdmin, userId: user.id });
@@ -430,9 +453,20 @@ export async function renderStudyFormPage(container, params) {
       }
 
       if (questionSetId === "__new__") {
-        const name = card.querySelector("#new_caderno_name").value.trim();
+        const input = card.querySelector("#new_caderno_name");
+        const name = input.value.trim();
+        input.classList.remove("input-error");
         if (!name) {
+          input.classList.add("input-error");
           alertBox.innerHTML = `<div class="alert alert--error">Informe o nome do novo caderno.</div>`;
+          return;
+        }
+        // Escopo da checagem de duplicata é a disciplina — o mesmo nome de
+        // caderno pode existir legitimamente em disciplinas diferentes.
+        const cadernosDaDisciplina = questionSets.filter((q) => q.discipline_id === disciplineId);
+        if (isDuplicateName(name, cadernosDaDisciplina)) {
+          input.classList.add("input-error");
+          alertBox.innerHTML = `<div class="alert alert--error">Já existe um caderno chamado "${escapeHtml(name)}" nessa disciplina — selecione-o na lista em vez de cadastrar de novo.</div>`;
           return;
         }
         const created = await createQuestionSet({
@@ -453,9 +487,17 @@ export async function renderStudyFormPage(container, params) {
       if (multibancaBoard && boardSelectValue === multibancaBoard.id) {
         boardIds = Array.from(card.querySelectorAll(".board-multi-checkbox:checked")).map((cb) => cb.value);
       } else if (boardSelectValue === "__new__") {
-        const name = card.querySelector("#new_board_name").value.trim();
+        const input = card.querySelector("#new_board_name");
+        const name = input.value.trim();
+        input.classList.remove("input-error");
         if (!name) {
+          input.classList.add("input-error");
           alertBox.innerHTML = `<div class="alert alert--error">Informe o nome da nova banca.</div>`;
+          return;
+        }
+        if (isDuplicateName(name, boards)) {
+          input.classList.add("input-error");
+          alertBox.innerHTML = `<div class="alert alert--error">Já existe uma banca chamada "${escapeHtml(name)}" — selecione-a na lista em vez de cadastrar de novo.</div>`;
           return;
         }
         const created = await createExamBoard({ name, isAdmin, userId: user.id });
@@ -519,4 +561,14 @@ function escapeHtml(str) {
 function truncateLabel(text, maxLen = 70) {
   if (!text || text.length <= maxLen) return text;
   return `${text.slice(0, maxLen - 1)}…`;
+}
+
+// Checagem de duplicata no cadastro sob demanda (05/07/2026) — comparação
+// case-insensitive e sem espaços nas pontas, contra a lista já carregada em
+// memória (disciplines/exams/boards, ou questionSets já filtrado pela
+// disciplina). Não existe constraint de unicidade no banco pra essas 4
+// tabelas (só chave primária) — a validação é só aqui no cliente.
+function isDuplicateName(name, list) {
+  const normalized = name.trim().toLowerCase();
+  return list.some((item) => item.name?.trim().toLowerCase() === normalized);
 }

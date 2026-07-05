@@ -57,6 +57,14 @@
   outline-offset: 1px;
 }
 
+/* Campo em erro (05/07/2026) — ex.: nome duplicado ao cadastrar Concurso/
+   Banca/Disciplina/Caderno sob demanda em Nova Sessão. Some sozinho quando o
+   campo recebe um novo input (ver studyFormPage.js). */
+.form-field input.input-error {
+  border-color: var(--color-error);
+  outline-color: var(--color-error);
+}
+
 /* Lista de checkboxes (ex.: seleção de bancas em Multibancas) — sobrescreve
    .form-field input { width: 100% } que, sem isso, estica cada checkbox pra
    ocupar a linha inteira e empurra o texto do label pra longe dele. */
