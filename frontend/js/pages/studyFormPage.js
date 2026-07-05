@@ -563,12 +563,30 @@ function truncateLabel(text, maxLen = 70) {
   return `${text.slice(0, maxLen - 1)}…`;
 }
 
-// Checagem de duplicata no cadastro sob demanda (05/07/2026) — comparação
-// case-insensitive e sem espaços nas pontas, contra a lista já carregada em
-// memória (disciplines/exams/boards, ou questionSets já filtrado pela
-// disciplina). Não existe constraint de unicidade no banco pra essas 4
-// tabelas (só chave primária) — a validação é só aqui no cliente.
+// Checagem de duplicata no cadastro sob demanda (05/07/2026, endurecida em
+// 05/07/2026 depois de achar "ALECE"/"Alece" duplicado 5x e 2 cadernos
+// duplicados no banco) — normaliza maiúscula/minúscula E acento, senão
+// "português", "Português" e "PORTUGUÊS" passam como nomes diferentes.
+// normalize("NFD") separa a letra da marca de acento (ex.: "ê" vira "e" +
+// marca combinante), e o regexp remove só a marca — mesmo efeito do
+// unaccent() usado no banco pra achar/limpar as duplicatas existentes.
+// Não existe constraint de unicidade no banco pra essas 4 tabelas (só chave
+// primária) — a validação é só aqui no cliente.
+// Regex construída via RegExp(string), com o intervalo de marcas de
+// combinação Unicode (hex 0300 a 036f) escrito por código, em vez de
+// caracteres de combinação digitados direto no arquivo-fonte — evita
+// corromper em copy/paste entre editores/encodings.
+const DIACRITICOS_REGEX = new RegExp("[\\u0300-\\u036f]", "g");
+
+function normalizeForCompare(text) {
+  return text
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(DIACRITICOS_REGEX, "");
+}
+
 function isDuplicateName(name, list) {
-  const normalized = name.trim().toLowerCase();
-  return list.some((item) => item.name?.trim().toLowerCase() === normalized);
+  const normalized = normalizeForCompare(name);
+  return list.some((item) => item.name && normalizeForCompare(item.name) === normalized);
 }
