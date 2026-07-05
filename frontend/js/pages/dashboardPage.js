@@ -53,12 +53,37 @@ export async function renderDashboardPage(container) {
       <div style="flex:1; display:flex; flex-direction:column;">
         ${renderNavbar("/dashboard")}
         <main class="app-content">
+          <div class="print-header">
+            <h1>Painel de Métricas — Dashboard</h1>
+            <p>Exportado em ${escapeHtml(new Date().toLocaleString("pt-BR"))}</p>
+          </div>
+          <div class="dashboard-toolbar" style="display:flex; justify-content:flex-end; margin-bottom:var(--spacing-3);">
+            <button id="export-pdf-btn" class="btn" style="width:auto; padding:8px 16px;">Exportar PDF</button>
+          </div>
           <div id="dashboard-content"><p>Carregando…</p></div>
         </main>
       </div>
     </div>
   `;
   wireNavbar(container);
+
+  // Nome sugerido do arquivo (pedido do usuário, 04/07/2026): o Chrome/Edge
+  // usa document.title como sugestão de nome ao "Salvar como PDF" — trocamos
+  // o título só durante a impressão e restauramos depois (afterprint).
+  const exportBtn = container.querySelector("#export-pdf-btn");
+  if (exportBtn) {
+    exportBtn.addEventListener("click", () => {
+      const tituloOriginal = document.title;
+      const hoje = new Date().toISOString().slice(0, 10); // AAAA-MM-DD
+      document.title = `metricas-${hoje}`;
+      const restaurarTitulo = () => {
+        document.title = tituloOriginal;
+        window.removeEventListener("afterprint", restaurarTitulo);
+      };
+      window.addEventListener("afterprint", restaurarTitulo);
+      window.print();
+    });
+  }
 
   const content = container.querySelector("#dashboard-content");
 
