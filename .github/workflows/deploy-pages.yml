@@ -22,12 +22,16 @@ concurrency:
   group: "pages"
   cancel-in-progress: true
 
+# Build e Deploy separados em 2 jobs (05/07/2026, depois do erro "Multiple
+# artifacts named 'github-pages'... Artifact count is 2"). Motivo: com tudo
+# num job só, clicar "Re-run jobs" reexecuta TAMBÉM o upload-pages-artifact —
+# e o artefato da tentativa anterior ainda existe, colidindo com o novo e
+# quebrando o deploy-pages (que espera exatamente 1 artefato "github-pages"
+# por execução). Com build/deploy em jobs distintos, dá pra reexecutar só o
+# job "deploy" (que não empacota nada de novo) sem gerar essa colisão.
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -40,6 +44,13 @@ jobs:
         with:
           path: frontend
 
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
       - name: Deploy
         id: deployment
         uses: actions/deploy-pages@v4
