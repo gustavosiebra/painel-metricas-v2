@@ -404,13 +404,23 @@ export async function renderStudyFormPage(container, params) {
     studyTypeSelect.addEventListener("change", updateStudyTypeUI);
     updateStudyTypeUI();
 
+    // Acertos não pode passar de Questões (05/07/2026, reforçado a pedido do
+    // usuário) — duas camadas: "max" dinâmico no campo (o navegador já barra
+    // digitar/incrementar acima do total) + destaque vermelho caso ainda
+    // assim o valor fique inconsistente (ex.: usuário reduz Questões DEPOIS
+    // de já ter preenchido Acertos maior). handleSubmit repete a checagem
+    // final antes de gravar, como rede de segurança.
     function recomputeWrong() {
       const total = Number(questionsTotalInput.value || 0);
       const correct = Number(correctTotalInput.value || 0);
       wrongTotalDisplay.value = Math.max(total - correct, 0);
+      correctTotalInput.max = questionsTotalInput.value || "";
+      const invalido = questionsTotalInput.value !== "" && correct > total;
+      correctTotalInput.classList.toggle("input-error", invalido);
     }
     questionsTotalInput.addEventListener("input", recomputeWrong);
     correctTotalInput.addEventListener("input", recomputeWrong);
+    recomputeWrong();
 
     // Limpa o destaque vermelho assim que a pessoa mexe no campo de novo
     // (nome duplicado, ver handleSubmit) — não fica preso até reenviar o form.
@@ -447,7 +457,9 @@ export async function renderStudyFormPage(container, params) {
     const correctTotal = Number(card.querySelector("#correct_total").value || 0);
     const wrongTotal = Math.max(questionsTotal - correctTotal, 0);
 
+    const correctTotalInput = card.querySelector("#correct_total");
     if (["questao", "simulado"].includes(studyType) && correctTotal > questionsTotal) {
+      correctTotalInput.classList.add("input-error");
       alertBox.innerHTML = `<div class="alert alert--error">Acertos não pode ser maior que Questões.</div>`;
       return;
     }

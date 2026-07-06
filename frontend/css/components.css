@@ -168,6 +168,65 @@
   font-weight: 600;
 }
 
+/* "Painel de Métricas" virou o link pra home/Dashboard (05/07/2026) — segue
+   sendo o título/logo (branco, sem o esmaecimento padrão de .nav-link), só
+   ganha um sublinhado sutil no hover pra indicar que é clicável. */
+.nav-link--brand {
+  color: #fff;
+  padding: 0;
+  border-bottom: none;
+}
+
+.nav-link--brand:hover {
+  text-decoration: underline;
+}
+
+/* Ícone de Configurações na navbar (05/07/2026) — saiu da lista de abas
+   principais (uso raro, não é fluxo diário) e virou um ícone discreto perto
+   do nome do usuário/Sair, no mesmo espírito de apps que reservam a barra
+   principal só pro que se usa todo dia. */
+.settings-link {
+  color: rgba(255, 255, 255, 0.75);
+  text-decoration: none;
+  font-size: 18px;
+  margin-right: 12px;
+}
+
+.settings-link:hover {
+  color: #fff;
+}
+
+/* Sub-abas dentro de uma página (05/07/2026) — usado no Catálogo pra separar
+   Cadastro (Concurso/Banca/Disciplina/Caderno) de Peso, sem virar duas
+   entradas na navbar principal. */
+.subtabs {
+  display: flex;
+  gap: var(--spacing-2);
+  border-bottom: 1px solid var(--color-border);
+  margin-bottom: var(--spacing-4);
+}
+
+.subtab-btn {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  padding: var(--spacing-2) var(--spacing-3);
+  font-size: 15px;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.subtab-btn:hover {
+  color: var(--color-text);
+}
+
+.subtab-btn--active {
+  color: var(--color-primary);
+  font-weight: 600;
+  border-bottom-color: var(--color-primary);
+}
+
 .data-table {
   width: 100%;
   border-collapse: collapse;
@@ -247,6 +306,19 @@
   font-weight: 700;
   color: var(--color-primary);
   margin: 0;
+}
+
+/* Cards de Situação clicáveis no Dashboard (05/07/2026) — levam pra
+   Prioridade já filtrada pela classificação. Hover discreto só pra indicar
+   que é clicável, sem competir visualmente com os cards normais. */
+.kpi-card--clickable {
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.kpi-card--clickable:hover {
+  border-color: var(--color-primary);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
 }
 
 .badge {

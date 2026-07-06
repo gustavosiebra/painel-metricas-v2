@@ -7,19 +7,25 @@ import { getState, setState } from "../state.js";
 export function renderNavbar(activeRoute) {
   const { user, isAdmin, displayName } = getState();
   const shownName = displayName || user?.email || "";
+  // Navegação reorganizada em 05/07/2026 (discutida e aprovada pelo
+  // usuário): "Dashboard" virou o título/logo; "Peso" foi incorporado como
+  // sub-aba dentro de Catálogo (mesma preocupação de fundo: estrutura por
+  // trás dos números); "Configurações" saiu da barra principal (uso raro) e
+  // virou um ícone de engrenagem perto do nome/Sair. Nova Sessão continua
+  // aqui (ação mais frequente do app, não vale o risco de esconder atrás de
+  // um clique a mais) — ganhou também um atalho direto no Dashboard.
   const links = [
-    { path: "/dashboard", label: "Dashboard" },
     { path: "/sessoes/nova", label: "Nova Sessão" },
     { path: "/sessoes", label: "Sessões" },
     { path: "/catalogo", label: "Catálogo" },
-    { path: "/pesos", label: "Peso" },
     { path: "/prioridade", label: "Prioridade" },
     { path: "/historico", label: "Histórico" },
-    { path: "/parametros", label: "Configurações" },
   ];
   // Dicionário (Admin) removido em 05/07/2026 — o Catálogo voltou a existir
   // pra todo mundo (com editar/apagar local), então a tela exclusiva de admin
   // perdeu a razão de ser. Rota/arquivo ficaram no repo sem uso, sem risco.
+  // "/pesos" (weightPage.js) também ficou sem uso — mesma lógica agora vive
+  // na sub-aba Peso de catalogPage.js.
 
   const linksHtml = links
     .map(
@@ -30,10 +36,11 @@ export function renderNavbar(activeRoute) {
   return `
     <header class="app-topbar">
       <div style="display:flex; align-items:center; gap:24px;">
-        <strong>Painel de Métricas</strong>
+        <a href="#/dashboard" class="nav-link nav-link--brand${activeRoute === "/dashboard" ? " nav-link--active" : ""}" data-path="/dashboard"><strong>Painel de Métricas</strong></a>
         <nav class="app-nav">${linksHtml}</nav>
       </div>
-      <div>
+      <div style="display:flex; align-items:center;">
+        <a href="#/parametros" class="settings-link${activeRoute === "/parametros" ? " nav-link--active" : ""}" data-path="/parametros" title="Configurações">⚙</a>
         <span id="display-name-label" style="margin-right:4px; cursor:pointer;" title="Clique para editar o nome de exibição">${escapeHtml(shownName)}</span>
         <span style="margin-right:16px;">${isAdmin ? " (admin)" : ""}</span>
         <button id="logout-btn" class="btn-link" style="color:#fff;">Sair</button>

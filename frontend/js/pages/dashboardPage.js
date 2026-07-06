@@ -3,6 +3,7 @@
 // cálculo estatístico é refeito aqui (TEC-006).
 
 import { renderNavbar, wireNavbar } from "../components/navbar.js";
+import { navigate } from "../router.js";
 import { formatPct, formatDeltaPct } from "../utils/format.js";
 import {
   getKpis,
@@ -58,6 +59,7 @@ export async function renderDashboardPage(container) {
             <p>Exportado em ${escapeHtml(new Date().toLocaleString("pt-BR"))}</p>
           </div>
           <div class="dashboard-toolbar" style="display:flex; justify-content:flex-end; gap:8px; margin-bottom:var(--spacing-3);">
+            <a href="#/sessoes/nova" class="btn" style="width:auto; padding:8px 16px;">+ Nova Sessão</a>
             <button id="export-img-btn" class="btn" style="width:auto; padding:8px 16px; background:var(--color-surface); color:var(--color-primary); border:1px solid var(--color-border);">Exportar Imagem</button>
           </div>
           <div id="dashboard-content"><p>Carregando…</p></div>
@@ -152,6 +154,12 @@ export async function renderDashboardPage(container) {
     ${renderRetencaoPorDisciplina(retencaoPorDisciplina)}
   `;
 
+  // Cards de Situação clicáveis (05/07/2026) — levam pra Prioridade já
+  // filtrada pela classificação clicada (ver renderVisaoGeral).
+  content.querySelectorAll("[data-situacao-link]").forEach((el) => {
+    el.addEventListener("click", () => navigate("/prioridade", { classificacao: el.dataset.situacaoLink }));
+  });
+
   // Cada gráfico é isolado no próprio try/catch: um erro de desenho (ex.:
   // Chart.js não carregado) não pode derrubar os outros gráficos do dashboard.
   if (tendenciaSemanal.semanas.length > 0) {
@@ -231,8 +239,11 @@ function renderVisaoGeral(kpis, produtividade, cadernosEstudados, situacao) {
       : Object.entries(SITUACAO_LABELS)
           .map(([key, meta]) => {
             const count = situacao[key] ?? 0;
+            // Clicável (05/07/2026, pedido do usuário — testando essa opção):
+            // leva pra Prioridade já filtrada por essa classificação, em vez
+            // de duplicar uma lista de cadernos aqui dentro do Dashboard.
             return `
-              <div class="kpi-card">
+              <div class="kpi-card kpi-card--clickable" data-situacao-link="${key}" title="Ver cadernos ${escapeHtml(meta.label.toLowerCase())} em Prioridade">
                 <p class="kpi-card__label">${escapeHtml(meta.label)}</p>
                 <p class="kpi-card__value" style="color:${meta.color};">${count}</p>
               </div>

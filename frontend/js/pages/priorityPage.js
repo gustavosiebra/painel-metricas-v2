@@ -2,6 +2,17 @@
 // v_prioridade_caderno.prioridade_rank (recorrência histórica × Wilson do
 // caderno). Sinal novo e separado do Peso manual por disciplina (não mexe
 // em exam_disciplines.weight).
+//
+// Filtro obrigatório (05/07/2026, mesmo padrão do Catálogo > Cadernos): a
+// tabela não renderiza nada até o usuário escolher uma disciplina (ou
+// explicitamente "Todas as disciplinas") — evita despejar todos os cadernos
+// do catálogo de uma vez (a view cruza TODO o catálogo com as bancas que o
+// usuário estuda, de propósito, pra também sinalizar cadernos nunca
+// estudados que são frequentes — ver decisão anterior).
+// Também aceita chegar via link do Dashboard (clique num card de Consolidado/
+// Atenção/Crítico/Poucos dados) com ?classificacao=X na URL — nesse caso já
+// abre com "Todas as disciplinas" + aquela classificação pré-marcados,
+// mostrando a lista direto, sem exigir clique extra.
 
 import { renderNavbar, wireNavbar } from "../components/navbar.js";
 import { listDisciplines } from "../services/catalogService.js";
@@ -24,6 +35,13 @@ const RECORRENCIA_LABELS = { alta: "Alta", media: "Média", baixa: "Baixa" };
 // ajuste feito no Dashboard) — mais claro que só falta questão suficiente
 // pra classificar, não é um resultado.
 const WILSON_LABELS = { preliminar: "Poucos dados", critico: "Crítico", atencao: "Atenção", consolidado: "Consolidado" };
+const WILSON_FILTRO_OPCOES = [
+  ["", "Todas"],
+  ["consolidado", "Consolidado"],
+  ["atencao", "Atenção"],
+  ["critico", "Crítico"],
+  ["preliminar", "Poucos dados"],
+];
 const DISPERSAO_LABELS = {
   sem_dispersao: "Sem dado",
   estavel: "Estável",
@@ -32,7 +50,9 @@ const DISPERSAO_LABELS = {
   fortemente_banca_dependente: "Fortemente banca-dependente",
 };
 
-export async function renderPriorityPage(container) {
+export async function renderPriorityPage(container, params) {
+  const classificacaoInicial = params?.get ? params.get("classificacao") : null;
+
   container.innerHTML = `
     <div class="app-shell">
       <div style="flex:1; display:flex; flex-direction:column;">
@@ -45,12 +65,24 @@ export async function renderPriorityPage(container) {
             Peso manual por disciplina — não substitui nem altera aquele.
           </p>
           <div class="card" style="margin-bottom:16px;">
-            <div class="form-field" style="margin-bottom:0; max-width:320px;">
-              <label for="filter-discipline">Disciplina</label>
-              <select id="filter-discipline"><option value="">Todas</option></select>
+            <div style="display:flex; gap:16px; align-items:end; flex-wrap:wrap;">
+              <div class="form-field" style="margin-bottom:0; min-width:240px;">
+                <label for="filter-discipline">Disciplina</label>
+                <select id="filter-discipline">
+                  <option value="" disabled ${!classificacaoInicial ? "selected" : ""}>— Escolha —</option>
+                  <option value="__todas__" ${classificacaoInicial ? "selected" : ""}>Todas as disciplinas</option>
+                </select>
+              </div>
+              <div class="form-field" style="margin-bottom:0; min-width:200px;">
+                <label for="filter-classificacao">Classificação Wilson</label>
+                <select id="filter-classificacao">
+                  ${WILSON_FILTRO_OPCOES.map(([v, l]) => `<option value="${v}" ${classificacaoInicial === v ? "selected" : ""}>${l}</option>`).join("")}
+                </select>
+              </div>
             </div>
           </div>
-          <div id="priority-content"><p>Carregando…</p></div>
+          <p id="priority-placeholder" style="color:var(--color-text-muted);">Escolha uma disciplina acima (ou "Todas as disciplinas") pra ver a prioridade.</p>
+          <div id="priority-content" style="display:none;"><p>Carregando…</p></div>
         </main>
       </div>
     </div>
@@ -58,6 +90,8 @@ export async function renderPriorityPage(container) {
   wireNavbar(container);
 
   const disciplineSelect = container.querySelector("#filter-discipline");
+  const classificacaoSelect = container.querySelector("#filter-classificacao");
+  const placeholder = container.querySelector("#priority-placeholder");
   const content = container.querySelector("#priority-content");
 
   try {
@@ -65,24 +99,47 @@ export async function renderPriorityPage(container) {
     disciplineSelect.innerHTML += disciplines.map((d) => `<option value="${d.id}">${escapeHtml(d.name)}</option>`).join("");
   } catch (err) {
     content.innerHTML = `<div class="alert alert--error">Erro ao carregar disciplinas: ${escapeHtml(err.message)}</div>`;
+    content.style.display = "block";
+    placeholder.style.display = "none";
     return;
   }
 
-  disciplineSelect.addEventListener("change", loadPriority);
+  disciplineSelect.addEventListener("change", () => {
+    if (!disciplineSelect.value) return; // opção "— Escolha —" (disabled), não deveria disparar, mas defensivo
+    loadPriority();
+  });
+  classificacaoSelect.addEventListener("change", () => {
+    if (!disciplineSelect.value) return; // ainda não escolheu disciplina — nada carregado pra refiltrar
+    renderTable(sortRows(aplicarFiltroClassificacao(currentRows)));
+  });
 
   let currentRows = [];
   const sortState = { column: "prioridade_rank", direction: "asc" };
 
-  await loadPriority();
+  // Deep-link do Dashboard (?classificacao=X): já chega com "Todas as
+  // disciplinas" selecionado (ver template acima) — carrega direto, sem
+  // esperar o usuário mexer em nada.
+  if (classificacaoInicial) {
+    await loadPriority();
+  }
 
   async function loadPriority() {
+    placeholder.style.display = "none";
+    content.style.display = "block";
     content.innerHTML = "<p>Carregando…</p>";
     try {
-      currentRows = await listPriority({ disciplineId: disciplineSelect.value || undefined });
-      renderTable(sortRows(currentRows));
+      const disciplineId = disciplineSelect.value === "__todas__" ? undefined : disciplineSelect.value;
+      currentRows = await listPriority({ disciplineId });
+      renderTable(sortRows(aplicarFiltroClassificacao(currentRows)));
     } catch (err) {
       content.innerHTML = `<div class="alert alert--error">Erro ao carregar prioridade: ${escapeHtml(err.message)}</div>`;
     }
+  }
+
+  function aplicarFiltroClassificacao(rows) {
+    const classificacao = classificacaoSelect.value;
+    if (!classificacao) return rows;
+    return rows.filter((r) => (r.classificacao_wilson || "preliminar") === classificacao);
   }
 
   function sortRows(rows) {
@@ -110,7 +167,7 @@ export async function renderPriorityPage(container) {
     if (!rows || rows.length === 0) {
       content.innerHTML = `
         <div class="card">
-          <p style="color:var(--color-text-muted);">Nenhum caderno encontrado — precisa de pelo menos uma sessão ativa com banca real registrada.</p>
+          <p style="color:var(--color-text-muted);">Nenhum caderno encontrado com esse filtro.</p>
         </div>
       `;
       return;
@@ -158,7 +215,7 @@ export async function renderPriorityPage(container) {
           sortState.column = column;
           sortState.direction = "asc";
         }
-        renderTable(sortRows(currentRows));
+        renderTable(sortRows(aplicarFiltroClassificacao(currentRows)));
       });
     });
   }
