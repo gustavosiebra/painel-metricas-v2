@@ -11,7 +11,6 @@ import { renderWeightPage } from "./pages/weightPage.js";
 import { renderHistoryPage } from "./pages/historyPage.js";
 import { renderParametersPage } from "./pages/parametersPage.js";
 import { renderPriorityPage } from "./pages/priorityPage.js";
-import { renderAdminDictionaryPage } from "./pages/adminDictionaryPage.js";
 
 registerRoute("/login", renderLoginPage);
 registerRoute("/dashboard", renderDashboardPage);
@@ -22,7 +21,6 @@ registerRoute("/pesos", renderWeightPage);
 registerRoute("/historico", renderHistoryPage);
 registerRoute("/parametros", renderParametersPage);
 registerRoute("/prioridade", renderPriorityPage);
-registerRoute("/admin/dicionario", renderAdminDictionaryPage);
 registerRoute("/", renderDashboardPage);
 
 async function bootstrap() {

@@ -1,7 +1,9 @@
-// Tela Parâmetros (Fase 7) — limiares/faixas configuráveis (NEG-005) e matriz
-// de risco pessoal (Situação × Peso → ação recomendada, NEG-007/Calibração).
-// Os textos de recommended_action são escritos pelo próprio usuário — não são
-// inventados aqui (ver Doc. Único, pendência de risk_rules vazia na Fase 5).
+// Tela "Configurações" (Fase 7, renomeada 05/07/2026 — antes "Parâmetros") —
+// limiares/faixas configuráveis (NEG-005) e matriz de risco pessoal (Situação
+// × Peso → ação recomendada, NEG-007/Calibração). Rota continua /parametros
+// por estabilidade (só o texto exibido mudou). Os textos de recommended_action
+// são escritos pelo próprio usuário — não são inventados aqui (ver Doc. Único,
+// pendência de risk_rules vazia na Fase 5).
 
 import { renderNavbar, wireNavbar } from "../components/navbar.js";
 import { getState } from "../state.js";
@@ -17,7 +19,7 @@ export async function renderParametersPage(container) {
       <div style="flex:1; display:flex; flex-direction:column;">
         ${renderNavbar("/parametros")}
         <main class="app-content">
-          <h2 class="form-title">Parâmetros</h2>
+          <h2 class="form-title">Configurações</h2>
           <div id="alert-box"></div>
           <div id="thresholds-section"><p>Carregando…</p></div>
           <div id="risk-rules-section"><p>Carregando matriz de risco…</p></div>

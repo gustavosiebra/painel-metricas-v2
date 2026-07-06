@@ -7,7 +7,7 @@ import { supabase } from "../supabaseClient.js";
 export async function listDisciplines() {
   const { data, error } = await supabase
     .from("disciplines")
-    .select("id, name, category, status")
+    .select("id, name, category, status, user_id")
     .order("name");
   if (error) throw error;
   return data;
@@ -16,7 +16,7 @@ export async function listDisciplines() {
 export async function listExamBoards() {
   const { data, error } = await supabase
     .from("exam_boards")
-    .select("id, name")
+    .select("id, name, user_id")
     .order("name");
   if (error) throw error;
   return data;
@@ -25,7 +25,7 @@ export async function listExamBoards() {
 export async function listExams() {
   const { data, error } = await supabase
     .from("exams")
-    .select("id, name, year, role, area, exam_date, status, board_id")
+    .select("id, name, year, role, area, exam_date, status, board_id, user_id")
     .order("name");
   if (error) throw error;
   return data;
@@ -34,7 +34,7 @@ export async function listExams() {
 export async function listQuestionSets() {
   const { data, error } = await supabase
     .from("question_sets")
-    .select("id, name, discipline_id, exam_id, status, learning_level")
+    .select("id, name, discipline_id, exam_id, status, learning_level, user_id")
     .order("name");
   if (error) throw error;
   return data;

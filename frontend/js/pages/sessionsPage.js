@@ -1,5 +1,8 @@
 // Tela "Sessões" (Doc. 16, T04) — consultar, filtrar, editar e arquivar
 // (exclusão lógica apenas — RN-009, nunca apagar histórico).
+// Exportar CSV adicionado em 05/07/2026 (pedido do usuário) — exporta a
+// visão atual (com filtro e ordenação aplicados), gerado no cliente, sem
+// round-trip nenhum ao banco.
 
 import { renderNavbar, wireNavbar } from "../components/navbar.js";
 import { listDisciplines } from "../services/catalogService.js";
@@ -38,6 +41,7 @@ export async function renderSessionsPage(container) {
                 </select>
               </div>
               <a href="#/sessoes/nova" class="btn" style="width:auto; padding:8px 16px;">+ Nova Sessão</a>
+              <button id="export-csv-btn" type="button" class="btn" style="width:auto; padding:8px 16px; background:var(--color-surface); color:var(--color-primary); border:1px solid var(--color-border);">Exportar CSV</button>
             </div>
           </div>
           <div id="sessions-content"><p>Carregando…</p></div>
@@ -63,6 +67,9 @@ export async function renderSessionsPage(container) {
 
   disciplineSelect.addEventListener("change", loadSessions);
   statusSelect.addEventListener("change", loadSessions);
+
+  const exportCsvBtn = container.querySelector("#export-csv-btn");
+  exportCsvBtn.addEventListener("click", () => exportarCsv(sortSessions(currentSessions), disciplinesById));
 
   let currentSessions = [];
   // Ordenação é só em memória, sobre o que já foi carregado — não refaz a
@@ -193,6 +200,51 @@ export async function renderSessionsPage(container) {
       });
     });
   }
+}
+
+// Exportar CSV (05/07/2026, pedido do usuário) — exporta exatamente o que
+// está filtrado/ordenado na tela no momento do clique, não a base inteira.
+function exportarCsv(sessions, disciplinesById) {
+  if (!sessions || sessions.length === 0) {
+    window.alert("Nenhuma sessão pra exportar com o filtro atual.");
+    return;
+  }
+
+  const headers = ["Data", "Disciplina", "Tipo", "Acertos", "Total de questões", "Nota", "Tempo (min)", "Status"];
+  const linhas = sessions.map((s) => {
+    const result = Array.isArray(s.session_results) ? s.session_results[0] : s.session_results;
+    return [
+      new Date(s.occurred_at).toLocaleDateString("pt-BR"),
+      disciplinesById[s.discipline_id] || "",
+      STUDY_TYPE_LABELS[s.study_type] || s.study_type || "",
+      result?.correct_total ?? "",
+      result?.questions_total ?? "",
+      result?.score ?? "",
+      s.duration_minutes ?? "",
+      s.status === "inativo" ? "Arquivada" : "Ativa",
+    ];
+  });
+
+  const csv = [headers, ...linhas]
+    .map((linha) => linha.map(csvEscape).join(";"))
+    .join("\r\n");
+
+  // BOM (﻿) pra Excel abrir acentos certos sem precisar escolher encoding manual.
+  const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
+  const hoje = new Date().toISOString().slice(0, 10);
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = `sessoes-${hoje}.csv`;
+  link.click();
+  URL.revokeObjectURL(link.href);
+}
+
+function csvEscape(value) {
+  const str = String(value ?? "");
+  if (str.includes(";") || str.includes('"') || str.includes("\n")) {
+    return `"${str.replace(/"/g, '""')}"`;
+  }
+  return str;
 }
 
 function escapeHtml(str) {

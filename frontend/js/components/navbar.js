@@ -11,17 +11,15 @@ export function renderNavbar(activeRoute) {
     { path: "/dashboard", label: "Dashboard" },
     { path: "/sessoes/nova", label: "Nova Sessão" },
     { path: "/sessoes", label: "Sessões" },
+    { path: "/catalogo", label: "Catálogo" },
     { path: "/pesos", label: "Peso" },
     { path: "/prioridade", label: "Prioridade" },
     { path: "/historico", label: "Histórico" },
-    { path: "/parametros", label: "Parâmetros" },
+    { path: "/parametros", label: "Configurações" },
   ];
-  // Aba só pra admin (Fase 10, 05/07/2026) — some da navbar de qualquer outro
-  // usuário. A RLS já bloqueia o acesso aos dados mesmo se alguém forçar a
-  // URL na mão, mas nem mostrar a aba evita confusão.
-  if (isAdmin) {
-    links.push({ path: "/admin/dicionario", label: "Dicionário (Admin)" });
-  }
+  // Dicionário (Admin) removido em 05/07/2026 — o Catálogo voltou a existir
+  // pra todo mundo (com editar/apagar local), então a tela exclusiva de admin
+  // perdeu a razão de ser. Rota/arquivo ficaram no repo sem uso, sem risco.
 
   const linksHtml = links
     .map(
