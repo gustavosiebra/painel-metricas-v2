@@ -161,3 +161,18 @@ export async function setSessionStatus(sessionId, status) {
   const { error } = await supabase.from("study_sessions").update({ status }).eq("id", sessionId);
   if (error) throw error;
 }
+
+// Exclusão FÍSICA e definitiva (exceção a RN-009, aberta em 05/07/2026 a
+// pedido explícito do usuário) — precisava conseguir apagar sessão de teste
+// pra soltar uma disciplina/concurso/caderno de teste que ficava preso por
+// causa dela (discipline_id é obrigatório em study_sessions, então enquanto
+// a sessão existir — mesmo arquivada — a disciplina não pode ser apagada).
+// RLS de study_sessions já é "ALL" (não só SELECT/UPDATE) restrito a
+// user_id = auth.uid(), então cada usuário só apaga a própria sessão mesmo;
+// session_results/study_session_boards/question_attempts cascadeiam junto
+// (FK ON DELETE CASCADE, verificado antes de expor isso na UI). Use com
+// cuidado: isso destrói histórico de verdade, sem recuperação possível.
+export async function deleteStudySession(sessionId) {
+  const { error } = await supabase.from("study_sessions").delete().eq("id", sessionId);
+  if (error) throw error;
+}

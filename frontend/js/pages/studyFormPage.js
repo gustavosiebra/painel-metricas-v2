@@ -529,14 +529,84 @@ export async function renderStudyFormPage(container, params) {
       if (editingId) {
         await updateStudySession(editingId, payload);
         alertBox.innerHTML = `<div class="alert alert--success">Sessão atualizada com sucesso.</div>`;
-      } else {
-        await createStudySession(payload);
-        alertBox.innerHTML = `<div class="alert alert--success">Sessão registrada com sucesso.</div>`;
+        setTimeout(() => navigate("/sessoes"), 800);
+        return;
       }
-      setTimeout(() => navigate("/sessoes"), 800);
+
+      await createStudySession(payload);
+
+      // Bug reportado pelo usuário (05/07/2026): o atalho de peso em cima
+      // (checkWeightShortcut) só existe pra combos JÁ REAIS — se o concurso
+      // foi cadastrado sob demanda nesta mesma tela, o exam_id só passou a
+      // existir de verdade agora, depois do createStudySession acima, então
+      // o atalho nunca teve chance de aparecer durante o preenchimento.
+      // Confere de novo aqui com os ids já resolvidos e reoferece a mesma
+      // opção antes de sair da tela, em vez de simplesmente perder a chance.
+      let pesoJaExiste = true;
+      if (examId) {
+        try {
+          pesoJaExiste = !!(await getWeight({ examId, disciplineId }));
+        } catch {
+          pesoJaExiste = true; // falha ao checar não deve travar o fluxo
+        }
+      }
+
+      if (!examId || pesoJaExiste) {
+        alertBox.innerHTML = `<div class="alert alert--success">Sessão registrada com sucesso.</div>`;
+        setTimeout(() => navigate("/sessoes"), 800);
+        return;
+      }
+
+      renderPostSaveWeightPrompt(examId, disciplineId);
     } catch (err) {
       alertBox.innerHTML = `<div class="alert alert--error">Erro ao salvar: ${escapeHtml(err.message)}</div>`;
     }
+  }
+
+  function renderPostSaveWeightPrompt(examId, disciplineId) {
+    alertBox.innerHTML = `
+      <div class="alert alert--success">Sessão registrada com sucesso.</div>
+      <div class="card" style="margin-top:8px; padding:12px; background:var(--color-bg-subtle, #f5f5f5);">
+        <p style="margin:0 0 8px 0;">Ainda não há peso definido para esta disciplina neste concurso.</p>
+        <div class="form-field">
+          <label for="postsave_weight">Peso</label>
+          <select id="postsave_weight">
+            <option value="baixo">Baixo</option>
+            <option value="alto">Alto</option>
+          </select>
+        </div>
+        <div class="form-field">
+          <label for="postsave_expected_questions">Questões esperadas na prova (opcional)</label>
+          <input type="number" id="postsave_expected_questions" min="0" step="1" />
+        </div>
+        <button type="button" id="postsave_save_weight" class="btn-link">Salvar peso</button>
+        &nbsp;|&nbsp;
+        <button type="button" id="postsave_skip_weight" class="btn-link">Pular</button>
+        <span id="postsave_weight_status" style="margin-left:8px;"></span>
+      </div>
+    `;
+
+    const statusEl = alertBox.querySelector("#postsave_weight_status");
+
+    alertBox.querySelector("#postsave_save_weight").addEventListener("click", async () => {
+      const { user } = getState();
+      const weight = alertBox.querySelector("#postsave_weight").value;
+      const expectedQuestions = alertBox.querySelector("#postsave_expected_questions").value;
+      try {
+        await upsertWeight({
+          userId: user.id,
+          examId,
+          disciplineId,
+          weight,
+          expectedQuestions: expectedQuestions ? Number(expectedQuestions) : null,
+        });
+        navigate("/sessoes");
+      } catch (err) {
+        statusEl.textContent = `Erro ao salvar peso: ${err.message}`;
+      }
+    });
+
+    alertBox.querySelector("#postsave_skip_weight").addEventListener("click", () => navigate("/sessoes"));
   }
 }
 

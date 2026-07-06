@@ -64,13 +64,17 @@ async function carregarERenderizar(content, userId) {
 
   const disciplineNameMap = new Map(disciplines.map((d) => [d.id, d.name]));
 
+  // Ordem Concurso → Banca → Disciplina → Caderno (pedido do usuário,
+  // 05/07/2026): segue a mesma hierarquia de cima pra baixo usada em Nova
+  // Sessão, em vez da ordem alfabética que estava antes.
   content.innerHTML = [
     renderSection({
-      titulo: "Disciplinas",
-      itens: disciplines,
+      titulo: "Concursos",
+      itens: exams,
       userId,
       colunasExtra: [
-        { header: "Categoria", extrair: (item) => escapeHtml(item.category || "—") },
+        { header: "Ano", extrair: (item) => escapeHtml(item.year ?? "—") },
+        { header: "Cargo", extrair: (item) => escapeHtml(item.role || "—") },
         { header: "Status", extrair: (item) => escapeHtml(item.status || "—") },
       ],
     }),
@@ -81,12 +85,11 @@ async function carregarERenderizar(content, userId) {
       colunasExtra: [],
     }),
     renderSection({
-      titulo: "Concursos",
-      itens: exams,
+      titulo: "Disciplinas",
+      itens: disciplines,
       userId,
       colunasExtra: [
-        { header: "Ano", extrair: (item) => escapeHtml(item.year ?? "—") },
-        { header: "Cargo", extrair: (item) => escapeHtml(item.role || "—") },
+        { header: "Categoria", extrair: (item) => escapeHtml(item.category || "—") },
         { header: "Status", extrair: (item) => escapeHtml(item.status || "—") },
       ],
     }),
@@ -242,8 +245,8 @@ function renderSection({ titulo, itens, userId, colunasExtra, filtroDisciplina }
             <input type="text" data-filter-input="${tipo}" placeholder="Buscar por nome..." />
           </div>
         </div>
-        <table class="data-table" data-filter-table="${tipo}">
-          <tr><th>Nome</th>${extraHeaders}<th>Dono</th><th>Ações</th></tr>
+        <table class="data-table data-table--fixed" data-filter-table="${tipo}">
+          <tr><th style="width:32%;">Nome</th>${extraHeaders}<th style="width:90px;">Dono</th><th style="width:140px;">Ações</th></tr>
           ${rows}
         </table>
       </div>

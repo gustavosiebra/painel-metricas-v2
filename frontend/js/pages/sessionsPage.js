@@ -1,12 +1,17 @@
 // Tela "Sessões" (Doc. 16, T04) — consultar, filtrar, editar e arquivar
-// (exclusão lógica apenas — RN-009, nunca apagar histórico).
+// (exclusão lógica por padrão — RN-009, nunca apagar histórico sem querer).
 // Exportar CSV adicionado em 05/07/2026 (pedido do usuário) — exporta a
 // visão atual (com filtro e ordenação aplicados), gerado no cliente, sem
 // round-trip nenhum ao banco.
+// "Apagar definitivamente" adicionado em 05/07/2026 (pedido explícito do
+// usuário, exceção consciente a RN-009) — precisava conseguir apagar uma
+// sessão de teste que travava a exclusão de uma disciplina de teste no
+// Catálogo (discipline_id é obrigatório em study_sessions). Confirmação
+// reforçada (digitar "APAGAR") justamente porque isso é irreversível.
 
 import { renderNavbar, wireNavbar } from "../components/navbar.js";
 import { listDisciplines } from "../services/catalogService.js";
-import { listSessions, setSessionStatus } from "../services/studyService.js";
+import { listSessions, setSessionStatus, deleteStudySession } from "../services/studyService.js";
 import { navigate } from "../router.js";
 
 const STUDY_TYPE_LABELS = {
@@ -149,6 +154,8 @@ export async function renderSessionsPage(container) {
               <button class="btn-link" data-toggle="${s.id}" data-next-status="${isArchived ? "ativo" : "inativo"}">
                 ${isArchived ? "Reativar" : "Arquivar"}
               </button>
+              &nbsp;|&nbsp;
+              <button class="btn-link" style="color:var(--color-error);" data-delete="${s.id}">Apagar definitivamente</button>
             </td>
           </tr>
         `;
@@ -196,6 +203,23 @@ export async function renderSessionsPage(container) {
           await loadSessions();
         } catch (err) {
           content.innerHTML = `<div class="alert alert--error">Erro ao atualizar status: ${escapeHtml(err.message)}</div>`;
+        }
+      });
+    });
+
+    content.querySelectorAll("[data-delete]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        // Confirmação reforçada de propósito (pedido do usuário): apagar
+        // aqui é físico e sem volta, diferente de Arquivar. Exigir digitar
+        // a palavra evita clique acidental num botão que já é destrutivo.
+        const digitado = window.prompt('Isso apaga a sessão PARA SEMPRE, sem volta (diferente de Arquivar). Digite APAGAR para confirmar:');
+        if (digitado !== "APAGAR") return;
+        btn.disabled = true;
+        try {
+          await deleteStudySession(btn.dataset.delete);
+          await loadSessions();
+        } catch (err) {
+          content.innerHTML = `<div class="alert alert--error">Erro ao apagar: ${escapeHtml(err.message)}</div>`;
         }
       });
     });

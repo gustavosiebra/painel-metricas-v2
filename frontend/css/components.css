@@ -188,6 +188,22 @@
   text-transform: uppercase;
 }
 
+/* Catálogo (05/07/2026) — sem isso, a coluna Nome (texto livre, às vezes bem
+   longo) estica sozinha pelo tamanho do conteúdo e empurra as colunas curtas
+   (Situação/Status/Dono/Ações) todas espremidas num canto à direita, com um
+   vão enorme no meio (bug reportado pelo usuário). table-layout:fixed faz as
+   colunas respeitarem a largura do <th> (definida inline em catalogPage.js)
+   em vez de se ajustarem ao conteúdo; break-word quebra nomes longos em vez
+   de estourar a largura da coluna. */
+.data-table--fixed {
+  table-layout: fixed;
+}
+
+.data-table--fixed td {
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+
 /* Fase 6 — Dashboard. 10 cartões fixos (6 KPI + 4 Situação): 5 colunas fixas
    (não auto-fit) garantem sempre 2 fileiras de 5, centralizadas na tela —
    pedido do usuário (04/07/2026). Abaixo de 900px cai pra 2 colunas pra não
