@@ -390,7 +390,7 @@ export async function renderStudyFormPage(container, params) {
 
   async function handleSubmit(event) {
     event.preventDefault();
-    const { user, isAdmin } = getState();
+    const { user } = getState();
     alertBox.innerHTML = "";
 
     let disciplineId = card.querySelector("#discipline_id").value;
@@ -428,7 +428,7 @@ export async function renderStudyFormPage(container, params) {
           alertBox.innerHTML = `<div class="alert alert--error">Já existe um concurso chamado "${escapeHtml(name)}" — selecione-o na lista em vez de cadastrar de novo.</div>`;
           return;
         }
-        const created = await createExam({ name, isAdmin, userId: user.id });
+        const created = await createExam({ name, userId: user.id });
         exams.push(created);
         examId = created.id;
       }
@@ -447,7 +447,7 @@ export async function renderStudyFormPage(container, params) {
           alertBox.innerHTML = `<div class="alert alert--error">Já existe uma disciplina chamada "${escapeHtml(name)}" — selecione-a na lista em vez de cadastrar de novo.</div>`;
           return;
         }
-        const created = await createDiscipline({ name, isAdmin, userId: user.id });
+        const created = await createDiscipline({ name, userId: user.id });
         disciplines.push(created);
         disciplineId = created.id;
       }
@@ -473,7 +473,6 @@ export async function renderStudyFormPage(container, params) {
           name,
           disciplineId,
           examId: examId || null,
-          isAdmin,
           userId: user.id,
         });
         questionSets.push(created);
@@ -500,7 +499,7 @@ export async function renderStudyFormPage(container, params) {
           alertBox.innerHTML = `<div class="alert alert--error">Já existe uma banca chamada "${escapeHtml(name)}" — selecione-a na lista em vez de cadastrar de novo.</div>`;
           return;
         }
-        const created = await createExamBoard({ name, isAdmin, userId: user.id });
+        const created = await createExamBoard({ name, userId: user.id });
         boards.push(created);
         boardIds = [created.id];
       } else {

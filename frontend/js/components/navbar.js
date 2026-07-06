@@ -16,6 +16,12 @@ export function renderNavbar(activeRoute) {
     { path: "/historico", label: "Histórico" },
     { path: "/parametros", label: "Parâmetros" },
   ];
+  // Aba só pra admin (Fase 10, 05/07/2026) — some da navbar de qualquer outro
+  // usuário. A RLS já bloqueia o acesso aos dados mesmo se alguém forçar a
+  // URL na mão, mas nem mostrar a aba evita confusão.
+  if (isAdmin) {
+    links.push({ path: "/admin/dicionario", label: "Dicionário (Admin)" });
+  }
 
   const linksHtml = links
     .map(
