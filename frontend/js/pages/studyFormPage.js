@@ -218,7 +218,7 @@ export async function renderStudyFormPage(container, params) {
         <div class="form-field">
           <label for="self_confidence">Confiança autodeclarada</label>
           <select id="self_confidence">
-            <option value="">Não informar</option>
+            <option value="" id="self_confidence_none">Não informar</option>
             <option value="baixa" ${existingSession?.self_confidence === "baixa" ? "selected" : ""}>Baixa</option>
             <option value="media" ${existingSession?.self_confidence === "media" ? "selected" : ""}>Média</option>
             <option value="alta" ${existingSession?.self_confidence === "alta" ? "selected" : ""}>Alta</option>
@@ -400,6 +400,19 @@ export async function renderStudyFormPage(container, params) {
       correctTotalInput.required = showQuestionCounts;
 
       selfConfidenceSelect.required = !showQuestionCounts;
+      // Sem isso, "Não informar" (value="") continua selecionável mesmo
+      // quando o campo vira required — o navegador bloqueia o submit
+      // silenciosamente (value vazio + required = inválido), mas a opção
+      // segue na lista como se fosse uma escolha válida. Desabilita a opção
+      // quando required (mesmo padrão de placeholder disabled já usado em
+      // Concurso/Banca/Disciplina/Caderno neste arquivo); se ela já estava
+      // selecionada, empurra pra "Baixa" pra não deixar o select num estado
+      // desabilitado-selecionado.
+      const noneOption = card.querySelector("#self_confidence_none");
+      noneOption.disabled = selfConfidenceSelect.required;
+      if (selfConfidenceSelect.required && selfConfidenceSelect.value === "") {
+        selfConfidenceSelect.value = "baixa";
+      }
     }
     studyTypeSelect.addEventListener("change", updateStudyTypeUI);
     updateStudyTypeUI();
