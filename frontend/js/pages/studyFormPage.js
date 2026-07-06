@@ -1,6 +1,20 @@
 // Tela "Nova Sessão" / "Editar Sessão" (Doc. 16, T03) — registro agregado por
 // caderno. Cadernos são criados sob demanda aqui mesmo (Fase 4, decisão de
 // 01/07/2026). Mesma tela serve os dois modos: params.get("id") define edição.
+//
+// Campos obrigatórios (05/07/2026, pedido explícito do usuário, revertendo a
+// decisão anterior de Concurso/Banca opcionais): Concurso, Banca, Disciplina,
+// Caderno e Peso (na 1ª vez que o par Concurso×Disciplina é usado) agora são
+// todos obrigatórios — ninguém consegue salvar sem preencher. Como ainda
+// existe utilidade real em "estudo geral, sem edital específico" e "sem
+// banca definida", essas continuam existindo como OPÇÕES EXPLÍCITAS dentro
+// dos selects (sentinelas "__geral__" e "__nenhuma__") — a diferença é que
+// agora precisam ser escolhidas conscientemente (o <select> abre sem nada
+// marcado, graças a um <option disabled> de placeholder + required), em vez
+// de vir pré-selecionada em branco sem o usuário decidir nada. Mesmo padrão
+// pro Caderno ("__nenhum__"). O tipo de estudo também ganhou regra: Questões/
+// Simulado exige Total de questões + Acertos; qualquer outro tipo exige
+// Tempo líquido (já era sempre obrigatório) + Confiança autodeclarada.
 
 import { renderNavbar, wireNavbar } from "../components/navbar.js";
 import {
@@ -102,9 +116,10 @@ export async function renderStudyFormPage(container, params) {
           <input type="date" id="occurred_at" required value="${existingSession ? existingSession.occurred_at.slice(0, 10) : todayISO()}" />
         </div>
         <div class="form-field">
-          <label for="exam_id">Concurso (opcional)</label>
-          <select id="exam_id">
-            <option value="">— Estudo geral, sem concurso específico —</option>
+          <label for="exam_id">Concurso</label>
+          <select id="exam_id" required>
+            <option value="" disabled ${!existingSession ? "selected" : ""}>— Selecione —</option>
+            <option value="__geral__" ${existingSession && !existingSession.exam_id ? "selected" : ""}>Estudo geral, sem concurso específico</option>
             ${exams.map((e) => `<option value="${e.id}" ${existingSession?.exam_id === e.id ? "selected" : ""}>${escapeHtml(e.name)}</option>`).join("")}
             <option value="__new__">+ Cadastrar novo concurso…</option>
           </select>
@@ -113,11 +128,12 @@ export async function renderStudyFormPage(container, params) {
           </div>
         </div>
         <div class="form-field">
-          <label for="board_id">Banca (opcional)</label>
-          <select id="board_id">
-            <option value="">— Não informar —</option>
-            ${boardOptions.map((b) => `<option value="${b.id}" ${existingSession?.board_id === b.id && initialBoardIds.length <= 1 ? "selected" : ""}>${escapeHtml(b.name)}</option>`).join("")}
-            ${multibancaBoard ? `<option value="${multibancaBoard.id}" ${initialBoardIds.length > 1 ? "selected" : ""}>${escapeHtml(multibancaBoard.name)}</option>` : ""}
+          <label for="board_id">Banca</label>
+          <select id="board_id" required>
+            <option value="" disabled ${!existingSession ? "selected" : ""}>— Selecione —</option>
+            <option value="__nenhuma__" ${existingSession && initialBoardIds.length === 0 ? "selected" : ""}>Não informar</option>
+            ${boardOptions.map((b) => `<option value="${b.id}" ${existingSession?.board_id === b.id && initialBoardIds.length <= 1 && initialBoardIds.includes(b.id) ? "selected" : ""}>${escapeHtml(b.name)}</option>`).join("")}
+            ${multibancaBoard ? `<option value="${multibancaBoard.id}" ${existingSession && initialBoardIds.length > 1 ? "selected" : ""}>${escapeHtml(multibancaBoard.name)}</option>` : ""}
             <option value="__new__">+ Cadastrar nova banca…</option>
           </select>
           <div id="new-board-box" style="display:none; margin-top:8px;">
@@ -141,7 +157,7 @@ export async function renderStudyFormPage(container, params) {
         <div class="form-field">
           <label for="discipline_id">Disciplina</label>
           <select id="discipline_id" required>
-            <option value="">Selecione…</option>
+            <option value="" disabled ${!existingSession?.discipline_id ? "selected" : ""}>— Selecione —</option>
             ${disciplines.map((d) => `<option value="${d.id}" ${existingSession?.discipline_id === d.id ? "selected" : ""}>${escapeHtml(d.name)}</option>`).join("")}
             <option value="__new__">+ Cadastrar nova disciplina…</option>
           </select>
@@ -150,10 +166,11 @@ export async function renderStudyFormPage(container, params) {
           </div>
         </div>
         <div class="card" id="weight-shortcut-box" style="display:none; margin:8px 0; padding:12px; background:var(--color-bg-subtle, #f5f5f5);">
-          <p style="margin:0 0 8px 0;">Ainda não há peso definido para esta disciplina neste concurso.</p>
+          <p style="margin:0 0 8px 0;">Ainda não há peso definido para esta disciplina neste concurso — obrigatório na primeira vez.</p>
           <div class="form-field">
             <label for="shortcut_weight">Peso</label>
             <select id="shortcut_weight">
+              <option value="" disabled selected>— Selecione —</option>
               <option value="baixo">Baixo</option>
               <option value="alto">Alto</option>
             </select>
@@ -162,13 +179,11 @@ export async function renderStudyFormPage(container, params) {
             <label for="shortcut_expected_questions">Questões esperadas na prova (opcional)</label>
             <input type="number" id="shortcut_expected_questions" min="0" step="1" />
           </div>
-          <button type="button" id="shortcut_save_weight" class="btn-link">Salvar peso</button>
-          <span id="weight-shortcut-status" style="margin-left:8px;"></span>
         </div>
         <div class="form-field" id="question-set-field" style="display:${existingSession?.discipline_id ? "block" : "none"};">
           <label for="question_set_id">Caderno</label>
-          <select id="question_set_id">
-            <option value="">Selecione a disciplina primeiro…</option>
+          <select id="question_set_id" required>
+            <option value="" disabled selected>Selecione a disciplina primeiro…</option>
           </select>
           <div id="new-caderno-box" style="display:none; margin-top:8px;">
             <input type="text" id="new_caderno_name" placeholder="Nome do novo caderno" />
@@ -198,15 +213,16 @@ export async function renderStudyFormPage(container, params) {
             <label for="score">Nota (0–100)</label>
             <input type="number" id="score" min="0" max="100" step="0.01" value="${result?.score ?? ""}" />
           </div>
-          <div class="form-field">
-            <label for="self_confidence">Confiança autodeclarada</label>
-            <select id="self_confidence">
-              <option value="">Não informar</option>
-              <option value="baixa" ${existingSession?.self_confidence === "baixa" ? "selected" : ""}>Baixa</option>
-              <option value="media" ${existingSession?.self_confidence === "media" ? "selected" : ""}>Média</option>
-              <option value="alta" ${existingSession?.self_confidence === "alta" ? "selected" : ""}>Alta</option>
-            </select>
-          </div>
+        </div>
+
+        <div class="form-field">
+          <label for="self_confidence">Confiança autodeclarada</label>
+          <select id="self_confidence">
+            <option value="">Não informar</option>
+            <option value="baixa" ${existingSession?.self_confidence === "baixa" ? "selected" : ""}>Baixa</option>
+            <option value="media" ${existingSession?.self_confidence === "media" ? "selected" : ""}>Média</option>
+            <option value="alta" ${existingSession?.self_confidence === "alta" ? "selected" : ""}>Alta</option>
+          </select>
         </div>
 
         <div class="form-field">
@@ -230,7 +246,7 @@ export async function renderStudyFormPage(container, params) {
     const boardSelect = card.querySelector("#board_id");
     const boardMultiField = card.querySelector("#board-multi-field");
     const weightShortcutBox = card.querySelector("#weight-shortcut-box");
-    const weightShortcutStatus = card.querySelector("#weight-shortcut-status");
+    const weightSelect = card.querySelector("#shortcut_weight");
     const questionSetField = card.querySelector("#question-set-field");
     const questionSetSelect = card.querySelector("#question_set_id");
     const newCadernoBox = card.querySelector("#new-caderno-box");
@@ -243,6 +259,7 @@ export async function renderStudyFormPage(container, params) {
     const questionsTotalInput = card.querySelector("#questions_total");
     const correctTotalInput = card.querySelector("#correct_total");
     const wrongTotalDisplay = card.querySelector("#wrong_total_display");
+    const selfConfidenceSelect = card.querySelector("#self_confidence");
 
     // "Multibanca" é uma opção dentro do próprio select de Banca (RN de
     // 02/07/2026) — só ao selecioná-la aparece a lista de checkboxes.
@@ -269,6 +286,11 @@ export async function renderStudyFormPage(container, params) {
     boardSelect.addEventListener("change", updateNewBoardUI);
     updateNewBoardUI();
 
+    // selectedId: undefined = ainda sem escolha do usuário nesta interação
+    // (marca o placeholder "— Selecione —", forçando escolha consciente);
+    // null = sessão existente que já tinha "nenhum caderno" decidido de
+    // propósito (marca a opção "Nenhum caderno específico"); string = id
+    // real de um caderno já escolhido antes (edição).
     function populateQuestionSets(disciplineId, selectedId) {
       const filtered = questionSets.filter((q) => q.discipline_id === disciplineId);
       // CSS trunca a caixa fechada, mas a lista aberta de um <select> nativo
@@ -278,7 +300,8 @@ export async function renderStudyFormPage(container, params) {
       // truncar o próprio texto da opção; o nome completo fica no atributo
       // title (aparece ao passar o mouse) e o value continua sendo o id real.
       questionSetSelect.innerHTML = `
-        <option value="">— Nenhum caderno específico —</option>
+        <option value="" disabled ${selectedId === undefined ? "selected" : ""}>— Selecione —</option>
+        <option value="__nenhum__" ${selectedId === null ? "selected" : ""}>Nenhum caderno específico</option>
         ${filtered
           .map(
             (q) =>
@@ -287,6 +310,7 @@ export async function renderStudyFormPage(container, params) {
           .join("")}
         <option value="__new__">+ Criar novo caderno…</option>
       `;
+      newCadernoBox.style.display = questionSetSelect.value === "__new__" ? "block" : "none";
     }
 
     disciplineSelect.addEventListener("change", () => {
@@ -300,72 +324,82 @@ export async function renderStudyFormPage(container, params) {
       // disciplineId="__new__" naturalmente não bate com nenhum caderno real,
       // então a lista aparece vazia, que é o esperado (disciplina sem histórico).
       questionSetField.style.display = "block";
-      populateQuestionSets(disciplineId, null);
+      populateQuestionSets(disciplineId, undefined);
       checkWeightShortcut();
     });
 
     // Pré-popular caderno em modo edição, já com a disciplina existente.
     if (existingSession?.discipline_id) {
-      populateQuestionSets(existingSession.discipline_id, existingSession.question_set_id);
+      populateQuestionSets(existingSession.discipline_id, existingSession.question_set_id ?? null);
     }
 
-    // Atalho de Peso: só faz sentido com concurso E disciplina escolhidos — sem
-    // concurso não há em que "pendurar" o peso (é por disciplina × edital).
-    // Some silenciosamente quando já existe peso salvo ou quando falta um dos dois.
+    // Peso obrigatório na 1ª vez que o par Concurso×Disciplina é usado
+    // (05/07/2026, pedido do usuário — antes era um atalho opcional com botão
+    // próprio de salvar; agora é só mais um campo obrigatório do formulário,
+    // validado e gravado junto no submit principal). Não se aplica a "Estudo
+    // geral" (sem concurso, não tem em que "pendurar" o peso). Quando o
+    // concurso ou a disciplina ainda são "__new__" (cadastro sob demanda),
+    // não dá pra checar o banco (não existem de verdade ainda), mas também
+    // não precisa: é garantidamente a 1ª vez, então o campo aparece direto.
     async function checkWeightShortcut() {
       const examId = examSelect.value;
       const disciplineId = disciplineSelect.value;
-      weightShortcutStatus.textContent = "";
-      // "__new__" ainda não é um id real (só existe depois do submit) — não dá
-      // pra checar/salvar peso pra algo que ainda não foi criado no catálogo.
-      if (!examId || !disciplineId || examId === "__new__" || disciplineId === "__new__") {
-        weightShortcutBox.style.display = "none";
+
+      if (!examId || examId === "__geral__" || !disciplineId) {
+        setWeightBoxVisible(false);
+        return;
+      }
+      if (examId === "__new__" || disciplineId === "__new__") {
+        setWeightBoxVisible(true);
         return;
       }
       try {
         const existing = await getWeight({ examId, disciplineId });
-        weightShortcutBox.style.display = existing ? "none" : "block";
+        setWeightBoxVisible(!existing);
       } catch (err) {
-        // Falha silenciosa: o atalho é conveniência, não deve travar o registro da sessão.
-        weightShortcutBox.style.display = "none";
+        // Falha ao checar não deve travar o formulário inteiro — melhor
+        // pedir o peso de novo (inofensivo, upsert) do que travar o usuário.
+        setWeightBoxVisible(true);
       }
     }
+
+    function setWeightBoxVisible(visible) {
+      weightShortcutBox.style.display = visible ? "block" : "none";
+      weightSelect.required = visible;
+      // Sempre reseta ao trocar de combo (Concurso/Disciplina) — senão um
+      // "Alto" escolhido pro combo anterior ficaria marcado por engano ao
+      // trocar pra outro combo que também exige peso.
+      weightSelect.value = "";
+      const expectedInput = card.querySelector("#shortcut_expected_questions");
+      if (expectedInput) expectedInput.value = "";
+    }
+
     examSelect.addEventListener("change", checkWeightShortcut);
     if (existingSession?.exam_id && existingSession?.discipline_id) checkWeightShortcut();
-
-    card.querySelector("#shortcut_save_weight").addEventListener("click", async () => {
-      const { user } = getState();
-      const examId = examSelect.value;
-      const disciplineId = disciplineSelect.value;
-      const weight = card.querySelector("#shortcut_weight").value;
-      const expectedQuestions = card.querySelector("#shortcut_expected_questions").value;
-      try {
-        await upsertWeight({
-          userId: user.id,
-          examId,
-          disciplineId,
-          weight,
-          expectedQuestions: expectedQuestions ? Number(expectedQuestions) : null,
-        });
-        weightShortcutBox.style.display = "none";
-        weightShortcutStatus.textContent = "";
-      } catch (err) {
-        weightShortcutStatus.textContent = `Erro ao salvar peso: ${err.message}`;
-      }
-    });
 
     questionSetSelect.addEventListener("change", () => {
       newCadernoBox.style.display = questionSetSelect.value === "__new__" ? "block" : "none";
     });
 
+    // Regra por tipo de estudo (05/07/2026, pedido do usuário): Questões e
+    // Simulado exigem Total de questões + Acertos; qualquer outro tipo exige
+    // Confiança autodeclarada (Tempo líquido já é sempre obrigatório, não
+    // muda por tipo). Nota (Simulado/Discursiva) continua opcional — é uma
+    // estimativa, nem toda banca dá nota fechada.
     function updateStudyTypeUI() {
-      const measurable = hasMeasurableResult(studyTypeSelect.value);
+      const type = studyTypeSelect.value;
+      const measurable = hasMeasurableResult(type);
       measurableFields.style.display = measurable ? "block" : "none";
-      scoreField.style.display = ["simulado", "discursiva"].includes(studyTypeSelect.value) ? "block" : "none";
-      const showQuestionCounts = ["questao", "simulado"].includes(studyTypeSelect.value);
+      scoreField.style.display = ["simulado", "discursiva"].includes(type) ? "block" : "none";
+
+      const showQuestionCounts = ["questao", "simulado"].includes(type);
       questionsTotalInput.closest(".form-field").style.display = showQuestionCounts ? "block" : "none";
       correctTotalInput.closest(".form-field").style.display = showQuestionCounts ? "block" : "none";
       wrongTotalDisplay.closest(".form-field").style.display = showQuestionCounts ? "block" : "none";
+      questionsTotalInput.required = showQuestionCounts;
+      correctTotalInput.required = showQuestionCounts;
+
+      selfConfidenceSelect.required = !showQuestionCounts;
     }
     studyTypeSelect.addEventListener("change", updateStudyTypeUI);
     updateStudyTypeUI();
@@ -398,6 +432,16 @@ export async function renderStudyFormPage(container, params) {
     const studyType = card.querySelector("#study_type").value;
     const questionSetSelect = card.querySelector("#question_set_id");
     let questionSetId = questionSetSelect.value;
+    const boardSelectValue = card.querySelector("#board_id").value;
+
+    // Peso: captura ANTES de resolver "__new__" (reflete exatamente o que o
+    // usuário viu/preencheu na tela). weightShortcutBox só fica visível
+    // (e required) quando o peso é de fato obrigatório pra esse combo — ver
+    // checkWeightShortcut em wireForm.
+    const weightShortcutBox = card.querySelector("#weight-shortcut-box");
+    const pesoNecessario = weightShortcutBox.style.display !== "none";
+    const pesoEscolhido = card.querySelector("#shortcut_weight").value;
+    const questoesEsperadas = card.querySelector("#shortcut_expected_questions").value;
 
     const questionsTotal = Number(card.querySelector("#questions_total").value || 0);
     const correctTotal = Number(card.querySelector("#correct_total").value || 0);
@@ -406,6 +450,17 @@ export async function renderStudyFormPage(container, params) {
     if (["questao", "simulado"].includes(studyType) && correctTotal > questionsTotal) {
       alertBox.innerHTML = `<div class="alert alert--error">Acertos não pode ser maior que Questões.</div>`;
       return;
+    }
+
+    // Multibancas: o <select> de Banca já valida "algo foi escolhido", mas
+    // não garante que pelo menos 1 checkbox foi marcado dentro do modo
+    // multibancas — checagem manual aqui (05/07/2026, banca não é mais opcional).
+    if (multibancaBoard && boardSelectValue === multibancaBoard.id) {
+      const marcadas = card.querySelectorAll(".board-multi-checkbox:checked").length;
+      if (marcadas === 0) {
+        alertBox.innerHTML = `<div class="alert alert--error">Escolha pelo menos uma banca na lista de Multibancas.</div>`;
+        return;
+      }
     }
 
     try {
@@ -431,6 +486,8 @@ export async function renderStudyFormPage(container, params) {
         const created = await createExam({ name, userId: user.id });
         exams.push(created);
         examId = created.id;
+      } else if (examId === "__geral__") {
+        examId = null;
       }
 
       if (disciplineId === "__new__") {
@@ -450,6 +507,23 @@ export async function renderStudyFormPage(container, params) {
         const created = await createDiscipline({ name, userId: user.id });
         disciplines.push(created);
         disciplineId = created.id;
+      }
+
+      // Peso — obrigatório na 1ª vez (ver checkWeightShortcut). Grava aqui,
+      // já com examId/disciplineId reais (podem ter acabado de ser criados
+      // acima), antes do Caderno.
+      if (pesoNecessario && examId) {
+        if (!pesoEscolhido) {
+          alertBox.innerHTML = `<div class="alert alert--error">Escolha o Peso (Baixo ou Alto) para esta disciplina neste concurso.</div>`;
+          return;
+        }
+        await upsertWeight({
+          userId: user.id,
+          examId,
+          disciplineId,
+          weight: pesoEscolhido,
+          expectedQuestions: questoesEsperadas ? Number(questoesEsperadas) : null,
+        });
       }
 
       if (questionSetId === "__new__") {
@@ -477,11 +551,12 @@ export async function renderStudyFormPage(container, params) {
         });
         questionSets.push(created);
         questionSetId = created.id;
+      } else if (questionSetId === "__nenhum__") {
+        questionSetId = null;
       }
 
       const scoreValue = card.querySelector("#score").value;
 
-      const boardSelectValue = card.querySelector("#board_id").value;
       let boardIds;
       if (multibancaBoard && boardSelectValue === multibancaBoard.id) {
         boardIds = Array.from(card.querySelectorAll(".board-multi-checkbox:checked")).map((cb) => cb.value);
@@ -502,6 +577,8 @@ export async function renderStudyFormPage(container, params) {
         const created = await createExamBoard({ name, userId: user.id });
         boards.push(created);
         boardIds = [created.id];
+      } else if (boardSelectValue === "__nenhuma__") {
+        boardIds = [];
       } else {
         boardIds = boardSelectValue ? [boardSelectValue] : [];
       }
@@ -529,84 +606,14 @@ export async function renderStudyFormPage(container, params) {
       if (editingId) {
         await updateStudySession(editingId, payload);
         alertBox.innerHTML = `<div class="alert alert--success">Sessão atualizada com sucesso.</div>`;
-        setTimeout(() => navigate("/sessoes"), 800);
-        return;
-      }
-
-      await createStudySession(payload);
-
-      // Bug reportado pelo usuário (05/07/2026): o atalho de peso em cima
-      // (checkWeightShortcut) só existe pra combos JÁ REAIS — se o concurso
-      // foi cadastrado sob demanda nesta mesma tela, o exam_id só passou a
-      // existir de verdade agora, depois do createStudySession acima, então
-      // o atalho nunca teve chance de aparecer durante o preenchimento.
-      // Confere de novo aqui com os ids já resolvidos e reoferece a mesma
-      // opção antes de sair da tela, em vez de simplesmente perder a chance.
-      let pesoJaExiste = true;
-      if (examId) {
-        try {
-          pesoJaExiste = !!(await getWeight({ examId, disciplineId }));
-        } catch {
-          pesoJaExiste = true; // falha ao checar não deve travar o fluxo
-        }
-      }
-
-      if (!examId || pesoJaExiste) {
+      } else {
+        await createStudySession(payload);
         alertBox.innerHTML = `<div class="alert alert--success">Sessão registrada com sucesso.</div>`;
-        setTimeout(() => navigate("/sessoes"), 800);
-        return;
       }
-
-      renderPostSaveWeightPrompt(examId, disciplineId);
+      setTimeout(() => navigate("/sessoes"), 800);
     } catch (err) {
       alertBox.innerHTML = `<div class="alert alert--error">Erro ao salvar: ${escapeHtml(err.message)}</div>`;
     }
-  }
-
-  function renderPostSaveWeightPrompt(examId, disciplineId) {
-    alertBox.innerHTML = `
-      <div class="alert alert--success">Sessão registrada com sucesso.</div>
-      <div class="card" style="margin-top:8px; padding:12px; background:var(--color-bg-subtle, #f5f5f5);">
-        <p style="margin:0 0 8px 0;">Ainda não há peso definido para esta disciplina neste concurso.</p>
-        <div class="form-field">
-          <label for="postsave_weight">Peso</label>
-          <select id="postsave_weight">
-            <option value="baixo">Baixo</option>
-            <option value="alto">Alto</option>
-          </select>
-        </div>
-        <div class="form-field">
-          <label for="postsave_expected_questions">Questões esperadas na prova (opcional)</label>
-          <input type="number" id="postsave_expected_questions" min="0" step="1" />
-        </div>
-        <button type="button" id="postsave_save_weight" class="btn-link">Salvar peso</button>
-        &nbsp;|&nbsp;
-        <button type="button" id="postsave_skip_weight" class="btn-link">Pular</button>
-        <span id="postsave_weight_status" style="margin-left:8px;"></span>
-      </div>
-    `;
-
-    const statusEl = alertBox.querySelector("#postsave_weight_status");
-
-    alertBox.querySelector("#postsave_save_weight").addEventListener("click", async () => {
-      const { user } = getState();
-      const weight = alertBox.querySelector("#postsave_weight").value;
-      const expectedQuestions = alertBox.querySelector("#postsave_expected_questions").value;
-      try {
-        await upsertWeight({
-          userId: user.id,
-          examId,
-          disciplineId,
-          weight,
-          expectedQuestions: expectedQuestions ? Number(expectedQuestions) : null,
-        });
-        navigate("/sessoes");
-      } catch (err) {
-        statusEl.textContent = `Erro ao salvar peso: ${err.message}`;
-      }
-    });
-
-    alertBox.querySelector("#postsave_skip_weight").addEventListener("click", () => navigate("/sessoes"));
   }
 }
 

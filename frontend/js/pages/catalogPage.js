@@ -1,11 +1,16 @@
-// Tela "Catálogo" (Doc. 15, M02) — consulta de Disciplinas, Bancas, Concursos
+// Tela "Catálogo" (Doc. 15, M02) — consulta de Concursos, Bancas, Disciplinas
 // e Cadernos. Reintroduzida em 05/07/2026 (Fase 10) pra TODO usuário, incluindo
 // admin: cada um só vê global (user_id nulo) + o que ele mesmo cadastrou (RLS
 // cuida disso sozinho, não replicamos a regra aqui). Editar/Apagar só aparece
 // nos itens que são do próprio usuário — em item global o botão nem existe,
 // porque a RLS bloquearia mesmo (é reforço visual, a segurança real é RLS).
-// Cadernos ganhou filtro por disciplina aqui (pedido do usuário) porque a
-// lista já passa de mil linhas — busca só por nome não ajuda muito sozinha.
+// Ordem Concurso → Banca → Disciplina → Caderno = mesma hierarquia de cima
+// pra baixo usada em Nova Sessão (pedido do usuário, 05/07/2026).
+// Colunas reduzidas ao que diferencia cada linha — "Status" tirado de todas
+// as seções (era sempre "ativo", zero informação útil) — pedido do usuário.
+// Cadernos passa de 1000 linhas: NÃO renderiza nada até o usuário escolher
+// uma disciplina ou digitar um nome — evita o "dump" de mil linhas de uma vez
+// (pedido do usuário, 05/07/2026).
 
 import { renderNavbar, wireNavbar } from "../components/navbar.js";
 import { getState } from "../state.js";
@@ -32,7 +37,7 @@ export async function renderCatalogPage(container) {
         <main class="app-content">
           <h2 class="form-title">Catálogo</h2>
           <p style="color:var(--color-text-muted); margin-top:-8px;">
-            Disciplinas, Bancas, Concursos e Cadernos. Editar/Apagar só disponível nos itens que você mesmo cadastrou.
+            Concursos, Bancas, Disciplinas e Cadernos. Editar/Apagar só disponível nos itens que você mesmo cadastrou.
           </p>
           <div id="catalog-content"><p>Carregando…</p></div>
         </main>
@@ -62,11 +67,6 @@ async function carregarERenderizar(content, userId) {
     return;
   }
 
-  const disciplineNameMap = new Map(disciplines.map((d) => [d.id, d.name]));
-
-  // Ordem Concurso → Banca → Disciplina → Caderno (pedido do usuário,
-  // 05/07/2026): segue a mesma hierarquia de cima pra baixo usada em Nova
-  // Sessão, em vez da ordem alfabética que estava antes.
   content.innerHTML = [
     renderSection({
       titulo: "Concursos",
@@ -75,7 +75,6 @@ async function carregarERenderizar(content, userId) {
       colunasExtra: [
         { header: "Ano", extrair: (item) => escapeHtml(item.year ?? "—") },
         { header: "Cargo", extrair: (item) => escapeHtml(item.role || "—") },
-        { header: "Status", extrair: (item) => escapeHtml(item.status || "—") },
       ],
     }),
     renderSection({
@@ -88,21 +87,15 @@ async function carregarERenderizar(content, userId) {
       titulo: "Disciplinas",
       itens: disciplines,
       userId,
-      colunasExtra: [
-        { header: "Categoria", extrair: (item) => escapeHtml(item.category || "—") },
-        { header: "Status", extrair: (item) => escapeHtml(item.status || "—") },
-      ],
+      colunasExtra: [{ header: "Categoria", extrair: (item) => escapeHtml(item.category || "—") }],
     }),
     renderSection({
       titulo: "Cadernos",
       itens: questionSets,
       userId,
-      colunasExtra: [
-        { header: "Disciplina", extrair: (item) => escapeHtml(disciplineNameMap.get(item.discipline_id) || "—") },
-        { header: "Situação", extrair: (item) => escapeHtml(item.learning_level || "—") },
-        { header: "Status", extrair: (item) => escapeHtml(item.status || "—") },
-      ],
+      colunasExtra: [{ header: "Situação", extrair: (item) => escapeHtml(item.learning_level || "—") }],
       filtroDisciplina: disciplines,
+      exigeFiltro: true,
     }),
   ]
     .map((s) => s.html)
@@ -116,29 +109,37 @@ async function carregarERenderizar(content, userId) {
   // Busca por nome, em todas as seções.
   content.querySelectorAll("[data-filter-input]").forEach((input) => {
     const tipo = input.dataset.filterInput;
-    const table = content.querySelector(`[data-filter-table="${tipo}"]`);
-    input.addEventListener("input", () => aplicarFiltros(table, input.value, disciplineFilterFor(content, tipo)));
+    input.addEventListener("input", () => aplicarFiltros(content, tipo));
   });
 
   // Filtro por disciplina, só existe na seção de Cadernos.
   const disciplineFilterSelect = content.querySelector("[data-filter-discipline]");
   if (disciplineFilterSelect) {
-    disciplineFilterSelect.addEventListener("change", () => {
-      const table = content.querySelector('[data-filter-table="questionSet"]');
-      const nameInput = content.querySelector('[data-filter-input="questionSet"]');
-      aplicarFiltros(table, nameInput ? nameInput.value : "", disciplineFilterSelect.value);
-    });
+    disciplineFilterSelect.addEventListener("change", () => aplicarFiltros(content, "questionSet"));
   }
 }
 
-function disciplineFilterFor(content, tipo) {
-  if (tipo !== "questionSet") return "";
-  const select = content.querySelector("[data-filter-discipline]");
-  return select ? select.value : "";
-}
+function aplicarFiltros(content, tipo) {
+  const table = content.querySelector(`[data-filter-table="${tipo}"]`);
+  const placeholder = content.querySelector(`[data-filter-placeholder="${tipo}"]`);
+  const nameInput = content.querySelector(`[data-filter-input="${tipo}"]`);
+  const disciplineSelect = tipo === "questionSet" ? content.querySelector("[data-filter-discipline]") : null;
 
-function aplicarFiltros(table, termoNome, disciplinaId) {
-  const termo = (termoNome || "").trim().toLowerCase();
+  const termo = (nameInput?.value || "").trim().toLowerCase();
+  const disciplinaId = disciplineSelect ? disciplineSelect.value : "";
+  const exigeFiltro = table?.dataset.exigeFiltro === "true";
+
+  // Cadernos (exigeFiltro): sem disciplina escolhida E sem busca por nome,
+  // não mostra a tabela — só o aviso pedindo pra escolher/buscar. Evita
+  // renderizar as 1000 linhas de uma vez só de abrir a tela.
+  if (exigeFiltro && !termo && !disciplinaId) {
+    if (table) table.style.display = "none";
+    if (placeholder) placeholder.style.display = "block";
+    return;
+  }
+  if (table) table.style.display = "";
+  if (placeholder) placeholder.style.display = "none";
+
   table.querySelectorAll("[data-filter-row]").forEach((row) => {
     const bateNome = !termo || row.dataset.filterNome.includes(termo);
     const bateDisciplina = !disciplinaId || row.dataset.filterDiscipline === disciplinaId;
@@ -183,7 +184,7 @@ function wireSection(content, tipo, acoes, onChange) {
   });
 }
 
-function renderSection({ titulo, itens, userId, colunasExtra, filtroDisciplina }) {
+function renderSection({ titulo, itens, userId, colunasExtra, filtroDisciplina, exigeFiltro }) {
   const tipoPorTitulo = { Disciplinas: "discipline", Bancas: "board", Concursos: "exam", Cadernos: "questionSet" };
   const tipo = tipoPorTitulo[titulo];
 
@@ -226,14 +227,18 @@ function renderSection({ titulo, itens, userId, colunasExtra, filtroDisciplina }
   const filtroDisciplinaHtml =
     tipo === "questionSet" && filtroDisciplina && filtroDisciplina.length > 0
       ? `
-        <div class="form-field" style="max-width:280px; display:inline-block; margin-right:12px;">
+        <div class="form-field" style="max-width:280px; margin-bottom:0; margin-right:12px;">
           <select data-filter-discipline>
-            <option value="">Todas as disciplinas</option>
+            <option value="">Escolha uma disciplina…</option>
             ${filtroDisciplina.map((d) => `<option value="${d.id}">${escapeHtml(d.name)}</option>`).join("")}
           </select>
         </div>
       `
       : "";
+
+  const placeholderHtml = exigeFiltro
+    ? `<p data-filter-placeholder="${tipo}" style="color:var(--color-text-muted);">Escolha uma disciplina acima ou busque por nome pra ver os cadernos.</p>`
+    : "";
 
   return {
     html: `
@@ -245,7 +250,8 @@ function renderSection({ titulo, itens, userId, colunasExtra, filtroDisciplina }
             <input type="text" data-filter-input="${tipo}" placeholder="Buscar por nome..." />
           </div>
         </div>
-        <table class="data-table data-table--fixed" data-filter-table="${tipo}">
+        ${placeholderHtml}
+        <table class="data-table data-table--fixed" data-filter-table="${tipo}" data-exige-filtro="${!!exigeFiltro}" style="${exigeFiltro ? "display:none;" : ""}">
           <tr><th style="width:32%;">Nome</th>${extraHeaders}<th style="width:90px;">Dono</th><th style="width:140px;">Ações</th></tr>
           ${rows}
         </table>
