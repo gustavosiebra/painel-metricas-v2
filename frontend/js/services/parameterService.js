@@ -12,6 +12,11 @@ export const PARAM_DEFAULTS = {
   diagnostico_min_n: 30,
   estabilidade_min_n: 30,
   janela_tendencia: { curta: 100, longa: 300 },
+  // Janela (dias corridos) da versão "recente" de Acertos/hora e Questões/hora
+  // no Dashboard (07/07/2026, pedido do usuário) — só uso do lado do cliente,
+  // repassado direto pro parâmetro p_dias de eficiencia_caderno() na chamada
+  // (não é lido via get_user_param() no banco, diferente dos outros acima).
+  produtividade_janela_dias: 28,
   retencao_buckets: [
     { max: 3, label: "0-3 dias" },
     { max: 7, label: "4-7 dias" },

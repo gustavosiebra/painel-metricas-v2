@@ -320,6 +320,45 @@ export async function getHorasPorDisciplina() {
   return linhas;
 }
 
+// Horas Semanais, valor bruto (07/07/2026, pedido do usuário) — consistência
+// de esforço semana a semana. Sem suavização de propósito, mesma decisão já
+// tomada pro gráfico de Acertos vs. Erros por Semana: uma semana fraca de
+// verdade (viagem, imprevisto, doença) precisa aparecer fraca no gráfico, não
+// escondida atrás de uma média móvel. TODOS os tipos de estudo contam (mesmo
+// critério do KPI "Horas estudadas"), por isso não reaproveita os blocos
+// semanais de getTendenciaSemanal (que só olha tipos mensuráveis) — busca e
+// ancora no próprio dia mais recente com qualquer sessão.
+export async function getHorasSemanais(nSemanas = 12) {
+  const { data, error } = await supabase.from("study_sessions").select("occurred_at, duration_minutes").eq("status", "ativo");
+  if (error) throw error;
+
+  const sessoes = data || [];
+  if (sessoes.length === 0) return [];
+
+  const ultimaData = sessoes.reduce((max, s) => (s.occurred_at > max ? s.occurred_at : max), sessoes[0].occurred_at);
+  const fimTotal = new Date(ultimaData);
+
+  const semanas = [];
+  for (let w = 0; w < nSemanas; w++) {
+    const fim = new Date(fimTotal);
+    fim.setDate(fim.getDate() - w * 7);
+    const inicio = new Date(fim);
+    inicio.setDate(inicio.getDate() - 6);
+    const minutos = sessoes
+      .filter((s) => {
+        const dt = new Date(s.occurred_at);
+        return dt >= inicio && dt <= fim;
+      })
+      .reduce((acc, s) => acc + Number(s.duration_minutes || 0), 0);
+    semanas.unshift({
+      inicio: inicio.toISOString().slice(0, 10),
+      fim: fim.toISOString().slice(0, 10),
+      horas: Math.round((minutos / 60) * 10) / 10,
+    });
+  }
+  return semanas;
+}
+
 // Contadores por Situação (Fase 6-B) — quantos CADERNOS caem em cada
 // classificação de Diagnóstico Wilson (v_diagnostico_caderno). Não usa
 // question_sets.learning_level (campo nunca ficou de fato preenchido pela
@@ -352,8 +391,15 @@ export async function getContadoresSituacao() {
 // (que incluem tipos sem acerto nenhum) produz um número enviesado — parece
 // "eficiência" mas na prática mede outra coisa. Horas totais continuam
 // disponíveis sozinhas (KPI "Horas estudadas"), sem cruzar com acerto.
-export async function getProdutividadeGeral() {
-  const { data, error } = await supabase.rpc("eficiencia_caderno", { p_dias: null });
+// pDias (07/07/2026, pedido do usuário): null = vitalício (comportamento
+// original); um número = só sessões dos últimos N dias corridos. A função no
+// banco já suporta esse filtro nativamente (parâmetro p_dias, sem mudança de
+// schema) — só passamos o valor adiante. Motivo de existir: uma média
+// vitalícia fica cada vez menos sensível ao presente conforme o total de
+// horas acumuladas cresce (uma semana ruim de verdade quase não move mais o
+// número) — a versão recente existe pra continuar enxergando o "agora".
+export async function getProdutividadeGeral(pDias = null) {
+  const { data, error } = await supabase.rpc("eficiencia_caderno", { p_dias: pDias });
   if (error) throw error;
 
   const rows = data || [];

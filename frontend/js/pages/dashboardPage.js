@@ -4,7 +4,9 @@
 
 import { renderNavbar, wireNavbar } from "../components/navbar.js";
 import { navigate } from "../router.js";
+import { getState } from "../state.js";
 import { formatPct, formatDeltaPct } from "../utils/format.js";
+import { getParam } from "../services/parameterService.js";
 import {
   getKpis,
   getCadernosEstudados,
@@ -15,9 +17,9 @@ import {
   getTendenciaSemanal,
   getJanelaTendenciaDisciplina,
   getJanelaTendenciaCadernoDestaques,
-  getRetencaoGeral,
   getRetencaoPorDisciplina,
   getHorasPorDisciplina,
+  getHorasSemanais,
   pickProximaAcao,
 } from "../services/dashboardService.js";
 
@@ -45,6 +47,7 @@ let chartMediaMovelInstance = null;
 let chartAcertosErrosInstance = null;
 let chartHorasInstance = null;
 let chartRetencaoInstance = null;
+let chartHorasSemanaisInstance = null;
 
 export async function renderDashboardPage(container) {
   // Sem H2 "Dashboard" na página (pedido do usuário, 03/07/2026) — o nome já
@@ -113,21 +116,42 @@ export async function renderDashboardPage(container) {
   }
 
   const content = container.querySelector("#dashboard-content");
+  const { user } = getState();
 
-  let kpis, cadernosEstudados, ranking, mediaMovelDiaria, situacao, produtividade, janelaDisciplina, janelaCaderno, retencaoGeral, retencaoPorDisciplina, horasPorDisciplina;
+  let kpis, cadernosEstudados, ranking, mediaMovelDiaria, situacao, produtividadeVitalicia, produtividadeRecente, janelaDisciplina, janelaCaderno, retencaoPorDisciplina, horasPorDisciplina, horasSemanais, janelaProdutividadeDias;
   try {
-    [kpis, cadernosEstudados, ranking, mediaMovelDiaria, situacao, produtividade, janelaDisciplina, janelaCaderno, retencaoGeral, retencaoPorDisciplina, horasPorDisciplina] = await Promise.all([
+    // Janela de Produtividade Recente (07/07/2026, pedido do usuário) —
+    // configurável em Configurações (padrão 28 dias); busca ANTES do
+    // Promise.all principal porque getProdutividadeGeral(janela) depende
+    // desse valor.
+    janelaProdutividadeDias = await getParam(user.id, "produtividade_janela_dias");
+
+    [
+      kpis,
+      cadernosEstudados,
+      ranking,
+      mediaMovelDiaria,
+      situacao,
+      produtividadeVitalicia,
+      produtividadeRecente,
+      janelaDisciplina,
+      janelaCaderno,
+      retencaoPorDisciplina,
+      horasPorDisciplina,
+      horasSemanais,
+    ] = await Promise.all([
       getKpis(),
       getCadernosEstudados(),
       getRankingRisco(),
       getMediaMovelSemanal(),
       getContadoresSituacao(),
-      getProdutividadeGeral(),
+      getProdutividadeGeral(null),
+      getProdutividadeGeral(janelaProdutividadeDias),
       getJanelaTendenciaDisciplina(),
       getJanelaTendenciaCadernoDestaques(),
-      getRetencaoGeral(),
       getRetencaoPorDisciplina(),
       getHorasPorDisciplina(),
+      getHorasSemanais(),
     ]);
   } catch (err) {
     content.innerHTML = `<div class="alert alert--error">Erro ao carregar dashboard: ${escapeHtml(err.message)}</div>`;
@@ -142,15 +166,15 @@ export async function renderDashboardPage(container) {
   // 2) ação concreta (Próxima Ação + Ranking), 3) tendência ao longo do tempo,
   // 4) aprofundamento (Janela, Transferência, Retenção) pra quem quer investigar mais.
   content.innerHTML = `
-    ${renderVisaoGeral(kpis, produtividade, cadernosEstudados, situacao)}
+    ${renderVisaoGeral(kpis, produtividadeVitalicia, produtividadeRecente, janelaProdutividadeDias, cadernosEstudados, situacao)}
     ${renderProximaAcao(proximaAcao)}
     ${renderRanking(ranking)}
     ${renderMediaMovelSemanal(tendenciaSemanal)}
     ${renderAcertosErrosSemana(tendenciaSemanal)}
+    ${renderHorasSemanais(horasSemanais)}
     ${renderHorasPorDisciplina(horasPorDisciplina)}
     ${renderJanelaTendenciaDisciplina(janelaDisciplina)}
     ${renderJanelaTendenciaCaderno(janelaCaderno)}
-    ${renderRetencaoGeral(retencaoGeral)}
     ${renderRetencaoPorDisciplina(retencaoPorDisciplina)}
   `;
 
@@ -166,11 +190,11 @@ export async function renderDashboardPage(container) {
     tentarDesenhar(content, "media-movel-chart", () => renderChartMediaMovel(content.querySelector("#media-movel-chart"), tendenciaSemanal.semanas));
     tentarDesenhar(content, "acertos-erros-chart", () => renderChartAcertosErros(content.querySelector("#acertos-erros-chart"), tendenciaSemanal.semanas));
   }
+  if (horasSemanais.length > 0) {
+    tentarDesenhar(content, "horas-semanais-chart", () => renderChartHorasSemanais(content.querySelector("#horas-semanais-chart"), horasSemanais));
+  }
   if (horasPorDisciplina.length > 0) {
     tentarDesenhar(content, "horas-disciplina-chart", () => renderChartHoras(content.querySelector("#horas-disciplina-chart"), horasPorDisciplina));
-  }
-  if (retencaoGeral.length > 0) {
-    tentarDesenhar(content, "retencao-geral-chart", () => renderChartRetencao(content.querySelector("#retencao-geral-chart"), retencaoGeral));
   }
 }
 
@@ -200,10 +224,20 @@ function tentarDesenhar(content, canvasId, desenhar) {
 // Estrita → "Acertos por hora"; Produtividade → "Questões por hora") entraram
 // aqui, sem rótulo técnico — Eficiência Global continua fora (decisão
 // anterior: mistura acerto com horas não mensuráveis, vicia o número).
-function renderVisaoGeral(kpis, produtividade, cadernosEstudados, situacao) {
+//
+// Acertos/hora e Questões/hora passaram a mostrar a janela RECENTE (padrão 28
+// dias, configurável em Configurações) como valor principal, com o vitalício
+// como subtexto (07/07/2026, pedido do usuário) — a média vitalícia sozinha
+// fica cada vez menos sensível ao presente conforme o total de horas
+// acumuladas cresce; a versão recente devolve o "termômetro do agora" sem
+// descartar a referência histórica.
+function renderVisaoGeral(kpis, produtividadeVitalicia, produtividadeRecente, janelaDias, cadernosEstudados, situacao) {
   const diag = kpis.diagnosticoGeral;
   const diagLabel = diag ? formatPct(diag.wilson_pct) : "—";
   const diagBadge = diag ? renderBadge(diag.classificacao) : "";
+
+  const subvitalicio = (valor) =>
+    `<p style="font-size:11px; color:var(--color-text-muted); margin:2px 0 0;">vitalício: ${valor == null ? "—" : `${valor}/h`}</p>`;
 
   const cartoesKpi = `
     <div class="kpi-card">
@@ -222,13 +256,15 @@ function renderVisaoGeral(kpis, produtividade, cadernosEstudados, situacao) {
       <p class="kpi-card__label">Disciplinas em estudo</p>
       <p class="kpi-card__value">${kpis.disciplinasComSessao}</p>
     </div>
-    <div class="kpi-card">
-      <p class="kpi-card__label">Acertos por hora</p>
-      <p class="kpi-card__value">${produtividade.eficienciaEstrita == null ? "—" : `${produtividade.eficienciaEstrita}/h`}</p>
+    <div class="kpi-card" title="Últimos ${janelaDias} dias">
+      <p class="kpi-card__label">Acertos por hora (${janelaDias}d)</p>
+      <p class="kpi-card__value">${produtividadeRecente.eficienciaEstrita == null ? "—" : `${produtividadeRecente.eficienciaEstrita}/h`}</p>
+      ${subvitalicio(produtividadeVitalicia.eficienciaEstrita)}
     </div>
-    <div class="kpi-card">
-      <p class="kpi-card__label">Questões por hora</p>
-      <p class="kpi-card__value">${produtividade.produtividade == null ? "—" : `${produtividade.produtividade}/h`}</p>
+    <div class="kpi-card" title="Últimos ${janelaDias} dias">
+      <p class="kpi-card__label">Questões por hora (${janelaDias}d)</p>
+      <p class="kpi-card__value">${produtividadeRecente.produtividade == null ? "—" : `${produtividadeRecente.produtividade}/h`}</p>
+      ${subvitalicio(produtividadeVitalicia.produtividade)}
     </div>
   `;
 
@@ -303,8 +339,23 @@ function renderAcertosErrosSemana(t) {
   return `
     <div class="card" style="margin-bottom:24px;">
       <h3 style="margin-top:0;">Acertos vs. Erros por Semana (volume)</h3>
-      <p style="color:var(--color-text-muted); margin-top:0;">Número bruto de questões, não %. Mostra se o volume de erros está encolhendo em termos absolutos, não só na razão.</p>
+      <p style="color:var(--color-text-muted); margin-top:0;">Volume bruto de questões por semana (não percentual) — mostra se o número de erros está caindo em valores absolutos, complementando o gráfico de % de acerto acima.</p>
       <canvas id="acertos-erros-chart" height="90"></canvas>
+    </div>
+  `;
+}
+
+// Horas Semanais, valor bruto (07/07/2026, pedido do usuário) — consistência
+// de esforço semana a semana. Sem suavização de propósito, mesma decisão já
+// tomada pro card de cima (Acertos vs. Erros): uma semana fraca de verdade
+// precisa aparecer fraca, não escondida atrás de uma média móvel.
+function renderHorasSemanais(semanas) {
+  if (!semanas || semanas.length === 0) return "";
+  return `
+    <div class="card" style="margin-bottom:24px;">
+      <h3 style="margin-top:0;">Horas Semanais</h3>
+      <p style="color:var(--color-text-muted); margin-top:0;">Total de horas estudadas por semana.</p>
+      <canvas id="horas-semanais-chart" height="90"></canvas>
     </div>
   `;
 }
@@ -331,10 +382,17 @@ function renderHorasPorDisciplina(linhas) {
     `
     )
     .join("");
+  const totalRow = `
+    <tr>
+      <td><strong>Total</strong></td>
+      <td><strong>${Math.round(total * 10) / 10}h</strong></td>
+      <td><strong>100%</strong></td>
+    </tr>
+  `;
   return `
     <div class="card" style="margin-bottom:24px;">
       <h3 style="margin-top:0;">Horas por Disciplina</h3>
-      <p style="color:var(--color-text-muted); margin-top:0;">Total: ${Math.round(total * 10) / 10}h, todos os tipos de estudo. Disciplinas com fatia muito pequena podem não aparecer visível na rosca — a tabela abaixo tem o número exato de todas.</p>
+      <p style="color:var(--color-text-muted); margin-top:0;">Disciplinas com fatia muito pequena podem não aparecer visível no gráfico.</p>
       <div style="display:flex; gap:24px; flex-wrap:wrap; align-items:flex-start;">
         <div style="max-width:340px; flex:1; min-width:280px;">
           <canvas id="horas-disciplina-chart" height="260"></canvas>
@@ -343,6 +401,7 @@ function renderHorasPorDisciplina(linhas) {
           <table class="data-table">
             <tr><th>Disciplina</th><th>Horas</th><th>%</th></tr>
             ${rows}
+            ${totalRow}
           </table>
         </div>
       </div>
@@ -430,6 +489,14 @@ function renderJanelaTendenciaCaderno(dados) {
 // sobe conforme o intervalo desde o último toque diminui. Isto é o dado bruto,
 // sem conclusão automática: com poucas questões numa faixa, a diferença pode
 // ser ruído, não sinal real.
+//
+// OCULTADO do Dashboard em 07/07/2026 (pedido do usuário: "não está me
+// retornando nenhuma informação") — conferido no banco antes de tirar: a
+// query tem dado real (~12700 questões distribuídas nas faixas), não é bug.
+// O problema é o SINAL: com o dataset atual o % de acerto fica quase idêntico
+// em todas as faixas (55-61%), sem curva perceptível — não há nada pra essa
+// visualização comunicar hoje. Função/serviço ficam no código, sem chamada
+// nenhuma — fácil trazer de volta se o padrão mudar com mais dado real.
 function renderRetencaoGeral(linhas) {
   if (!linhas || linhas.length === 0) return "";
   const rows = linhas
@@ -498,7 +565,7 @@ function renderProximaAcao(item) {
   }
   return `
     <div class="proxima-acao">
-      <strong>Ação recomendada:</strong> <strong>${escapeHtml(item.disciplinaNome)}</strong> (${renderBadge(item.classificacao)})
+      <strong>Ação recomendada:</strong> <strong>${escapeHtml(item.disciplinaNome)}</strong> — ${renderBadge(item.classificacao)}
     </div>
   `;
 }
@@ -621,6 +688,36 @@ function renderChartAcertosErros(canvas, semanas) {
     options: {
       responsive: true,
       scales: { y: { beginAtZero: true, title: { display: true, text: "Questões" } } },
+    },
+  });
+}
+
+// Horas Semanais, valor bruto (07/07/2026) — barras, sem suavização de propósito.
+function renderChartHorasSemanais(canvas, semanas) {
+  if (chartHorasSemanaisInstance) {
+    chartHorasSemanaisInstance.destroy();
+    chartHorasSemanaisInstance = null;
+  }
+  const fmtData = (iso) => {
+    const [, m, d] = iso.split("-");
+    return `${d}/${m}`;
+  };
+  const labels = semanas.map((s) => `${fmtData(s.inicio)}–${fmtData(s.fim)}`);
+  const dataHoras = semanas.map((s) => s.horas);
+
+  chartHorasSemanaisInstance = new Chart(canvas, {
+    type: "bar",
+    data: {
+      labels,
+      datasets: [{ label: "Horas na semana", data: dataHoras, backgroundColor: "#7a9cc6" }],
+    },
+    options: {
+      responsive: true,
+      scales: { y: { beginAtZero: true, title: { display: true, text: "Horas" } } },
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: (ctx) => `${ctx.parsed.y}h` } },
+      },
     },
   });
 }
