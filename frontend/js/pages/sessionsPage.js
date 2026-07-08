@@ -10,7 +10,7 @@
 // reforçada (digitar "APAGAR") justamente porque isso é irreversível.
 
 import { renderNavbar, wireNavbar } from "../components/navbar.js";
-import { listDisciplines } from "../services/catalogService.js";
+import { listDisciplines, listExams, listExamBoards, listQuestionSets } from "../services/catalogService.js";
 import { listSessions, setSessionStatus, deleteStudySession } from "../services/studyService.js";
 import { navigate } from "../router.js";
 
@@ -23,6 +23,9 @@ const STUDY_TYPE_LABELS = {
   leitura: "Leitura",
   videoaula: "Videoaula",
 };
+
+// Mesmos valores de studyFormPage.js (self_confidence: "baixa"/"media"/"alta").
+const SELF_CONFIDENCE_LABELS = { baixa: "Baixa", media: "Média", alta: "Alta" };
 
 export async function renderSessionsPage(container) {
   container.innerHTML = `
@@ -60,10 +63,23 @@ export async function renderSessionsPage(container) {
   const statusSelect = container.querySelector("#filter-status");
   const content = container.querySelector("#sessions-content");
   let disciplinesById = {};
+  // Carregados só pra alimentar o CSV (08/07/2026) — a tela em si (filtro,
+  // tabela) continua usando só disciplinesById, como antes.
+  let examsById = {};
+  let boardsById = {};
+  let questionSetsById = {};
 
   try {
-    const disciplines = await listDisciplines();
+    const [disciplines, exams, boards, questionSets] = await Promise.all([
+      listDisciplines(),
+      listExams(),
+      listExamBoards(),
+      listQuestionSets(),
+    ]);
     disciplinesById = Object.fromEntries(disciplines.map((d) => [d.id, d.name]));
+    examsById = Object.fromEntries(exams.map((e) => [e.id, e.name]));
+    boardsById = Object.fromEntries(boards.map((b) => [b.id, b.name]));
+    questionSetsById = Object.fromEntries(questionSets.map((q) => [q.id, q.name]));
     disciplineSelect.innerHTML += disciplines.map((d) => `<option value="${d.id}">${escapeHtml(d.name)}</option>`).join("");
   } catch (err) {
     content.innerHTML = `<div class="alert alert--error">Erro ao carregar disciplinas: ${escapeHtml(err.message)}</div>`;
@@ -74,7 +90,9 @@ export async function renderSessionsPage(container) {
   statusSelect.addEventListener("change", loadSessions);
 
   const exportCsvBtn = container.querySelector("#export-csv-btn");
-  exportCsvBtn.addEventListener("click", () => exportarCsv(sortSessions(currentSessions), disciplinesById));
+  exportCsvBtn.addEventListener("click", () =>
+    exportarCsv(sortSessions(currentSessions), { disciplinesById, examsById, boardsById, questionSetsById })
+  );
 
   let currentSessions = [];
   // Ordenação é só em memória, sobre o que já foi carregado — não refaz a
@@ -228,25 +246,59 @@ export async function renderSessionsPage(container) {
   }
 }
 
-// Exportar CSV (05/07/2026, pedido do usuário) — exporta exatamente o que
-// está filtrado/ordenado na tela no momento do clique, não a base inteira.
-function exportarCsv(sessions, disciplinesById) {
+// Exportar CSV (05/07/2026, pedido do usuário; expandido em 08/07/2026 pra
+// trazer TODOS os dados de entrada — usuário quer usar o arquivo em outros
+// lugares, não só como resumo de tela). Exporta exatamente o que está
+// filtrado/ordenado na tela no momento do clique, não a base inteira.
+// Cobre todo campo que existe no formulário de Nova Sessão (studyFormPage.js):
+// Concurso/Banca(s)/Disciplina/Caderno (catálogo), Tipo, Data, Tempo,
+// Confiança autodeclarada, Observações, e (quando mensurável) Total de
+// questões/Acertos/Erros/Nota + se a Nota é estimativa.
+function exportarCsv(sessions, { disciplinesById, examsById, boardsById, questionSetsById }) {
   if (!sessions || sessions.length === 0) {
     window.alert("Nenhuma sessão pra exportar com o filtro atual.");
     return;
   }
 
-  const headers = ["Data", "Disciplina", "Tipo", "Acertos", "Total de questões", "Nota", "Tempo (min)", "Status"];
+  const headers = [
+    "Data",
+    "Concurso",
+    "Banca(s)",
+    "Disciplina",
+    "Caderno",
+    "Tipo",
+    "Tempo (min)",
+    "Confiança autodeclarada",
+    "Total de questões",
+    "Acertos",
+    "Erros",
+    "Nota",
+    "Nota é estimativa",
+    "Observações",
+    "Status",
+  ];
   const linhas = sessions.map((s) => {
     const result = Array.isArray(s.session_results) ? s.session_results[0] : s.session_results;
+    // Multibancas (>1 banca): board_id (coluna legada) fica null e a fonte de
+    // verdade vira study_session_boards; com 1 banca só, board_id já resolve
+    // sozinho e study_session_boards fica vazio — não duplica.
+    const boardIds = Array.isArray(s.study_session_boards) ? s.study_session_boards.map((b) => b.board_id) : [];
+    const nomesBancas = boardIds.length > 0 ? boardIds.map((id) => boardsById[id] || "").filter(Boolean) : s.board_id ? [boardsById[s.board_id] || ""] : [];
     return [
       new Date(s.occurred_at).toLocaleDateString("pt-BR"),
+      examsById[s.exam_id] || "",
+      nomesBancas.join(" + "),
       disciplinesById[s.discipline_id] || "",
+      questionSetsById[s.question_set_id] || "",
       STUDY_TYPE_LABELS[s.study_type] || s.study_type || "",
-      result?.correct_total ?? "",
-      result?.questions_total ?? "",
-      result?.score ?? "",
       s.duration_minutes ?? "",
+      SELF_CONFIDENCE_LABELS[s.self_confidence] || "",
+      result?.questions_total ?? "",
+      result?.correct_total ?? "",
+      result?.wrong_total ?? "",
+      result?.score ?? "",
+      result ? (result.score_is_estimate ? "Sim" : "Não") : "",
+      s.notes || "",
       s.status === "inativo" ? "Arquivada" : "Ativa",
     ];
   });

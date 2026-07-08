@@ -139,11 +139,16 @@ export async function getSessionById(sessionId) {
 // status: "ativo" | "inativo" | undefined (undefined = sem filtro, todas).
 // Sem valor padrão de propósito — "Todas" no formulário manda undefined, e um
 // default aqui faria "Todas" se comportar como "Ativas" por acidente.
+// Select expandido em 08/07/2026 (pedido do usuário: Exportar CSV precisa
+// trazer TODOS os dados de entrada, não só o que já aparecia na tela) —
+// notes, score_is_estimate e study_session_boards (multibancas) entraram
+// aqui só pra alimentar o CSV; a tabela em tela continua mostrando as mesmas
+// colunas de antes (ver renderTable em sessionsPage.js).
 export async function listSessions({ disciplineId, status, limit = 5000 } = {}) {
   let query = supabase
     .from("study_sessions")
     .select(
-      "id, occurred_at, study_type, duration_minutes, discipline_id, question_set_id, exam_id, board_id, self_confidence, status, session_results(questions_total, correct_total, wrong_total, score)"
+      "id, occurred_at, study_type, duration_minutes, discipline_id, question_set_id, exam_id, board_id, self_confidence, notes, status, session_results(questions_total, correct_total, wrong_total, score, score_is_estimate), study_session_boards(board_id)"
     )
     .order("occurred_at", { ascending: false })
     .limit(limit);
