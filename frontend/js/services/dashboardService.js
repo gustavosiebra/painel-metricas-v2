@@ -320,6 +320,30 @@ export async function getHorasPorDisciplina() {
   return linhas;
 }
 
+// Horas por Tipo de Estudo (07/07/2026, pedido do usuário) — mesmo espírito de
+// getHorasPorDisciplina, mas quebrado por study_type em vez de disciplina:
+// responde "estou gastando meu tempo em quê" (questões vs. leitura vs.
+// revisão vs. videoaula...), não só "em qual disciplina". Mesmo critério de
+// horas totais do KPI (todos os tipos contam, sem cruzar com acerto — só soma
+// hora bruta). study_type já vem pronto em study_sessions, sem precisar de
+// join com outra tabela.
+export async function getHorasPorTipoEstudo() {
+  const { data, error } = await supabase.from("study_sessions").select("duration_minutes, study_type").eq("status", "ativo");
+  if (error) throw error;
+
+  const porTipo = new Map();
+  for (const r of data || []) {
+    const atual = porTipo.get(r.study_type) || 0;
+    porTipo.set(r.study_type, atual + Number(r.duration_minutes || 0));
+  }
+  const linhas = Array.from(porTipo.entries()).map(([studyType, minutos]) => ({
+    studyType,
+    horas: Math.round((minutos / 60) * 10) / 10,
+  }));
+  linhas.sort((a, b) => b.horas - a.horas);
+  return linhas;
+}
+
 // Horas Semanais, valor bruto (07/07/2026, pedido do usuário) — consistência
 // de esforço semana a semana. Sem suavização de propósito, mesma decisão já
 // tomada pro gráfico de Acertos vs. Erros por Semana: uma semana fraca de

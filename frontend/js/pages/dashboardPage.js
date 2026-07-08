@@ -19,6 +19,7 @@ import {
   getJanelaTendenciaCadernoDestaques,
   getRetencaoPorDisciplina,
   getHorasPorDisciplina,
+  getHorasPorTipoEstudo,
   getHorasSemanais,
   pickProximaAcao,
 } from "../services/dashboardService.js";
@@ -43,9 +44,23 @@ const CLASSIFICACAO_LABEL = {
   preliminar: "Poucos dados",
 };
 
+// Rótulos de study_type (07/07/2026) — mesmo texto usado em sessionsPage.js,
+// duplicado aqui de propósito (mesmo padrão já usado pros outros rótulos
+// acima nesta página, em vez de criar um módulo compartilhado só pra isso).
+const STUDY_TYPE_LABELS = {
+  questao: "Questões",
+  simulado: "Simulado",
+  discursiva: "Discursiva",
+  revisao: "Revisão",
+  flashcard: "Flashcard",
+  leitura: "Leitura",
+  videoaula: "Videoaula",
+};
+
 let chartMediaMovelInstance = null;
 let chartAcertosErrosInstance = null;
 let chartHorasInstance = null;
+let chartHorasTipoInstance = null;
 let chartRetencaoInstance = null;
 let chartHorasSemanaisInstance = null;
 
@@ -118,7 +133,7 @@ export async function renderDashboardPage(container) {
   const content = container.querySelector("#dashboard-content");
   const { user } = getState();
 
-  let kpis, cadernosEstudados, ranking, mediaMovelDiaria, situacao, produtividadeVitalicia, produtividadeRecente, janelaDisciplina, janelaCaderno, retencaoPorDisciplina, horasPorDisciplina, horasSemanais, janelaProdutividadeDias;
+  let kpis, cadernosEstudados, ranking, mediaMovelDiaria, situacao, produtividadeVitalicia, produtividadeRecente, janelaDisciplina, janelaCaderno, retencaoPorDisciplina, horasPorDisciplina, horasPorTipoEstudo, horasSemanais, janelaProdutividadeDias;
   try {
     // Janela de Produtividade Recente (07/07/2026, pedido do usuário) —
     // configurável em Configurações (padrão 28 dias); busca ANTES do
@@ -138,6 +153,7 @@ export async function renderDashboardPage(container) {
       janelaCaderno,
       retencaoPorDisciplina,
       horasPorDisciplina,
+      horasPorTipoEstudo,
       horasSemanais,
     ] = await Promise.all([
       getKpis(),
@@ -151,6 +167,7 @@ export async function renderDashboardPage(container) {
       getJanelaTendenciaCadernoDestaques(),
       getRetencaoPorDisciplina(),
       getHorasPorDisciplina(),
+      getHorasPorTipoEstudo(),
       getHorasSemanais(),
     ]);
   } catch (err) {
@@ -173,6 +190,7 @@ export async function renderDashboardPage(container) {
     ${renderAcertosErrosSemana(tendenciaSemanal)}
     ${renderHorasSemanais(horasSemanais)}
     ${renderHorasPorDisciplina(horasPorDisciplina)}
+    ${renderHorasPorTipoEstudo(horasPorTipoEstudo)}
     ${renderJanelaTendenciaDisciplina(janelaDisciplina)}
     ${renderJanelaTendenciaCaderno(janelaCaderno)}
     ${renderRetencaoPorDisciplina(retencaoPorDisciplina)}
@@ -195,6 +213,9 @@ export async function renderDashboardPage(container) {
   }
   if (horasPorDisciplina.length > 0) {
     tentarDesenhar(content, "horas-disciplina-chart", () => renderChartHoras(content.querySelector("#horas-disciplina-chart"), horasPorDisciplina));
+  }
+  if (horasPorTipoEstudo.length > 0) {
+    tentarDesenhar(content, "horas-tipo-chart", () => renderChartHorasTipo(content.querySelector("#horas-tipo-chart"), horasPorTipoEstudo));
   }
 }
 
@@ -400,6 +421,51 @@ function renderHorasPorDisciplina(linhas) {
         <div style="flex:1; min-width:280px; overflow-x:auto;">
           <table class="data-table">
             <tr><th>Disciplina</th><th>Horas</th><th>%</th></tr>
+            ${rows}
+            ${totalRow}
+          </table>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// Horas por Tipo de Estudo (07/07/2026, pedido do usuário) — mesmo padrão
+// visual de Horas por Disciplina (rosca + tabela com Total), só que quebrado
+// por study_type em vez de disciplina: responde "estou gastando meu tempo em
+// quê" (questões vs. leitura vs. revisão vs. videoaula...).
+function renderHorasPorTipoEstudo(linhas) {
+  if (!linhas || linhas.length === 0) return "";
+  const total = linhas.reduce((acc, l) => acc + l.horas, 0);
+  const rows = linhas
+    .map(
+      (l) => `
+      <tr>
+        <td>${escapeHtml(STUDY_TYPE_LABELS[l.studyType] || l.studyType)}</td>
+        <td>${l.horas}h</td>
+        <td>${formatPct(total > 0 ? (l.horas / total) * 100 : null)}</td>
+      </tr>
+    `
+    )
+    .join("");
+  const totalRow = `
+    <tr>
+      <td><strong>Total</strong></td>
+      <td><strong>${Math.round(total * 10) / 10}h</strong></td>
+      <td><strong>100%</strong></td>
+    </tr>
+  `;
+  return `
+    <div class="card" style="margin-bottom:24px;">
+      <h3 style="margin-top:0;">Horas por Tipo de Estudo</h3>
+      <p style="color:var(--color-text-muted); margin-top:0;">Estudos com fatia muito pequena podem não aparecer visível no gráfico.</p>
+      <div style="display:flex; gap:24px; flex-wrap:wrap; align-items:flex-start;">
+        <div style="max-width:340px; flex:1; min-width:280px;">
+          <canvas id="horas-tipo-chart" height="260"></canvas>
+        </div>
+        <div style="flex:1; min-width:280px; overflow-x:auto;">
+          <table class="data-table">
+            <tr><th>Tipo de estudo</th><th>Horas</th><th>%</th></tr>
             ${rows}
             ${totalRow}
           </table>
@@ -740,6 +806,41 @@ function renderChartHoras(canvas, linhas) {
     type: "doughnut",
     data: {
       labels: linhas.map((l) => l.disciplinaNome),
+      datasets: [
+        {
+          data: linhas.map((l) => l.horas),
+          backgroundColor: linhas.map((_, i) => CORES[i % CORES.length]),
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { position: "right" },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => `${ctx.label}: ${ctx.parsed}h (${formatPct(total > 0 ? (ctx.parsed / total) * 100 : null)})`,
+          },
+        },
+      },
+    },
+  });
+}
+
+// Rosca de horas por tipo de estudo (07/07/2026) — mesmo padrão visual e
+// mesma paleta de renderChartHoras (Horas por Disciplina), só trocando o
+// campo de rótulo (studyType/STUDY_TYPE_LABELS em vez de disciplinaNome).
+function renderChartHorasTipo(canvas, linhas) {
+  if (chartHorasTipoInstance) {
+    chartHorasTipoInstance.destroy();
+    chartHorasTipoInstance = null;
+  }
+  const CORES = ["#1f3864", "#2e7d32", "#c0392b", "#b45309", "#6a1b9a", "#00838f", "#8d6e63"];
+  const total = linhas.reduce((acc, l) => acc + l.horas, 0);
+  chartHorasTipoInstance = new Chart(canvas, {
+    type: "doughnut",
+    data: {
+      labels: linhas.map((l) => STUDY_TYPE_LABELS[l.studyType] || l.studyType),
       datasets: [
         {
           data: linhas.map((l) => l.horas),
