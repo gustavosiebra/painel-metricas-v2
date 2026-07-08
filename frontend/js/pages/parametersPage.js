@@ -79,6 +79,10 @@ export async function renderParametersPage(container) {
             <input type="number" id="th_produtividade_janela" min="1" step="1" value="${p.produtividade_janela_dias}" />
           </div>
           <div class="form-field">
+            <label>Tendência Semanal — mínimo de questões por semana</label>
+            <input type="number" id="th_tendencia_min_questoes" min="1" step="1" value="${p.tendencia_semanal_min_questoes}" />
+          </div>
+          <div class="form-field">
             <label>Faixas de Retenção (dias desde o último toque no caderno)</label>
             <div id="retencao-buckets"></div>
             <button type="button" id="add-bucket" class="btn-link">+ adicionar faixa</button>
@@ -117,6 +121,7 @@ export async function renderParametersPage(container) {
           setParam({ userId: user.id, key: "diagnostico_min_n", value: Number(thresholdsSection.querySelector("#th_min_n_diag").value) }),
           setParam({ userId: user.id, key: "estabilidade_min_n", value: Number(thresholdsSection.querySelector("#th_min_n_estab").value) }),
           setParam({ userId: user.id, key: "produtividade_janela_dias", value: Number(thresholdsSection.querySelector("#th_produtividade_janela").value) }),
+          setParam({ userId: user.id, key: "tendencia_semanal_min_questoes", value: Number(thresholdsSection.querySelector("#th_tendencia_min_questoes").value) }),
           setParam({
             userId: user.id,
             key: "janela_tendencia",

@@ -104,7 +104,20 @@ export async function getMediaMovelSemanal() {
 // questoes/acertos já retornados pela RPC e uma razão simples (mesmo padrão
 // de getProdutividadeGeral: soma bruta primeiro, divide uma vez só).
 // n_semanas=12 (~3 meses) é uma escolha de exibição, não um corte estatístico.
-export function getTendenciaSemanal(diario, nSemanas = 12) {
+//
+// Piso de N por semana (08/07/2026, pedido do usuário) — minQuestoes vem de
+// tendencia_semanal_min_questoes (Configurações, padrão 50). Semana com
+// questoes < minQuestoes fica com pct=null e suficiente=false: some do
+// gráfico de % (barra em branco) em vez de mostrar um % instável tipo 100%
+// em cima de 3 questões. Validado com o usuário: isso NÃO torna o % das
+// semanas restantes "estatisticamente preciso" (IC 95% Wilson ainda largo
+// nessa faixa de N) — é só uma barreira contra a distorção mais grosseira.
+// Sem acúmulo/merge com a semana seguinte de propósito — cada semana é
+// avaliada isolada (decisão do usuário: mais simples e mais fácil de ler do
+// que juntar semanas até bater o piso). O volume bruto (questoes/acertos/
+// erros) continua sempre exposto mesmo quando insuficiente — só o % some,
+// porque só a razão vira enganosa com amostra pequena, volume absoluto não.
+export function getTendenciaSemanal(diario, nSemanas = 12, minQuestoes = null) {
   if (!diario || diario.length === 0) {
     return { semanas: [], semanaAtual: null, semanaAnterior: null, deltaSemana: null };
   }
@@ -121,13 +134,15 @@ export function getTendenciaSemanal(diario, nSemanas = 12) {
     });
     const questoes = diasNaSemana.reduce((acc, d) => acc + Number(d.questoes || 0), 0);
     const acertos = diasNaSemana.reduce((acc, d) => acc + Number(d.acertos || 0), 0);
+    const suficiente = minQuestoes == null || questoes >= minQuestoes;
     semanas.unshift({
       inicio: inicio.toISOString().slice(0, 10),
       fim: fim.toISOString().slice(0, 10),
       questoes,
       acertos,
       erros: questoes - acertos, // volume bruto, não % — pedido do usuário (03/07/2026): ver acertos/erros crescendo/encolhendo em número absoluto, não só razão
-      pct: questoes > 0 ? Math.round((acertos / questoes) * 1000) / 10 : null,
+      pct: questoes > 0 && suficiente ? Math.round((acertos / questoes) * 1000) / 10 : null,
+      suficiente,
     });
   }
   const semanaAtual = semanas[semanas.length - 1] ?? null;

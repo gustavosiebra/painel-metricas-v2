@@ -17,6 +17,17 @@ export const PARAM_DEFAULTS = {
   // repassado direto pro parâmetro p_dias de eficiencia_caderno() na chamada
   // (não é lido via get_user_param() no banco, diferente dos outros acima).
   produtividade_janela_dias: 28,
+  // Piso de N — Tendência Semanal (08/07/2026, pedido do usuário) — abaixo
+  // desse volume de questões NA SEMANA, o % daquela semana some do gráfico
+  // "Tendência Semanal (% de acerto)" em vez de mostrar um número tipo 100%
+  // em cima de 3 questões. Só uso do lado do cliente (getTendenciaSemanal),
+  // mesmo padrão de produtividade_janela_dias acima — não é lido via
+  // get_user_param() no banco. Validado com o usuário: nem 30 nem 50 tornam
+  // o % "estatisticamente preciso" (IC 95% Wilson ainda largo nessa faixa de
+  // N), é só uma barreira contra a distorção mais grosseira, não uma garantia
+  // de precisão. Sem acúmulo entre semanas — cada semana é avaliada isolada;
+  // se não bater o piso, fica em branco (não funde com a semana seguinte).
+  tendencia_semanal_min_questoes: 50,
   retencao_buckets: [
     { max: 3, label: "0-3 dias" },
     { max: 7, label: "4-7 dias" },

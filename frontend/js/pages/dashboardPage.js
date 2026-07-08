@@ -133,13 +133,18 @@ export async function renderDashboardPage(container) {
   const content = container.querySelector("#dashboard-content");
   const { user } = getState();
 
-  let kpis, cadernosEstudados, ranking, mediaMovelDiaria, situacao, produtividadeVitalicia, produtividadeRecente, janelaDisciplina, janelaCaderno, retencaoPorDisciplina, horasPorDisciplina, horasPorTipoEstudo, horasSemanais, janelaProdutividadeDias;
+  let kpis, cadernosEstudados, ranking, mediaMovelDiaria, situacao, produtividadeVitalicia, produtividadeRecente, janelaDisciplina, janelaCaderno, retencaoPorDisciplina, horasPorDisciplina, horasPorTipoEstudo, horasSemanais, janelaProdutividadeDias, tendenciaMinQuestoes;
   try {
     // Janela de Produtividade Recente (07/07/2026, pedido do usuário) —
     // configurável em Configurações (padrão 28 dias); busca ANTES do
     // Promise.all principal porque getProdutividadeGeral(janela) depende
-    // desse valor.
-    janelaProdutividadeDias = await getParam(user.id, "produtividade_janela_dias");
+    // desse valor. Piso de N da Tendência Semanal (08/07/2026) segue o mesmo
+    // padrão — buscado à parte porque só é usado DEPOIS do Promise.all, ao
+    // chamar getTendenciaSemanal (não é argumento de nenhuma chamada dentro dele).
+    [janelaProdutividadeDias, tendenciaMinQuestoes] = await Promise.all([
+      getParam(user.id, "produtividade_janela_dias"),
+      getParam(user.id, "tendencia_semanal_min_questoes"),
+    ]);
 
     [
       kpis,
@@ -176,7 +181,7 @@ export async function renderDashboardPage(container) {
   }
 
   const proximaAcao = pickProximaAcao(ranking);
-  const tendenciaSemanal = getTendenciaSemanal(mediaMovelDiaria);
+  const tendenciaSemanal = getTendenciaSemanal(mediaMovelDiaria, 12, tendenciaMinQuestoes);
 
   // Ordem por impacto de decisão (03/07/2026), não pela ordem em que cada
   // métrica foi construída: 1) visão geral (KPIs + Cadernos por Situação),
@@ -205,7 +210,7 @@ export async function renderDashboardPage(container) {
   // Cada gráfico é isolado no próprio try/catch: um erro de desenho (ex.:
   // Chart.js não carregado) não pode derrubar os outros gráficos do dashboard.
   if (tendenciaSemanal.semanas.length > 0) {
-    tentarDesenhar(content, "media-movel-chart", () => renderChartMediaMovel(content.querySelector("#media-movel-chart"), tendenciaSemanal.semanas));
+    tentarDesenhar(content, "media-movel-chart", () => renderChartMediaMovel(content.querySelector("#media-movel-chart"), tendenciaSemanal.semanas, tendenciaMinQuestoes));
     tentarDesenhar(content, "acertos-erros-chart", () => renderChartAcertosErros(content.querySelector("#acertos-erros-chart"), tendenciaSemanal.semanas));
   }
   if (horasSemanais.length > 0) {
@@ -330,7 +335,13 @@ function renderMediaMovelSemanal(t) {
     const [, m, d] = iso.split("-");
     return `${d}/${m}`;
   };
-  let deltaHtml = '<p style="color:var(--color-text-muted);">Ainda não há uma semana anterior completa para comparar.</p>';
+  // Piso de N (08/07/2026) — se a semana atual e/ou anterior não bateu o
+  // mínimo de questões, deltaSemana já vem null de getTendenciaSemanal (pct
+  // null de qualquer um dos dois lados invalida a comparação); aqui só
+  // escolhemos o texto certo pra explicar POR QUE não há comparação, em vez
+  // de tratar "sem semana anterior" (caso original) e "semana sem dado
+  // suficiente" (caso novo) com a mesma frase genérica.
+  let deltaHtml;
   if (t.deltaSemana != null) {
     const cor = t.deltaSemana > 0 ? "var(--color-success)" : t.deltaSemana < 0 ? "var(--color-error)" : "var(--color-text-muted)";
     const seta = t.deltaSemana > 0 ? "▲" : t.deltaSemana < 0 ? "▼" : "＝";
@@ -341,12 +352,23 @@ function renderMediaMovelSemanal(t) {
         — <strong style="color:${cor};">${seta} ${Math.abs(t.deltaSemana).toFixed(2)} p.p.</strong>
       </p>
     `;
+  } else if (t.semanaAnterior == null) {
+    deltaHtml = '<p style="color:var(--color-text-muted);">Ainda não há uma semana anterior completa para comparar.</p>';
+  } else if (t.semanaAtual?.suficiente === false || t.semanaAnterior?.suficiente === false) {
+    deltaHtml = '<p style="color:var(--color-text-muted);">Dado insuficiente na semana atual ou na anterior — comparação não exibida.</p>';
+  } else {
+    deltaHtml = '<p style="color:var(--color-text-muted);">Ainda não há uma semana anterior completa para comparar.</p>';
   }
+  const temInsuficiente = t.semanas.some((s) => !s.suficiente);
+  const notaRodape = temInsuficiente
+    ? `<p style="font-size:12px; color:var(--color-text-muted); margin: 8px 0 0;">* semana com poucas questões — % não exibido para não distorcer o gráfico.</p>`
+    : "";
   return `
     <div class="card" style="margin-bottom:24px;">
       <h3 style="margin-top:0;">Tendência Semanal (% de acerto)</h3>
       ${deltaHtml}
       <canvas id="media-movel-chart" height="90"></canvas>
+      ${notaRodape}
     </div>
   `;
 }
@@ -686,7 +708,11 @@ function renderPesoBadge(weight) {
 // ilegível (muitos rótulos amontoados no eixo X, linha diária cheia de ruído
 // escondendo qualquer tendência). % de acerto por semana — o gráfico original
 // (Fase 6-C), restaurado como card próprio a pedido do usuário (03/07/2026).
-function renderChartMediaMovel(canvas, semanas) {
+// minQuestoes (08/07/2026) só é usado aqui pro texto do tooltip — a decisão
+// de esconder o % (pct=null) já veio pronta de getTendenciaSemanal. "*" no
+// rótulo do eixo sinaliza visualmente a barra ausente (Chart.js não desenha
+// barra pra valor null); nota de rodapé no card explica o "*" por extenso.
+function renderChartMediaMovel(canvas, semanas, minQuestoes = null) {
   if (chartMediaMovelInstance) {
     chartMediaMovelInstance.destroy();
     chartMediaMovelInstance = null;
@@ -695,7 +721,7 @@ function renderChartMediaMovel(canvas, semanas) {
     const [, m, d] = iso.split("-");
     return `${d}/${m}`;
   };
-  const labels = semanas.map((s) => `${fmtData(s.inicio)}–${fmtData(s.fim)}`);
+  const labels = semanas.map((s) => `${fmtData(s.inicio)}–${fmtData(s.fim)}${s.suficiente ? "" : " *"}`);
   const dataPct = semanas.map((s) => s.pct);
 
   chartMediaMovelInstance = new Chart(canvas, {
@@ -709,7 +735,17 @@ function renderChartMediaMovel(canvas, semanas) {
       scales: { y: { min: 0, max: 100, ticks: { callback: (v) => formatPct(v) } } },
       plugins: {
         legend: { display: false },
-        tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${formatPct(ctx.parsed.y)}` } },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => {
+              const s = semanas[ctx.dataIndex];
+              if (!s.suficiente) {
+                return `Dado insuficiente: ${s.questoes} questão(ões) (mínimo ${minQuestoes ?? "?"})`;
+              }
+              return `${ctx.dataset.label}: ${formatPct(ctx.parsed.y)}`;
+            },
+          },
+        },
       },
     },
   });
