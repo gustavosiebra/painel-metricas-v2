@@ -164,17 +164,19 @@ export async function renderSessionsPage(container) {
 
     content.innerHTML = `
       <div class="card">
-        <table class="data-table">
-          <tr>
-            <th data-sort-col="occurred_at" style="cursor:pointer;">Data${sortIndicator("occurred_at")}</th>
-            <th data-sort-col="discipline" style="cursor:pointer;">Disciplina${sortIndicator("discipline")}</th>
-            <th data-sort-col="study_type" style="cursor:pointer;">Tipo${sortIndicator("study_type")}</th>
-            <th>Desempenho</th>
-            <th>Tempo</th>
-            <th>Ações</th>
-          </tr>
-          ${rows}
-        </table>
+        <div style="overflow-x:auto;">
+          <table class="data-table">
+            <tr>
+              <th data-sort-col="occurred_at" style="cursor:pointer;">Data${sortIndicator("occurred_at")}</th>
+              <th data-sort-col="discipline" style="cursor:pointer;">Disciplina${sortIndicator("discipline")}</th>
+              <th data-sort-col="study_type" style="cursor:pointer;">Tipo${sortIndicator("study_type")}</th>
+              <th>Desempenho</th>
+              <th>Tempo</th>
+              <th>Ações</th>
+            </tr>
+            ${rows}
+          </table>
+        </div>
       </div>
     `;
 

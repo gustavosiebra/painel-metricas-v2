@@ -289,10 +289,12 @@ function renderSection({ titulo, itens, userId, colunasExtra, filtroDisciplina, 
           </div>
         </div>
         ${placeholderHtml}
-        <table class="data-table data-table--fixed" data-filter-table="${tipo}" data-exige-filtro="${!!exigeFiltro}" style="${exigeFiltro ? "display:none;" : ""}">
-          <tr><th style="width:32%;">Nome</th>${extraHeaders}<th style="width:90px;">Dono</th><th style="width:140px;">Ações</th></tr>
-          ${rows}
-        </table>
+        <div style="overflow-x:auto;">
+          <table class="data-table data-table--fixed" data-filter-table="${tipo}" data-exige-filtro="${!!exigeFiltro}" style="${exigeFiltro ? "display:none;" : ""} min-width:480px;">
+            <tr><th style="width:32%;">Nome</th>${extraHeaders}<th style="width:90px;">Dono</th><th style="width:140px;">Ações</th></tr>
+            ${rows}
+          </table>
+        </div>
       </div>
     `,
   };
@@ -343,13 +345,15 @@ async function carregarPeso(container, userId) {
     tableBox.innerHTML = `
       <div class="card">
         <h3 style="margin-top:0;">Pesos definidos (${currentRows.length})</h3>
-        <table class="data-table">
-          <tr>
-            <th>Concurso</th><th>Disciplina</th><th>Peso</th><th>Meta %</th>
-            <th>Questões esp.</th><th>Wilson</th><th>Classificação</th><th>Ações</th>
-          </tr>
-          ${trs}
-        </table>
+        <div style="overflow-x:auto;">
+          <table class="data-table" style="min-width:640px;">
+            <tr>
+              <th>Concurso</th><th>Disciplina</th><th>Peso</th><th>Meta %</th>
+              <th>Questões esp.</th><th>Wilson</th><th>Classificação</th><th>Ações</th>
+            </tr>
+            ${trs}
+          </table>
+        </div>
       </div>
     `;
 

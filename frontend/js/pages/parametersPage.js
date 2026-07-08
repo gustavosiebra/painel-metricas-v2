@@ -179,22 +179,24 @@ export async function renderParametersPage(container) {
           </div>
           <button type="submit" class="btn" style="width:auto; padding:8px 16px;">Salvar regra</button>
         </form>
-        <table class="data-table">
-          <tr><th>Situação</th><th>Peso</th><th>Risco</th><th>Ação recomendada</th><th></th></tr>
-          ${rules
-            .map(
-              (r) => `
-            <tr>
-              <td>${escapeHtml(r.learning_level)}</td>
-              <td>${escapeHtml(r.weight)}</td>
-              <td>${escapeHtml(r.risk)}</td>
-              <td>${escapeHtml(r.recommended_action)}</td>
-              <td><button class="btn-link" data-id="${r.id}" data-action="remove-rule">Remover</button></td>
-            </tr>
-          `
-            )
-            .join("")}
-        </table>
+        <div style="overflow-x:auto;">
+          <table class="data-table">
+            <tr><th>Situação</th><th>Peso</th><th>Risco</th><th>Ação recomendada</th><th></th></tr>
+            ${rules
+              .map(
+                (r) => `
+              <tr>
+                <td>${escapeHtml(r.learning_level)}</td>
+                <td>${escapeHtml(r.weight)}</td>
+                <td>${escapeHtml(r.risk)}</td>
+                <td>${escapeHtml(r.recommended_action)}</td>
+                <td><button class="btn-link" data-id="${r.id}" data-action="remove-rule">Remover</button></td>
+              </tr>
+            `
+              )
+              .join("")}
+          </table>
+        </div>
       </div>
     `;
 

@@ -148,6 +148,32 @@
 .app-nav {
   display: flex;
   gap: var(--spacing-3);
+  flex-wrap: wrap;
+}
+
+/* Grupos da navbar (07/07/2026, validação mobile) — flex-wrap sempre ativo
+   (não só atrás de media query): em telas largas os itens cabem numa linha
+   só e isso não muda nada visualmente; em telas estreitas (celular), o grupo
+   quebra em mais de uma linha em vez de estourar a largura da tela e forçar
+   scroll horizontal no site inteiro. */
+.navbar-left {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-4);
+  flex-wrap: wrap;
+}
+
+.navbar-right {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  row-gap: var(--spacing-1);
+}
+
+.navbar-name {
+  margin-right: 4px;
+  cursor: pointer;
+  overflow-wrap: anywhere;
 }
 
 .nav-link {

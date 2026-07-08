@@ -61,7 +61,7 @@ export async function renderDashboardPage(container) {
             <h1>Painel de Métricas — Dashboard</h1>
             <p>Exportado em ${escapeHtml(new Date().toLocaleString("pt-BR"))}</p>
           </div>
-          <div class="dashboard-toolbar" style="display:flex; justify-content:flex-end; gap:8px; margin-bottom:var(--spacing-3);">
+          <div class="dashboard-toolbar" style="display:flex; justify-content:flex-end; gap:8px; flex-wrap:wrap; margin-bottom:var(--spacing-3);">
             <a href="#/sessoes/nova" class="btn" style="width:auto; padding:8px 16px;">+ Nova Sessão</a>
             <button id="export-img-btn" class="btn" style="width:auto; padding:8px 16px; background:var(--color-surface); color:var(--color-primary); border:1px solid var(--color-border);">Exportar Imagem</button>
           </div>
@@ -397,7 +397,7 @@ function renderHorasPorDisciplina(linhas) {
         <div style="max-width:340px; flex:1; min-width:280px;">
           <canvas id="horas-disciplina-chart" height="260"></canvas>
         </div>
-        <div style="flex:1; min-width:280px;">
+        <div style="flex:1; min-width:280px; overflow-x:auto;">
           <table class="data-table">
             <tr><th>Disciplina</th><th>Horas</th><th>%</th></tr>
             ${rows}
@@ -436,10 +436,12 @@ function renderJanelaTendenciaDisciplina(linhas) {
     <div class="card" style="margin-bottom:24px;">
       <h3 style="margin-top:0;">Tendência por Disciplina (recente vs. mais antigo)</h3>
       <p style="color:var(--color-text-muted); margin-top:0;">Compara as últimas ~100 questões com as últimas ~300 — diferença até 3 p.p. é tratada como estável.</p>
-      <table class="data-table">
-        <tr><th>Disciplina</th><th>Janela curta</th><th>Janela longa</th><th>Delta</th></tr>
-        ${rows}
-      </table>
+      <div style="overflow-x:auto;">
+        <table class="data-table">
+          <tr><th>Disciplina</th><th>Janela curta</th><th>Janela longa</th><th>Delta</th></tr>
+          ${rows}
+        </table>
+      </div>
     </div>
   `;
 }
@@ -461,14 +463,14 @@ function renderJanelaTendenciaCaderno(dados) {
       <h3 style="margin-top:0;">Cadernos que mais mudaram (recente vs. mais antigo)</h3>
       <p style="color:var(--color-text-muted); margin-top:0;">Só cadernos com pelo menos 20 questões na janela longa. Mostra os 5 maiores avanços e as 5 maiores quedas.</p>
       <div style="display:flex; gap:24px; flex-wrap:wrap;">
-        <div style="flex:1; min-width:280px;">
+        <div style="flex:1; min-width:280px; overflow-x:auto;">
           <p style="margin:0 0 4px; color:var(--color-success); font-weight:600;">Maiores avanços</p>
           <table class="data-table">
             <tr><th>Caderno</th><th>Curta</th><th>Longa</th><th>Delta</th></tr>
             ${dados.subindo.map(linha).join("") || '<tr><td colspan="4">—</td></tr>'}
           </table>
         </div>
-        <div style="flex:1; min-width:280px;">
+        <div style="flex:1; min-width:280px; overflow-x:auto;">
           <p style="margin:0 0 4px; color:var(--color-error); font-weight:600;">Maiores quedas</p>
           <table class="data-table">
             <tr><th>Caderno</th><th>Curta</th><th>Longa</th><th>Delta</th></tr>
@@ -515,10 +517,12 @@ function renderRetencaoGeral(linhas) {
       <h3 style="margin-top:0;">Retenção por Intervalo de Revisão</h3>
       <p style="color:var(--color-text-muted); margin-top:0;">Acerto médio agrupado pelo intervalo desde a última vez que você tocou naquele caderno (qualquer tipo de estudo conta como "toque"). Proxy por caderno — não por questão individual (question_attempts não é usado, registro é agregado desde a Fase 4). Curva no estilo da curva de esquecimento (Anki): se sobe da direita pra esquerda, revisão está segurando retenção.</p>
       <canvas id="retencao-geral-chart" height="80"></canvas>
-      <table class="data-table" style="margin-top:16px;">
-        <tr><th>Intervalo desde o último toque</th><th>% acerto</th><th>Questões</th></tr>
-        ${rows}
-      </table>
+      <div style="overflow-x:auto;">
+        <table class="data-table" style="margin-top:16px;">
+          <tr><th>Intervalo desde o último toque</th><th>% acerto</th><th>Questões</th></tr>
+          ${rows}
+        </table>
+      </div>
     </div>
   `;
 }
@@ -591,10 +595,12 @@ function renderRanking(ranking) {
   return `
     <div class="card" style="margin-bottom:24px;">
       <h3 style="margin-top:0;">Ranking de Risco</h3>
-      <table class="data-table">
-        <tr><th>Disciplina</th><th>Diagnóstico</th><th>Wilson</th><th>Questões</th><th>Peso</th></tr>
-        ${rows}
-      </table>
+      <div style="overflow-x:auto;">
+        <table class="data-table">
+          <tr><th>Disciplina</th><th>Diagnóstico</th><th>Wilson</th><th>Questões</th><th>Peso</th></tr>
+          ${rows}
+        </table>
+      </div>
     </div>
   `;
 }

@@ -192,17 +192,19 @@ export async function renderPriorityPage(container, params) {
 
     content.innerHTML = `
       <div class="card">
-        <table class="data-table">
-          <tr>
-            <th data-sort-col="prioridade_rank" style="cursor:pointer;">Prioridade${sortIndicator("prioridade_rank")}</th>
-            <th>Caderno</th>
-            <th data-sort-col="disciplina_nome" style="cursor:pointer;">Disciplina${sortIndicator("disciplina_nome")}</th>
-            <th data-sort-col="classificacao_recorrencia" style="cursor:pointer;">Recorrência${sortIndicator("classificacao_recorrencia")}</th>
-            <th>Dispersão entre bancas</th>
-            <th data-sort-col="wilson_pct" style="cursor:pointer;">Wilson${sortIndicator("wilson_pct")}</th>
-          </tr>
-          ${trs}
-        </table>
+        <div style="overflow-x:auto;">
+          <table class="data-table">
+            <tr>
+              <th data-sort-col="prioridade_rank" style="cursor:pointer;">Prioridade${sortIndicator("prioridade_rank")}</th>
+              <th>Caderno</th>
+              <th data-sort-col="disciplina_nome" style="cursor:pointer;">Disciplina${sortIndicator("disciplina_nome")}</th>
+              <th data-sort-col="classificacao_recorrencia" style="cursor:pointer;">Recorrência${sortIndicator("classificacao_recorrencia")}</th>
+              <th>Dispersão entre bancas</th>
+              <th data-sort-col="wilson_pct" style="cursor:pointer;">Wilson${sortIndicator("wilson_pct")}</th>
+            </tr>
+            ${trs}
+          </table>
+        </div>
       </div>
     `;
 

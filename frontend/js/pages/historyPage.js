@@ -158,10 +158,12 @@ export async function renderHistoryPage(container) {
       <div class="card" style="margin-bottom:16px;">
         <h3 style="margin-top:0;">Transferência entre Concursos</h3>
         <p style="color:var(--color-text-muted); margin-top:0;">Mesmo caderno, Wilson por concurso. Amplitude = maior menos menor Wilson entre os concursos — quanto maior, mais disperso o desempenho entre editais.</p>
-        <table class="data-table">
-          <tr><th>Caderno</th><th>Concursos</th><th>Wilson por concurso</th><th>Amplitude</th></tr>
-          ${rows}
-        </table>
+        <div style="overflow-x:auto;">
+          <table class="data-table">
+            <tr><th>Caderno</th><th>Concursos</th><th>Wilson por concurso</th><th>Amplitude</th></tr>
+            ${rows}
+          </table>
+        </div>
       </div>
     `;
   }
@@ -182,10 +184,12 @@ export async function renderHistoryPage(container) {
       )
       .join("");
     return `
-      <table class="data-table">
-        <tr><th>Nome</th><th>Wilson</th><th>Questões</th></tr>
-        ${trs}
-      </table>
+      <div style="overflow-x:auto;">
+        <table class="data-table">
+          <tr><th>Nome</th><th>Wilson</th><th>Questões</th></tr>
+          ${trs}
+        </table>
+      </div>
     `;
   }
 }

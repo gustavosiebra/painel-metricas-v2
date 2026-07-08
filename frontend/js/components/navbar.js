@@ -33,15 +33,20 @@ export function renderNavbar(activeRoute) {
     )
     .join("");
 
+  // Grupos viraram classes (07/07/2026, validação mobile) em vez de inline
+  // style — precisava de flex-wrap responsivo em telas estreitas, e um
+  // style="" inline com gap fixo (24px) tem prioridade sobre qualquer regra
+  // de media query no CSS, então não dava pra sobrescrever sem !important.
+  // Com classes, .navbar-left/.navbar-right controlam isso de verdade.
   return `
     <header class="app-topbar">
-      <div style="display:flex; align-items:center; gap:24px;">
+      <div class="navbar-left">
         <a href="#/dashboard" class="nav-link nav-link--brand${activeRoute === "/dashboard" ? " nav-link--active" : ""}" data-path="/dashboard"><strong>Painel de Métricas</strong></a>
         <nav class="app-nav">${linksHtml}</nav>
       </div>
-      <div style="display:flex; align-items:center;">
+      <div class="navbar-right">
         <a href="#/parametros" class="settings-link${activeRoute === "/parametros" ? " nav-link--active" : ""}" data-path="/parametros" title="Configurações">⚙</a>
-        <span id="display-name-label" style="margin-right:4px; cursor:pointer;" title="Clique para editar o nome de exibição">${escapeHtml(shownName)}</span>
+        <span id="display-name-label" class="navbar-name" title="Clique para editar o nome de exibição">${escapeHtml(shownName)}</span>
         <span style="margin-right:16px;">${isAdmin ? " (admin)" : ""}</span>
         <button id="logout-btn" class="btn-link" style="color:#fff;">Sair</button>
       </div>
