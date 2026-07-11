@@ -37,13 +37,19 @@ import { getState } from "../state.js";
 import { navigate } from "../router.js";
 import { getWeight, upsertWeight } from "../services/weightService.js";
 
+// Ordem alfabética pelo rótulo (08/07/2026, pedido do usuário) — mais fácil
+// de achar um tipo específico numa lista de 8 do que decorar uma ordem
+// arbitrária. Caderno de Erros e Simulado são os dois tipos em que Disciplina
+// deixa de ser obrigatória (ver #discipline_none_option em updateStudyTypeUI)
+// — os demais continuam exigindo disciplina normalmente.
 const STUDY_TYPES = [
-  { value: "questao", label: "Questões" },
-  { value: "simulado", label: "Simulado" },
+  { value: "caderno_erros", label: "Caderno de Erros" },
   { value: "discursiva", label: "Discursiva" },
-  { value: "revisao", label: "Revisão" },
   { value: "flashcard", label: "Flashcard" },
   { value: "leitura", label: "Leitura" },
+  { value: "questao", label: "Questões" },
+  { value: "revisao", label: "Revisão" },
+  { value: "simulado", label: "Simulado" },
   { value: "videoaula", label: "Videoaula" },
 ];
 
@@ -116,6 +122,19 @@ export async function renderStudyFormPage(container, params) {
           <input type="date" id="occurred_at" required value="${existingSession ? existingSession.occurred_at.slice(0, 10) : todayISO()}" />
         </div>
         <div class="form-field">
+          <!-- Tipo de estudo vem logo depois de Data (08/07/2026, pedido do
+               usuário) — precisa vir ANTES de Disciplina porque Disciplina
+               só libera "Nenhuma disciplina específica" pra Simulado/Caderno
+               de Erros (ver updateStudyTypeUI); com Tipo de estudo lá embaixo
+               como antes, dava pra chegar em Disciplina sem essa opção ainda
+               ter sido liberada, obrigando escolher uma disciplina real e
+               depois voltar. -->
+          <label for="study_type">Tipo de estudo</label>
+          <select id="study_type" required>
+            ${STUDY_TYPES.map((t) => `<option value="${t.value}" ${existingSession?.study_type === t.value ? "selected" : ""}>${t.label}</option>`).join("")}
+          </select>
+        </div>
+        <div class="form-field">
           <label for="exam_id">Concurso</label>
           <select id="exam_id" required>
             <option value="" disabled ${!existingSession ? "selected" : ""}>— Selecione —</option>
@@ -157,7 +176,8 @@ export async function renderStudyFormPage(container, params) {
         <div class="form-field">
           <label for="discipline_id">Disciplina</label>
           <select id="discipline_id" required>
-            <option value="" disabled ${!existingSession?.discipline_id ? "selected" : ""}>— Selecione —</option>
+            <option value="" disabled ${!existingSession ? "selected" : ""}>— Selecione —</option>
+            <option value="__nenhuma__" id="discipline_none_option" ${existingSession && existingSession.discipline_id == null ? "selected" : ""}>Nenhuma disciplina específica</option>
             ${disciplines.map((d) => `<option value="${d.id}" ${existingSession?.discipline_id === d.id ? "selected" : ""}>${escapeHtml(d.name)}</option>`).join("")}
             <option value="__new__">+ Cadastrar nova disciplina…</option>
           </select>
@@ -189,13 +209,6 @@ export async function renderStudyFormPage(container, params) {
             <input type="text" id="new_caderno_name" placeholder="Nome do novo caderno" />
           </div>
         </div>
-        <div class="form-field">
-          <label for="study_type">Tipo de estudo</label>
-          <select id="study_type" required>
-            ${STUDY_TYPES.map((t) => `<option value="${t.value}" ${existingSession?.study_type === t.value ? "selected" : ""}>${t.label}</option>`).join("")}
-          </select>
-        </div>
-
         <div id="measurable-fields" style="display:none;">
           <div class="form-field">
             <label for="questions_total">Questões</label>
@@ -316,8 +329,12 @@ export async function renderStudyFormPage(container, params) {
     disciplineSelect.addEventListener("change", () => {
       const disciplineId = disciplineSelect.value;
       newDisciplineBox.style.display = disciplineId === "__new__" ? "block" : "none";
-      if (!disciplineId) {
+      // "__nenhuma__" (só existe pra Caderno de Erros, ver updateStudyTypeUI):
+      // sem disciplina não existe caderno pra vincular — mesmo tratamento de
+      // "nada selecionado ainda".
+      if (!disciplineId || disciplineId === "__nenhuma__") {
         questionSetField.style.display = "none";
+        checkWeightShortcut();
         return;
       }
       // Disciplina nova ainda não existe (só é criada no submit) — filtro por
@@ -345,7 +362,7 @@ export async function renderStudyFormPage(container, params) {
       const examId = examSelect.value;
       const disciplineId = disciplineSelect.value;
 
-      if (!examId || examId === "__geral__" || !disciplineId) {
+      if (!examId || examId === "__geral__" || !disciplineId || disciplineId === "__nenhuma__") {
         setWeightBoxVisible(false);
         return;
       }
@@ -392,7 +409,7 @@ export async function renderStudyFormPage(container, params) {
       measurableFields.style.display = measurable ? "block" : "none";
       scoreField.style.display = ["simulado", "discursiva"].includes(type) ? "block" : "none";
 
-      const showQuestionCounts = ["questao", "simulado"].includes(type);
+      const showQuestionCounts = ["questao", "simulado", "caderno_erros"].includes(type);
       questionsTotalInput.closest(".form-field").style.display = showQuestionCounts ? "block" : "none";
       correctTotalInput.closest(".form-field").style.display = showQuestionCounts ? "block" : "none";
       wrongTotalDisplay.closest(".form-field").style.display = showQuestionCounts ? "block" : "none";
@@ -412,6 +429,22 @@ export async function renderStudyFormPage(container, params) {
       noneOption.disabled = selfConfidenceSelect.required;
       if (selfConfidenceSelect.required && selfConfidenceSelect.value === "") {
         selfConfidenceSelect.value = "baixa";
+      }
+
+      // Disciplina opcional em Caderno de Erros e Simulado (08/07/2026, este
+      // 2º liberado a pedido do usuário — simulado também cobre várias
+      // disciplinas de uma vez, mesmo problema do caderno de erros). Mesmo
+      // padrão acima: desabilita a sentinela pros demais tipos, pra não
+      // deixar "Nenhuma disciplina específica" escolhível em Questões/
+      // Revisão/etc. Se o tipo mudar PRA FORA desses dois com a sentinela já
+      // selecionada, força reescolha (não dá pra "adivinhar" uma disciplina).
+      const allowNoDiscipline = type === "caderno_erros" || type === "simulado";
+      const disciplineNoneOption = card.querySelector("#discipline_none_option");
+      disciplineNoneOption.disabled = !allowNoDiscipline;
+      if (!allowNoDiscipline && disciplineSelect.value === "__nenhuma__") {
+        disciplineSelect.value = "";
+        questionSetField.style.display = "none";
+        setWeightBoxVisible(false);
       }
     }
     studyTypeSelect.addEventListener("change", updateStudyTypeUI);
@@ -456,6 +489,15 @@ export async function renderStudyFormPage(container, params) {
     const questionSetSelect = card.querySelector("#question_set_id");
     let questionSetId = questionSetSelect.value;
     const boardSelectValue = card.querySelector("#board_id").value;
+
+    // "__nenhuma__" só é selecionável em Caderno de Erros (ver
+    // updateStudyTypeUI) — sem disciplina não existe caderno pra vincular,
+    // então força questionSetId junto, ignorando qualquer valor obsoleto que
+    // tenha sobrado no <select> escondido de uma disciplina escolhida antes.
+    if (disciplineId === "__nenhuma__") {
+      disciplineId = null;
+      questionSetId = null;
+    }
 
     // Peso: captura ANTES de resolver "__new__" (reflete exatamente o que o
     // usuário viu/preencheu na tela). weightShortcutBox só fica visível
