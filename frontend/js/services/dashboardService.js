@@ -4,7 +4,7 @@
 
 import { supabase } from "../supabaseClient.js";
 
-const TYPES_WITH_MEASURABLE_RESULT = ["questao", "simulado", "discursiva"];
+const TYPES_WITH_MEASURABLE_RESULT = ["questao", "simulado", "discursiva", "caderno_erros"];
 
 // KPIs de topo: horas totais, disciplinas em estudo (qualquer tipo, não só
 // mensurável) e o Diagnóstico Wilson geral (v_diagnostico_geral). "Sessões
@@ -22,7 +22,10 @@ export async function getKpis() {
 
   const sessions = sessionsResult.data || [];
   const horasTotais = sessions.reduce((acc, s) => acc + Number(s.duration_minutes || 0), 0) / 60;
-  const disciplinasComSessao = new Set(sessions.map((s) => s.discipline_id)).size;
+  // filter(Boolean) (08/07/2026) — Caderno de Erros pode ter discipline_id
+  // null (disciplina não é obrigatória nesse tipo); sem isso, "null" entrava
+  // no Set como se fosse mais uma disciplina real, inflando a contagem em 1.
+  const disciplinasComSessao = new Set(sessions.map((s) => s.discipline_id).filter(Boolean)).size;
 
   return {
     horasTotais: Math.round(horasTotais * 10) / 10,

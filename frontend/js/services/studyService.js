@@ -4,10 +4,19 @@
 // nos demais tipos (revisao/flashcard/leitura/videoaula). question_attempts
 // fica vazio por enquanto — schema já preparado, sem uso ainda.
 // Exclusão é sempre lógica (status ativo/inativo) — nunca DELETE físico (RN-009).
+//
+// "caderno_erros" (08/07/2026) — revisão semanal de questões erradas,
+// cruzando disciplinas. Também é mensurável (questões/acertos/erros), mas de
+// propósito NÃO entra nas views de Diagnóstico Wilson/Retenção/Eficiência
+// (0024/0026/0028) — essas já filtram study_type in ('questao','simulado',
+// 'discursiva') explicitamente, então um tipo novo nasce isolado sem precisar
+// mudar SQL nenhum. Fica de fora de propósito: misturar "questão nova" com
+// "reteste do seu pior erro" no mesmo % de Wilson distorceria o diagnóstico
+// pra pior sem representar queda real de desempenho.
 
 import { supabase } from "../supabaseClient.js";
 
-const TYPES_WITH_MEASURABLE_RESULT = ["questao", "simulado", "discursiva"];
+const TYPES_WITH_MEASURABLE_RESULT = ["questao", "simulado", "discursiva", "caderno_erros"];
 
 export function hasMeasurableResult(studyType) {
   return TYPES_WITH_MEASURABLE_RESULT.includes(studyType);

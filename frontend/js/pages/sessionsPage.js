@@ -22,6 +22,7 @@ const STUDY_TYPE_LABELS = {
   flashcard: "Flashcard",
   leitura: "Leitura",
   videoaula: "Videoaula",
+  caderno_erros: "Caderno de Erros",
 };
 
 // Mesmos valores de studyFormPage.js (self_confidence: "baixa"/"media"/"alta").
