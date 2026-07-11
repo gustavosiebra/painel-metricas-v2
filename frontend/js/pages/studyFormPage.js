@@ -208,7 +208,7 @@ export async function renderStudyFormPage(container, params) {
         </div>
         <div class="form-field" id="question-set-field" style="display:${existingSession?.discipline_id ? "block" : "none"};">
           <label for="question_set_id">Caderno</label>
-          <select id="question_set_id" required>
+          <select id="question_set_id" ${existingSession?.discipline_id ? "required" : ""}>
             <option value="" disabled selected>Selecione a disciplina primeiro…</option>
           </select>
           <div id="new-caderno-box" style="display:none; margin-top:8px;">
@@ -339,6 +339,12 @@ export async function renderStudyFormPage(container, params) {
       // sem disciplina não existe caderno pra vincular — mesmo tratamento de
       // "nada selecionado ainda".
       if (!disciplineId || disciplineId === "__nenhuma__") {
+        // required=false (08/07/2026, correção de bug) — sem isso, o <select>
+        // de Caderno ficava obrigatório mas escondido (display:none) quando
+        // "Nenhuma disciplina específica" era escolhida (Caderno de Erros/
+        // Simulado): o navegador barra o submit por causa dele, mas como está
+        // invisível não mostra aviso nenhum — clicar em Salvar não fazia nada.
+        questionSetSelect.required = false;
         questionSetField.style.display = "none";
         checkWeightShortcut();
         return;
@@ -346,6 +352,7 @@ export async function renderStudyFormPage(container, params) {
       // Disciplina nova ainda não existe (só é criada no submit) — filtro por
       // disciplineId="__new__" naturalmente não bate com nenhum caderno real,
       // então a lista aparece vazia, que é o esperado (disciplina sem histórico).
+      questionSetSelect.required = true;
       questionSetField.style.display = "block";
       populateQuestionSets(disciplineId, undefined);
       checkWeightShortcut();
@@ -449,6 +456,7 @@ export async function renderStudyFormPage(container, params) {
       disciplineNoneOption.disabled = !allowNoDiscipline;
       if (!allowNoDiscipline && disciplineSelect.value === "__nenhuma__") {
         disciplineSelect.value = "";
+        questionSetSelect.required = false;
         questionSetField.style.display = "none";
         setWeightBoxVisible(false);
       }
