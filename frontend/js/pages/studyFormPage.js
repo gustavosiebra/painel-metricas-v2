@@ -128,9 +128,15 @@ export async function renderStudyFormPage(container, params) {
                de Erros (ver updateStudyTypeUI); com Tipo de estudo lá embaixo
                como antes, dava pra chegar em Disciplina sem essa opção ainda
                ter sido liberada, obrigando escolher uma disciplina real e
-               depois voltar. -->
+               depois voltar. Placeholder "— Selecione —" (08/07/2026) —
+               depois de alfabetizar STUDY_TYPES, "Caderno de Erros" virou a
+               1ª opção da lista e o <select> vinha com ela pré-marcada sem o
+               usuário escolher nada; mesmo padrão de Concurso/Banca/
+               Disciplina/Caderno já usado neste arquivo, força escolha
+               consciente em vez de cair num tipo por acidente. -->
           <label for="study_type">Tipo de estudo</label>
           <select id="study_type" required>
+            <option value="" disabled ${!existingSession ? "selected" : ""}>— Selecione —</option>
             ${STUDY_TYPES.map((t) => `<option value="${t.value}" ${existingSession?.study_type === t.value ? "selected" : ""}>${t.label}</option>`).join("")}
           </select>
         </div>
