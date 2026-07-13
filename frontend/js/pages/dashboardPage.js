@@ -9,7 +9,6 @@ import { formatPct, formatDeltaPct } from "../utils/format.js";
 import { getParam } from "../services/parameterService.js";
 import {
   getKpis,
-  getCadernosEstudados,
   getRankingRisco,
   getMediaMovelSemanal,
   getContadoresSituacao,
@@ -134,7 +133,7 @@ export async function renderDashboardPage(container) {
   const content = container.querySelector("#dashboard-content");
   const { user } = getState();
 
-  let kpis, cadernosEstudados, ranking, mediaMovelDiaria, situacao, produtividadeVitalicia, produtividadeRecente, janelaDisciplina, janelaCaderno, retencaoPorDisciplina, horasPorDisciplina, horasPorTipoEstudo, horasSemanais, janelaProdutividadeDias, tendenciaMinQuestoes;
+  let kpis, ranking, mediaMovelDiaria, situacao, produtividadeVitalicia, produtividadeRecente, janelaDisciplina, janelaCaderno, retencaoPorDisciplina, horasPorDisciplina, horasPorTipoEstudo, horasSemanais, janelaProdutividadeDias, tendenciaMinQuestoes;
   try {
     // Janela de Produtividade Recente (07/07/2026, pedido do usuário) —
     // configurável em Configurações (padrão 28 dias); busca ANTES do
@@ -149,7 +148,6 @@ export async function renderDashboardPage(container) {
 
     [
       kpis,
-      cadernosEstudados,
       ranking,
       mediaMovelDiaria,
       situacao,
@@ -163,7 +161,6 @@ export async function renderDashboardPage(container) {
       horasSemanais,
     ] = await Promise.all([
       getKpis(),
-      getCadernosEstudados(),
       getRankingRisco(),
       getMediaMovelSemanal(),
       getContadoresSituacao(),
@@ -189,7 +186,7 @@ export async function renderDashboardPage(container) {
   // 2) ação concreta (Próxima Ação + Ranking), 3) tendência ao longo do tempo,
   // 4) aprofundamento (Janela, Transferência, Retenção) pra quem quer investigar mais.
   content.innerHTML = `
-    ${renderVisaoGeral(kpis, produtividadeVitalicia, produtividadeRecente, janelaProdutividadeDias, cadernosEstudados, situacao)}
+    ${renderVisaoGeral(kpis, produtividadeVitalicia, produtividadeRecente, janelaProdutividadeDias, situacao)}
     ${renderProximaAcao(proximaAcao)}
     ${renderRanking(ranking)}
     ${renderMediaMovelSemanal(tendenciaSemanal)}
@@ -258,7 +255,7 @@ function tentarDesenhar(content, canvasId, desenhar) {
 // fica cada vez menos sensível ao presente conforme o total de horas
 // acumuladas cresce; a versão recente devolve o "termômetro do agora" sem
 // descartar a referência histórica.
-function renderVisaoGeral(kpis, produtividadeVitalicia, produtividadeRecente, janelaDias, cadernosEstudados, situacao) {
+function renderVisaoGeral(kpis, produtividadeVitalicia, produtividadeRecente, janelaDias, situacao) {
   const diag = kpis.diagnosticoGeral;
   const diagLabel = diag ? formatPct(diag.wilson_pct) : "—";
   const diagBadge = diag ? renderBadge(diag.classificacao) : "";
@@ -266,18 +263,22 @@ function renderVisaoGeral(kpis, produtividadeVitalicia, produtividadeRecente, ja
   const subvitalicio = (valor) =>
     `<p style="font-size:11px; color:var(--color-text-muted); margin:2px 0 0;">vitalício: ${valor == null ? "—" : `${valor}/h`}</p>`;
 
+  // Ordem esquerda->direita (13/07/2026, pedido do usuário): Desempenho
+  // geral, Questões resolvidas, Horas estudadas, Disciplinas em estudo,
+  // Acertos/h, Questões/h. "Cadernos estudados" saiu do grid (substituído
+  // por Questões resolvidas — número bruto de questões, não de cadernos).
   const cartoesKpi = `
     <div class="kpi-card">
       <p class="kpi-card__label">Desempenho geral</p>
       <p class="kpi-card__value">${diagLabel} ${diagBadge}</p>
     </div>
     <div class="kpi-card">
-      <p class="kpi-card__label">Horas estudadas</p>
-      <p class="kpi-card__value">${kpis.horasTotais}h</p>
+      <p class="kpi-card__label">Questões resolvidas</p>
+      <p class="kpi-card__value">${kpis.questoesResolvidas}</p>
     </div>
     <div class="kpi-card">
-      <p class="kpi-card__label">Cadernos estudados</p>
-      <p class="kpi-card__value">${cadernosEstudados}</p>
+      <p class="kpi-card__label">Horas estudadas</p>
+      <p class="kpi-card__value">${kpis.horasTotais}h</p>
     </div>
     <div class="kpi-card">
       <p class="kpi-card__label">Disciplinas em estudo</p>

@@ -13,7 +13,10 @@ const TYPES_WITH_MEASURABLE_RESULT = ["questao", "simulado", "discursiva", "cade
 // decidir nada.
 export async function getKpis() {
   const [sessionsResult, diagGeralResult] = await Promise.all([
-    supabase.from("study_sessions").select("duration_minutes, discipline_id").eq("status", "ativo"),
+    supabase
+      .from("study_sessions")
+      .select("duration_minutes, discipline_id, session_results(questions_total)")
+      .eq("status", "ativo"),
     supabase.from("v_diagnostico_geral").select("*").maybeSingle(),
   ]);
 
@@ -26,25 +29,23 @@ export async function getKpis() {
   // null (disciplina não é obrigatória nesse tipo); sem isso, "null" entrava
   // no Set como se fosse mais uma disciplina real, inflando a contagem em 1.
   const disciplinasComSessao = new Set(sessions.map((s) => s.discipline_id).filter(Boolean)).size;
+  // Questões resolvidas (13/07/2026, pedido do usuário, substitui "Cadernos
+  // estudados" no grid de KPIs) — soma bruta de questions_total de TODA
+  // sessão mensurável (questao/simulado/discursiva/caderno_erros). É uma
+  // contagem, não uma razão — sem o risco de viés do % de acerto (não há
+  // "diluição" possível numa soma simples), então Caderno de Erros conta
+  // aqui do mesmo jeito que conta em Horas estudadas.
+  const questoesResolvidas = sessions.reduce((acc, s) => {
+    const result = Array.isArray(s.session_results) ? s.session_results[0] : s.session_results;
+    return acc + Number(result?.questions_total || 0);
+  }, 0);
 
   return {
     horasTotais: Math.round(horasTotais * 10) / 10,
     disciplinasComSessao,
+    questoesResolvidas,
     diagnosticoGeral: diagGeralResult.data || null, // null = nenhuma sessão mensurável ainda
   };
-}
-
-// Cadernos Estudados (Fase 6-E, 03/07/2026) — quantos cadernos distintos já
-// têm pelo menos uma sessão registrada. Complementa "Disciplinas em estudo"
-// com uma visão mais granular de amplitude de cobertura.
-export async function getCadernosEstudados() {
-  const { data, error } = await supabase
-    .from("study_sessions")
-    .select("question_set_id")
-    .eq("status", "ativo")
-    .not("question_set_id", "is", null);
-  if (error) throw error;
-  return new Set((data || []).map((r) => r.question_set_id)).size;
 }
 
 // Ranking de Risco: junta Diagnóstico por Disciplina (sempre existe se houver
