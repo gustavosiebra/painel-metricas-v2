@@ -158,6 +158,60 @@ export function getTendenciaSemanal(diario, nSemanas = 12, minQuestoes = null) {
   return { semanas, semanaAtual, semanaAnterior, deltaSemana };
 }
 
+// Meta de Estudo Semanal (13/07/2026, pedido do usuário) — semana de
+// CALENDÁRIO (domingo a sábado), diferente de Horas Semanais/Tendência
+// Semanal (janela corrida de 7 dias terminando no dado mais recente, feita
+// pra OBSERVAR tendência ao longo do tempo). Aqui é meta que reseta no
+// calendário, então precisa ser a semana civil atual, não uma janela corrida.
+// Só horas e questões (nunca %) — ver comentário de meta_semanal_horas em
+// parameterService.js sobre por que % de acerto não vira meta aqui.
+export async function getMetaSemanalAtual() {
+  const hoje = new Date();
+  const inicio = new Date(hoje);
+  inicio.setDate(hoje.getDate() - hoje.getDay()); // domingo desta semana
+  inicio.setHours(0, 0, 0, 0);
+  const fim = new Date(inicio);
+  fim.setDate(inicio.getDate() + 6);
+  fim.setHours(23, 59, 59, 999);
+
+  const { data, error } = await supabase
+    .from("study_sessions")
+    .select("occurred_at, duration_minutes, session_results(questions_total)")
+    .eq("status", "ativo")
+    .gte("occurred_at", inicio.toISOString())
+    .lte("occurred_at", fim.toISOString());
+  if (error) throw error;
+
+  const porDia = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(inicio);
+    d.setDate(inicio.getDate() + i);
+    return { dia: d.toISOString().slice(0, 10), horas: 0, questoes: 0 };
+  });
+
+  let horasTotais = 0;
+  let questoesTotais = 0;
+  for (const s of data || []) {
+    const horas = Number(s.duration_minutes || 0) / 60;
+    const result = Array.isArray(s.session_results) ? s.session_results[0] : s.session_results;
+    const questoes = Number(result?.questions_total || 0);
+    horasTotais += horas;
+    questoesTotais += questoes;
+    const idx = Math.floor((new Date(s.occurred_at) - inicio) / 86400000);
+    if (idx >= 0 && idx < 7) {
+      porDia[idx].horas += horas;
+      porDia[idx].questoes += questoes;
+    }
+  }
+
+  return {
+    inicio: inicio.toISOString().slice(0, 10),
+    fim: fim.toISOString().slice(0, 10),
+    horasTotais: Math.round(horasTotais * 10) / 10,
+    questoesTotais,
+    porDia: porDia.map((d) => ({ ...d, horas: Math.round(d.horas * 10) / 10 })),
+  };
+}
+
 // Janela de Tendência por Disciplina (view já existia desde a Fase 5,
 // v_janela_tendencia, nunca tinha sido exposta em tela nenhuma). Compara as
 // últimas ~100 questões (curta) com as últimas ~300 (longa) por disciplina —

@@ -20,6 +20,7 @@ import {
   getHorasPorDisciplina,
   getHorasPorTipoEstudo,
   getHorasSemanais,
+  getMetaSemanalAtual,
   pickProximaAcao,
 } from "../services/dashboardService.js";
 
@@ -63,6 +64,7 @@ let chartHorasInstance = null;
 let chartHorasTipoInstance = null;
 let chartRetencaoInstance = null;
 let chartHorasSemanaisInstance = null;
+let chartMetaSemanalInstance = null;
 
 export async function renderDashboardPage(container) {
   // Sem H2 "Dashboard" na página (pedido do usuário, 03/07/2026) — o nome já
@@ -133,17 +135,19 @@ export async function renderDashboardPage(container) {
   const content = container.querySelector("#dashboard-content");
   const { user } = getState();
 
-  let kpis, ranking, mediaMovelDiaria, situacao, produtividadeVitalicia, produtividadeRecente, janelaDisciplina, janelaCaderno, retencaoPorDisciplina, horasPorDisciplina, horasPorTipoEstudo, horasSemanais, janelaProdutividadeDias, tendenciaMinQuestoes;
+  let kpis, ranking, mediaMovelDiaria, situacao, produtividadeVitalicia, produtividadeRecente, janelaDisciplina, janelaCaderno, retencaoPorDisciplina, horasPorDisciplina, horasPorTipoEstudo, horasSemanais, metaSemanal, janelaProdutividadeDias, tendenciaMinQuestoes, metaHoras, metaQuestoes;
   try {
     // Janela de Produtividade Recente (07/07/2026, pedido do usuário) —
     // configurável em Configurações (padrão 28 dias); busca ANTES do
     // Promise.all principal porque getProdutividadeGeral(janela) depende
-    // desse valor. Piso de N da Tendência Semanal (08/07/2026) segue o mesmo
-    // padrão — buscado à parte porque só é usado DEPOIS do Promise.all, ao
-    // chamar getTendenciaSemanal (não é argumento de nenhuma chamada dentro dele).
-    [janelaProdutividadeDias, tendenciaMinQuestoes] = await Promise.all([
+    // desse valor. Piso de N da Tendência Semanal (08/07/2026) e Metas de
+    // Estudo Semanal (13/07/2026) seguem o mesmo padrão — buscados à parte
+    // porque só são usados DEPOIS do Promise.all principal.
+    [janelaProdutividadeDias, tendenciaMinQuestoes, metaHoras, metaQuestoes] = await Promise.all([
       getParam(user.id, "produtividade_janela_dias"),
       getParam(user.id, "tendencia_semanal_min_questoes"),
+      getParam(user.id, "meta_semanal_horas"),
+      getParam(user.id, "meta_semanal_questoes"),
     ]);
 
     [
@@ -159,6 +163,7 @@ export async function renderDashboardPage(container) {
       horasPorDisciplina,
       horasPorTipoEstudo,
       horasSemanais,
+      metaSemanal,
     ] = await Promise.all([
       getKpis(),
       getRankingRisco(),
@@ -172,6 +177,7 @@ export async function renderDashboardPage(container) {
       getHorasPorDisciplina(),
       getHorasPorTipoEstudo(),
       getHorasSemanais(),
+      getMetaSemanalAtual(),
     ]);
   } catch (err) {
     content.innerHTML = `<div class="alert alert--error">Erro ao carregar dashboard: ${escapeHtml(err.message)}</div>`;
@@ -187,6 +193,7 @@ export async function renderDashboardPage(container) {
   // 4) aprofundamento (Janela, Transferência, Retenção) pra quem quer investigar mais.
   content.innerHTML = `
     ${renderVisaoGeral(kpis, produtividadeVitalicia, produtividadeRecente, janelaProdutividadeDias, situacao)}
+    ${renderMetaSemanal(metaSemanal, metaHoras, metaQuestoes)}
     ${renderProximaAcao(proximaAcao)}
     ${renderRanking(ranking)}
     ${renderMediaMovelSemanal(tendenciaSemanal)}
@@ -207,6 +214,33 @@ export async function renderDashboardPage(container) {
 
   // Cada gráfico é isolado no próprio try/catch: um erro de desenho (ex.:
   // Chart.js não carregado) não pode derrubar os outros gráficos do dashboard.
+  // Meta de Estudo Semanal — sempre desenha (7 dias fixos, mesmo que todos
+  // zerados, diferente dos gráficos abaixo que só desenham com dado real).
+  let metaMetricaAtual = "horas";
+  tentarDesenhar(content, "meta-semanal-chart", () => renderChartMetaSemanal(content.querySelector("#meta-semanal-chart"), metaSemanal.porDia, metaMetricaAtual));
+  const metaBtnHoras = content.querySelector("#meta-toggle-horas");
+  const metaBtnQuestoes = content.querySelector("#meta-toggle-questoes");
+  function estilizarToggle(btn, ativo) {
+    btn.style.background = ativo ? "var(--color-primary)" : "var(--color-surface)";
+    btn.style.color = ativo ? "#fff" : "var(--color-primary)";
+    btn.style.border = ativo ? "1px solid var(--color-primary)" : "1px solid var(--color-border)";
+  }
+  function atualizarMetaToggle() {
+    estilizarToggle(metaBtnHoras, metaMetricaAtual === "horas");
+    estilizarToggle(metaBtnQuestoes, metaMetricaAtual === "questoes");
+  }
+  atualizarMetaToggle();
+  metaBtnHoras.addEventListener("click", () => {
+    metaMetricaAtual = "horas";
+    atualizarMetaToggle();
+    tentarDesenhar(content, "meta-semanal-chart", () => renderChartMetaSemanal(content.querySelector("#meta-semanal-chart"), metaSemanal.porDia, metaMetricaAtual));
+  });
+  metaBtnQuestoes.addEventListener("click", () => {
+    metaMetricaAtual = "questoes";
+    atualizarMetaToggle();
+    tentarDesenhar(content, "meta-semanal-chart", () => renderChartMetaSemanal(content.querySelector("#meta-semanal-chart"), metaSemanal.porDia, metaMetricaAtual));
+  });
+
   if (tendenciaSemanal.semanas.length > 0) {
     tentarDesenhar(content, "media-movel-chart", () => renderChartMediaMovel(content.querySelector("#media-movel-chart"), tendenciaSemanal.semanas, tendenciaMinQuestoes));
     tentarDesenhar(content, "acertos-erros-chart", () => renderChartAcertosErros(content.querySelector("#acertos-erros-chart"), tendenciaSemanal.semanas));
@@ -316,6 +350,46 @@ function renderVisaoGeral(kpis, produtividadeVitalicia, produtividadeRecente, ja
           .join("");
 
   return `<div class="kpi-grid">${cartoesKpi}${cartoesSituacao}</div>`;
+}
+
+// Metas de Estudo Semanal (13/07/2026, pedido do usuário) — barra de
+// progresso de Horas e de Questões contra a meta configurável (Configurações),
+// mais o gráfico Dom-Sáb da semana civil atual com toggle Horas/Questões. De
+// propósito SEM % de acerto aqui — ver comentário em meta_semanal_horas
+// (parameterService.js) sobre por que % não vira "meta" com barra de progresso.
+function renderMetaSemanal(meta, metaHoras, metaQuestoes) {
+  const fmtData = (iso) => {
+    const [, m, d] = iso.split("-");
+    return `${d}/${m}`;
+  };
+  const barra = (atual, alvo, cor) => {
+    const pct = alvo > 0 ? Math.min(100, Math.round((atual / alvo) * 100)) : 0;
+    return `
+      <div style="background:var(--color-border); border-radius:6px; height:10px; overflow:hidden; margin:6px 0;">
+        <div style="width:${pct}%; height:100%; background:${cor};"></div>
+      </div>
+    `;
+  };
+  return `
+    <div class="card" style="margin-bottom:24px;">
+      <h3 style="margin-top:0;">Metas de Estudo — Semana Atual (${fmtData(meta.inicio)}–${fmtData(meta.fim)})</h3>
+      <div style="display:flex; gap:32px; flex-wrap:wrap; margin-bottom:16px;">
+        <div style="flex:1; min-width:220px;">
+          <p style="margin:0;">Horas estudadas: <strong>${meta.horasTotais}h</strong> / ${metaHoras}h</p>
+          ${barra(meta.horasTotais, metaHoras, "#1f3864")}
+        </div>
+        <div style="flex:1; min-width:220px;">
+          <p style="margin:0;">Questões resolvidas: <strong>${meta.questoesTotais}</strong> / ${metaQuestoes}</p>
+          ${barra(meta.questoesTotais, metaQuestoes, "#2e7d32")}
+        </div>
+      </div>
+      <div style="display:flex; gap:8px; margin-bottom:8px;">
+        <button type="button" id="meta-toggle-horas" class="btn" style="width:auto; padding:6px 14px;">Horas</button>
+        <button type="button" id="meta-toggle-questoes" class="btn" style="width:auto; padding:6px 14px;">Questões</button>
+      </div>
+      <canvas id="meta-semanal-chart" height="90"></canvas>
+    </div>
+  `;
 }
 
 // Tendência Semanal (Fase 6-C) — substitui o gráfico diário original (400
@@ -828,6 +902,35 @@ function renderChartHorasSemanais(canvas, semanas) {
         legend: { display: false },
         tooltip: { callbacks: { label: (ctx) => `${ctx.parsed.y}h` } },
       },
+    },
+  });
+}
+
+// Meta de Estudo Semanal (13/07/2026) — barras por dia da semana civil atual
+// (domingo a sábado), alternando Horas/Questões pelos botões de toggle.
+function renderChartMetaSemanal(canvas, porDia, metrica) {
+  if (chartMetaSemanalInstance) {
+    chartMetaSemanalInstance.destroy();
+    chartMetaSemanalInstance = null;
+  }
+  const DIAS = ["DOM", "SEG", "TER", "QUA", "QUI", "SEX", "SAB"];
+  const dados = porDia.map((d) => (metrica === "horas" ? d.horas : d.questoes));
+  chartMetaSemanalInstance = new Chart(canvas, {
+    type: "bar",
+    data: {
+      labels: DIAS,
+      datasets: [
+        {
+          label: metrica === "horas" ? "Horas" : "Questões",
+          data: dados,
+          backgroundColor: metrica === "horas" ? "#1f3864" : "#2e7d32",
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      scales: { y: { beginAtZero: true } },
+      plugins: { legend: { display: false } },
     },
   });
 }

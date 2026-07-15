@@ -25,7 +25,7 @@ export async function listExamBoards() {
 export async function listExams() {
   const { data, error } = await supabase
     .from("exams")
-    .select("id, name, year, role, area, exam_date, status, board_id, user_id")
+    .select("id, name, year, role, area, exam_date, registration_date, fee_amount, status, board_id, user_id")
     .order("name");
   if (error) throw error;
   return data;
@@ -60,14 +60,38 @@ export async function createQuestionSet({ name, disciplineId, examId, userId }) 
   return data;
 }
 
-export async function createExam({ name, userId }) {
+// examDate/registrationDate/feeAmount (13/07/2026, aba Planejamento) são
+// opcionais — o cadastro rápido em Nova Sessão continua chamando isto só com
+// name/userId (os 3 ficam null, editáveis depois em Planejamento).
+export async function createExam({ name, userId, examDate, registrationDate, feeAmount }) {
   const { data, error } = await supabase
     .from("exams")
-    .insert({ name, user_id: userId })
-    .select("id, name, year, role, area, exam_date, status, board_id")
+    .insert({
+      name,
+      user_id: userId,
+      exam_date: examDate || null,
+      registration_date: registrationDate || null,
+      fee_amount: feeAmount ?? null,
+    })
+    .select("id, name, year, role, area, exam_date, registration_date, fee_amount, status, board_id")
     .single();
   if (error) throw error;
   return data;
+}
+
+// Edição das datas/valor de um concurso já existente (aba Planejamento).
+// Separado de updateExamName de propósito — nome é editado no Catálogo,
+// isto aqui é só o que a aba Planejamento mexe.
+export async function updateExamPlanning(id, { examDate, registrationDate, feeAmount }) {
+  const { error } = await supabase
+    .from("exams")
+    .update({
+      exam_date: examDate || null,
+      registration_date: registrationDate || null,
+      fee_amount: feeAmount ?? null,
+    })
+    .eq("id", id);
+  if (error) throw error;
 }
 
 export async function createExamBoard({ name, userId }) {

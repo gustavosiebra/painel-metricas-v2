@@ -35,6 +35,17 @@ export const PARAM_DEFAULTS = {
     { max: 30, label: "15-30 dias" },
     { max: null, label: "30+ dias" },
   ],
+  // Metas de Estudo Semanal (13/07/2026, pedido do usuário, inspirado em apps
+  // de concurso que mostram meta de horas/questões da semana) — só uso do
+  // lado do cliente (getMetaSemanalAtual em dashboardService.js), mesmo
+  // padrão de produtividade_janela_dias/tendencia_semanal_min_questoes acima.
+  // De propósito NÃO existe meta_semanal_percentual: % de acerto é resultado,
+  // não esforço — uma barra de progresso "meta: 70%" passaria a mensagem
+  // errada (que dá pra "tentar mais forte" e subir, quando na real depende do
+  // que caiu na prática daquela semana). % de acerto continua só na
+  // Tendência Semanal, sem virar meta.
+  meta_semanal_horas: 20,
+  meta_semanal_questoes: 200,
 };
 
 export async function getParam(userId, key) {
