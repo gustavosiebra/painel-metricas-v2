@@ -318,7 +318,11 @@ export async function getRetencaoPorDisciplina() {
 // mensurável, só soma hora bruta).
 export async function getHorasPorDisciplina() {
   const [sessionsResult, disciplinesResult] = await Promise.all([
-    supabase.from("study_sessions").select("duration_minutes, discipline_id, study_type").eq("status", "ativo"),
+    supabase
+      .from("study_sessions")
+      .select("duration_minutes, discipline_id")
+      .eq("status", "ativo")
+      .not("discipline_id", "is", null),
     supabase.from("disciplines").select("id, name"),
   ]);
   if (sessionsResult.error) throw sessionsResult.error;
@@ -326,15 +330,17 @@ export async function getHorasPorDisciplina() {
 
   const nomePorId = new Map((disciplinesResult.data || []).map((d) => [d.id, d.name]));
   const porDisciplina = new Map();
-  // Rótulo por tipo quando não há disciplina (11/07/2026, pedido do usuário —
-  // rejeitou o rótulo combinado "Caderno de Erros / Simulado"): só esses dois
-  // study_type permitem discipline_id null (ver studyFormPage.js,
-  // allowNoDiscipline), então usamos o study_type de cada sessão pra separar
-  // em duas fatias distintas em vez de uma só combinada. Fallback genérico
-  // fica só como rede de segurança (não deveria ocorrer, dado o constraint).
-  const ROTULO_SEM_DISCIPLINA = { caderno_erros: "Caderno de Erros", simulado: "Simulado" };
+  // Sessões sem disciplina (Caderno de Erros, Simulado, Flashcard por
+  // baralho raiz — 13/07/2026, decisão do usuário) ficam de fora deste
+  // gráfico (antes: entravam como pseudo-disciplina "Caderno de Erros"/
+  // "Simulado", rótulo por rótulo). Trocado porque esse mapa de rótulos
+  // crescia a cada tipo novo liberado pra ficar sem disciplina, e o
+  // propósito daqui é comparar disciplina real com disciplina real. Esse
+  // tempo continua visível em "Horas por Tipo de Estudo" (getHorasPorTipoEstudo),
+  // que agrupa por study_type — presente em toda sessão, sem essa lacuna.
   for (const r of sessionsResult.data || []) {
-    const nome = nomePorId.get(r.discipline_id) || ROTULO_SEM_DISCIPLINA[r.study_type] || "Sem disciplina";
+    const nome = nomePorId.get(r.discipline_id);
+    if (!nome) continue;
     const atual = porDisciplina.get(nome) || 0;
     porDisciplina.set(nome, atual + Number(r.duration_minutes || 0));
   }

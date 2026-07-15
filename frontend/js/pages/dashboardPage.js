@@ -437,7 +437,7 @@ function renderHorasPorDisciplina(linhas) {
   return `
     <div class="card" style="margin-bottom:24px;">
       <h3 style="margin-top:0;">Horas por Disciplina</h3>
-      <p style="color:var(--color-text-muted); margin-top:0;">Disciplinas com fatia muito pequena podem não aparecer visível no gráfico.</p>
+      <p style="color:var(--color-text-muted); margin-top:0;">Disciplinas com fatia muito pequena podem não aparecer visível no gráfico. Sessões sem disciplina vinculada (Caderno de Erros, Simulado, Flashcard por baralho raiz) não entram aqui — esse tempo aparece em "Horas por Tipo de Estudo" abaixo.</p>
       <div style="display:flex; gap:24px; flex-wrap:wrap; align-items:flex-start;">
         <div style="max-width:340px; flex:1; min-width:280px;">
           <canvas id="horas-disciplina-chart" height="260"></canvas>

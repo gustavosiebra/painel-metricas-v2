@@ -39,9 +39,7 @@ import { getWeight, upsertWeight } from "../services/weightService.js";
 
 // Ordem alfabética pelo rótulo (08/07/2026, pedido do usuário) — mais fácil
 // de achar um tipo específico numa lista de 8 do que decorar uma ordem
-// arbitrária. Caderno de Erros e Simulado são os dois tipos em que Disciplina
-// deixa de ser obrigatória (ver #discipline_none_option em updateStudyTypeUI)
-// — os demais continuam exigindo disciplina normalmente.
+// arbitrária.
 const STUDY_TYPES = [
   { value: "caderno_erros", label: "Caderno de Erros" },
   { value: "discursiva", label: "Discursiva" },
@@ -52,6 +50,18 @@ const STUDY_TYPES = [
   { value: "simulado", label: "Simulado" },
   { value: "videoaula", label: "Videoaula" },
 ];
+
+// Tipos em que Disciplina deixa de ser obrigatória (ver #discipline_none_option
+// em updateStudyTypeUI) — extraído pra constante nomeada em 13/07/2026 (antes
+// era um `if` inline com só 2 valores); o usuário avisou que essa lista deve
+// crescer, então um array nomeado deixa "liberar um tipo novo" ser só uma
+// linha aqui, sem caçar a lógica espalhada. Caderno de Erros e Simulado:
+// cross-disciplina por natureza (revisão semanal de erros / simulado cobre
+// várias matérias de uma vez). Flashcard (13/07/2026): decisão do usuário de
+// estudar pelo baralho RAIZ do Anki, intercalando todas as disciplinas juntas
+// (repetição espaçada intercalada retém mais do que baralho filtrado por
+// caderno) — forçar uma disciplina única por sessão não reflete esse fluxo.
+const STUDY_TYPES_ALLOW_NO_DISCIPLINE = ["caderno_erros", "simulado", "flashcard"];
 
 export async function renderStudyFormPage(container, params) {
   const editingId = params?.get ? params.get("id") : null;
@@ -444,14 +454,12 @@ export async function renderStudyFormPage(container, params) {
         selfConfidenceSelect.value = "baixa";
       }
 
-      // Disciplina opcional em Caderno de Erros e Simulado (08/07/2026, este
-      // 2º liberado a pedido do usuário — simulado também cobre várias
-      // disciplinas de uma vez, mesmo problema do caderno de erros). Mesmo
-      // padrão acima: desabilita a sentinela pros demais tipos, pra não
-      // deixar "Nenhuma disciplina específica" escolhível em Questões/
-      // Revisão/etc. Se o tipo mudar PRA FORA desses dois com a sentinela já
-      // selecionada, força reescolha (não dá pra "adivinhar" uma disciplina).
-      const allowNoDiscipline = type === "caderno_erros" || type === "simulado";
+      // Disciplina opcional (ver STUDY_TYPES_ALLOW_NO_DISCIPLINE, topo do
+      // arquivo). Desabilita a sentinela pros demais tipos, pra não deixar
+      // "Nenhuma disciplina específica" escolhível em Questões/Revisão/etc.
+      // Se o tipo mudar PRA FORA da lista com a sentinela já selecionada,
+      // força reescolha (não dá pra "adivinhar" uma disciplina).
+      const allowNoDiscipline = STUDY_TYPES_ALLOW_NO_DISCIPLINE.includes(type);
       const disciplineNoneOption = card.querySelector("#discipline_none_option");
       disciplineNoneOption.disabled = !allowNoDiscipline;
       if (!allowNoDiscipline && disciplineSelect.value === "__nenhuma__") {
