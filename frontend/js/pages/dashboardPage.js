@@ -362,25 +362,36 @@ function renderMetaSemanal(meta, metaHoras, metaQuestoes) {
     const [, m, d] = iso.split("-");
     return `${d}/${m}`;
   };
-  const barra = (atual, alvo, cor) => {
+  // Barra trava em 100% (não estoura visualmente), mas o texto ao lado
+  // sempre mostra o valor real, mesmo passando da meta — a contagem em si
+  // nunca para. Quando atinge/ultrapassa (13/07/2026, pedido do usuário), a
+  // barra muda pra --color-success e aparece "✓ Meta batida! +X" com o
+  // excedente; antes disso era tudo em --color-primary, sem nenhum aviso.
+  const barra = (atual, alvo) => {
+    const atingiu = alvo > 0 && atual >= alvo;
     const pct = alvo > 0 ? Math.min(100, Math.round((atual / alvo) * 100)) : 0;
+    const cor = atingiu ? "var(--color-success)" : "var(--color-primary)";
     return `
       <div style="background:var(--color-border); border-radius:6px; height:10px; overflow:hidden; margin:6px 0;">
         <div style="width:${pct}%; height:100%; background:${cor};"></div>
       </div>
     `;
   };
+  const badgeMeta = (atual, alvo, sufixo, formatar) => {
+    if (!(alvo > 0 && atual >= alvo)) return "";
+    return `<span style="color:var(--color-success); font-weight:600; font-size:13px; margin-left:8px;">✓ Meta batida! +${formatar(atual - alvo)}${sufixo}</span>`;
+  };
   return `
     <div class="card" style="margin-bottom:24px;">
       <h3 style="margin-top:0;">Metas de Estudo — Semana Atual (${fmtData(meta.inicio)}–${fmtData(meta.fim)})</h3>
       <div style="display:flex; gap:32px; flex-wrap:wrap; margin-bottom:16px;">
         <div style="flex:1; min-width:220px;">
-          <p style="margin:0;">Horas estudadas: <strong>${meta.horasTotais}h</strong> / ${metaHoras}h</p>
-          ${barra(meta.horasTotais, metaHoras, "#1f3864")}
+          <p style="margin:0;">Horas estudadas: <strong>${meta.horasTotais}h</strong> / ${metaHoras}h${badgeMeta(meta.horasTotais, metaHoras, "h", (v) => Math.round(v * 10) / 10)}</p>
+          ${barra(meta.horasTotais, metaHoras)}
         </div>
         <div style="flex:1; min-width:220px;">
-          <p style="margin:0;">Questões resolvidas: <strong>${meta.questoesTotais}</strong> / ${metaQuestoes}</p>
-          ${barra(meta.questoesTotais, metaQuestoes, "#2e7d32")}
+          <p style="margin:0;">Questões resolvidas: <strong>${meta.questoesTotais}</strong> / ${metaQuestoes}${badgeMeta(meta.questoesTotais, metaQuestoes, " questões", (v) => v)}</p>
+          ${barra(meta.questoesTotais, metaQuestoes)}
         </div>
       </div>
       <div style="display:flex; gap:8px; margin-bottom:8px;">
