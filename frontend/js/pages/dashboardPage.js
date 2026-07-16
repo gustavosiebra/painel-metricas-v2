@@ -119,6 +119,17 @@ export async function renderDashboardPage(container) {
           onclone: (clonedDoc) => {
             const header = clonedDoc.querySelector(".print-header");
             if (header) header.style.display = "block";
+            // Metas de Estudo (13/07/2026, pedido do usuário): na tela só um
+            // gráfico aparece por vez (toggle Horas/Questões — formato que o
+            // usuário preferiu manter), mas os DOIS já ficam sempre desenhados
+            // por baixo, só escondidos via display:none. onclone mexe numa
+            // cópia isolada do DOM que só existe pra virar a imagem — forçar
+            // os dois blocos visíveis aqui não muda nada na tela real do
+            // usuário, então a exportação leva ambos sem nenhum flicker.
+            const blocoHoras = clonedDoc.querySelector("#meta-semanal-bloco-horas");
+            const blocoQuestoes = clonedDoc.querySelector("#meta-semanal-bloco-questoes");
+            if (blocoHoras) blocoHoras.style.display = "block";
+            if (blocoQuestoes) blocoQuestoes.style.display = "block";
           },
         });
         const hoje = new Date().toISOString().slice(0, 10);
@@ -217,13 +228,33 @@ export async function renderDashboardPage(container) {
 
   // Cada gráfico é isolado no próprio try/catch: um erro de desenho (ex.:
   // Chart.js não carregado) não pode derrubar os outros gráficos do dashboard.
-  // Meta de Estudo Semanal — sempre desenha os DOIS gráficos empilhados
-  // (Horas e Questões), sem toggle (13/07/2026, pedido do usuário: com
-  // toggle, Exportar Imagem só capturava o que estivesse selecionado no
-  // momento do clique; com os dois sempre visíveis, a exportação leva
-  // ambos juntos, sem precisar de lógica especial só pra exportação).
+  // Meta de Estudo Semanal — os DOIS gráficos (Horas e Questões) são SEMPRE
+  // desenhados (13/07/2026), mesmo que só um apareça na tela por vez; o
+  // toggle abaixo só troca qual bloco fica visível (display), sem redesenhar
+  // nada. Isso preserva o formato em toggle que o usuário preferiu manter,
+  // e ainda garante que a Exportar Imagem tenha os dois prontos pra revelar
+  // (ver onclone no botão de exportar).
   tentarDesenhar(content, "meta-semanal-chart-horas", () => renderChartMetaSemanal(content.querySelector("#meta-semanal-chart-horas"), metaSemanal.porDia, "horas"));
   tentarDesenhar(content, "meta-semanal-chart-questoes", () => renderChartMetaSemanal(content.querySelector("#meta-semanal-chart-questoes"), metaSemanal.porDia, "questoes"));
+
+  const metaBtnHoras = content.querySelector("#meta-toggle-horas");
+  const metaBtnQuestoes = content.querySelector("#meta-toggle-questoes");
+  const metaBlocoHoras = content.querySelector("#meta-semanal-bloco-horas");
+  const metaBlocoQuestoes = content.querySelector("#meta-semanal-bloco-questoes");
+  function estilizarToggle(btn, ativo) {
+    btn.style.background = ativo ? "var(--color-primary)" : "var(--color-surface)";
+    btn.style.color = ativo ? "#fff" : "var(--color-primary)";
+    btn.style.border = ativo ? "1px solid var(--color-primary)" : "1px solid var(--color-border)";
+  }
+  function selecionarMetaMetrica(metrica) {
+    estilizarToggle(metaBtnHoras, metrica === "horas");
+    estilizarToggle(metaBtnQuestoes, metrica === "questoes");
+    metaBlocoHoras.style.display = metrica === "horas" ? "block" : "none";
+    metaBlocoQuestoes.style.display = metrica === "questoes" ? "block" : "none";
+  }
+  selecionarMetaMetrica("horas");
+  metaBtnHoras.addEventListener("click", () => selecionarMetaMetrica("horas"));
+  metaBtnQuestoes.addEventListener("click", () => selecionarMetaMetrica("questoes"));
 
   if (tendenciaSemanal.semanas.length > 0) {
     tentarDesenhar(content, "media-movel-chart", () => renderChartMediaMovel(content.querySelector("#media-movel-chart"), tendenciaSemanal.semanas, tendenciaMinQuestoes));
@@ -378,10 +409,20 @@ function renderMetaSemanal(meta, metaHoras, metaQuestoes) {
           ${barra(meta.questoesTotais, metaQuestoes)}
         </div>
       </div>
-      <p style="margin:16px 0 4px; font-weight:600;">Horas por dia</p>
-      <canvas id="meta-semanal-chart-horas" height="90"></canvas>
-      <p style="margin:16px 0 4px; font-weight:600;">Questões por dia</p>
-      <canvas id="meta-semanal-chart-questoes" height="90"></canvas>
+      <div style="display:flex; gap:8px; margin-bottom:8px;">
+        <button type="button" id="meta-toggle-horas" class="btn" style="width:auto; padding:6px 14px;">Horas</button>
+        <button type="button" id="meta-toggle-questoes" class="btn" style="width:auto; padding:6px 14px;">Questões</button>
+      </div>
+      <!-- Os dois blocos ficam sempre desenhados (ver renderDashboardPage) —
+           só a exibição alterna via toggle. Assim a Exportar Imagem consegue
+           revelar os dois na hora de gerar a imagem (onclone), sem precisar
+           redesenhar nada nem mudar o que aparece na tela real. -->
+      <div id="meta-semanal-bloco-horas">
+        <canvas id="meta-semanal-chart-horas" height="90"></canvas>
+      </div>
+      <div id="meta-semanal-bloco-questoes" style="display:none;">
+        <canvas id="meta-semanal-chart-questoes" height="90"></canvas>
+      </div>
     </div>
   `;
 }
