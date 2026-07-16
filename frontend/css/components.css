@@ -418,19 +418,17 @@
   }
 }
 
-/* 16/07/2026 — a causa real do "preciso dar zoom/ajustar manualmente" no
-   celular: 2 colunas de até 200px + 16px de gap pedem até 416px de largura,
-   mas um iPhone comum (375px de tela, ~359px úteis depois do padding) só
-   tem ~359px disponíveis. minmax(0,200px) permite ENCOLHER até 0, mas não
-   distribui automaticamente o espaço sobrando (isso é o que unidades fr
-   fariam, não minmax fixo) — então a grade simplesmente estourava a tela e
-   ficava parcialmente cortada, exigindo pinça pra ver o resto. Abaixo de
-   480px (mesmo ponto de corte já usado em layout.css pro padding do
-   conteúdo) cai pra 1 coluna — cada cartão vira 100% da largura disponível,
-   nunca estoura, não depende de fazer conta nenhuma. */
+/* 16/07/2026 — revisão: 1 coluna só (tentativa anterior) resolvia o overflow
+   mas o usuário prefere manter 2 colunas sempre, mesmo em tela estreita
+   (10 cartões = 5 fileiras de 2, não 10 fileiras de 1). O problema nunca foi
+   o número de colunas — foi minmax(0,200px), que trava um TETO fixo de 200px
+   por coluna sem redistribuir a sobra. Trocando pra minmax(0,1fr): a coluna
+   sempre ocupa exatamente metade do espaço disponível, ela própria calcula o
+   quanto cabe — nunca estoura, não interessa a largura da tela. */
 @media (max-width: 480px) {
   .kpi-grid {
-    grid-template-columns: minmax(0, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--spacing-2);
   }
 }
 

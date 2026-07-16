@@ -13,6 +13,21 @@
   min-height: 100vh;
 }
 
+/* 16/07/2026 — a causa raiz real do "preciso arrastar pra ver tudo": .app-shell
+   e o wrapper interno (flex:1, inline em cada page*.js) são flex containers, e
+   um item de flex sem min-width:0 tem min-width:auto por padrão — ou seja, ELE
+   NÃO ENCOLHE além do maior conteúdo não-quebrável lá dentro, não importa
+   quantos níveis de flex-wrap existam nos filhos. Uma tabela larga (ex.:
+   Ranking de Risco, 5 colunas) em QUALQUER lugar dentro de .app-shell podia
+   forçar a página inteira (body) a ficar mais larga que a tela, mesmo essa
+   tabela tendo seu próprio overflow-x:auto — o overflow local não importa se o
+   ANCESTRAL já cresceu além do viewport. min-width:0 quebra essa corrente:
+   cada nível passa a poder encolher de verdade, e cada overflow-x:auto interno
+   passa a conter sua própria rolagem em vez de vazar pra página toda. */
+.app-shell > * {
+  min-width: 0;
+}
+
 .app-topbar {
   display: flex;
   align-items: center;
@@ -26,6 +41,7 @@
 
 .app-content {
   flex: 1;
+  min-width: 0;
   padding: var(--spacing-4);
   max-width: 1100px;
   margin: 0 auto;
