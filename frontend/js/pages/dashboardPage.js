@@ -64,7 +64,10 @@ let chartHorasInstance = null;
 let chartHorasTipoInstance = null;
 let chartRetencaoInstance = null;
 let chartHorasSemanaisInstance = null;
-let chartMetaSemanalInstance = null;
+// Objeto (não uma única variável) porque agora são DOIS canvases fixos
+// (Horas e Questões, sempre visíveis) em vez de um só alternado por toggle —
+// cada canvas.id vira uma chave, pra destruir/recriar só a instância certa.
+const chartMetaSemanalInstances = {};
 
 export async function renderDashboardPage(container) {
   // Sem H2 "Dashboard" na página (pedido do usuário, 03/07/2026) — o nome já
@@ -214,32 +217,13 @@ export async function renderDashboardPage(container) {
 
   // Cada gráfico é isolado no próprio try/catch: um erro de desenho (ex.:
   // Chart.js não carregado) não pode derrubar os outros gráficos do dashboard.
-  // Meta de Estudo Semanal — sempre desenha (7 dias fixos, mesmo que todos
-  // zerados, diferente dos gráficos abaixo que só desenham com dado real).
-  let metaMetricaAtual = "horas";
-  tentarDesenhar(content, "meta-semanal-chart", () => renderChartMetaSemanal(content.querySelector("#meta-semanal-chart"), metaSemanal.porDia, metaMetricaAtual));
-  const metaBtnHoras = content.querySelector("#meta-toggle-horas");
-  const metaBtnQuestoes = content.querySelector("#meta-toggle-questoes");
-  function estilizarToggle(btn, ativo) {
-    btn.style.background = ativo ? "var(--color-primary)" : "var(--color-surface)";
-    btn.style.color = ativo ? "#fff" : "var(--color-primary)";
-    btn.style.border = ativo ? "1px solid var(--color-primary)" : "1px solid var(--color-border)";
-  }
-  function atualizarMetaToggle() {
-    estilizarToggle(metaBtnHoras, metaMetricaAtual === "horas");
-    estilizarToggle(metaBtnQuestoes, metaMetricaAtual === "questoes");
-  }
-  atualizarMetaToggle();
-  metaBtnHoras.addEventListener("click", () => {
-    metaMetricaAtual = "horas";
-    atualizarMetaToggle();
-    tentarDesenhar(content, "meta-semanal-chart", () => renderChartMetaSemanal(content.querySelector("#meta-semanal-chart"), metaSemanal.porDia, metaMetricaAtual));
-  });
-  metaBtnQuestoes.addEventListener("click", () => {
-    metaMetricaAtual = "questoes";
-    atualizarMetaToggle();
-    tentarDesenhar(content, "meta-semanal-chart", () => renderChartMetaSemanal(content.querySelector("#meta-semanal-chart"), metaSemanal.porDia, metaMetricaAtual));
-  });
+  // Meta de Estudo Semanal — sempre desenha os DOIS gráficos empilhados
+  // (Horas e Questões), sem toggle (13/07/2026, pedido do usuário: com
+  // toggle, Exportar Imagem só capturava o que estivesse selecionado no
+  // momento do clique; com os dois sempre visíveis, a exportação leva
+  // ambos juntos, sem precisar de lógica especial só pra exportação).
+  tentarDesenhar(content, "meta-semanal-chart-horas", () => renderChartMetaSemanal(content.querySelector("#meta-semanal-chart-horas"), metaSemanal.porDia, "horas"));
+  tentarDesenhar(content, "meta-semanal-chart-questoes", () => renderChartMetaSemanal(content.querySelector("#meta-semanal-chart-questoes"), metaSemanal.porDia, "questoes"));
 
   if (tendenciaSemanal.semanas.length > 0) {
     tentarDesenhar(content, "media-movel-chart", () => renderChartMediaMovel(content.querySelector("#media-movel-chart"), tendenciaSemanal.semanas, tendenciaMinQuestoes));
@@ -394,11 +378,10 @@ function renderMetaSemanal(meta, metaHoras, metaQuestoes) {
           ${barra(meta.questoesTotais, metaQuestoes)}
         </div>
       </div>
-      <div style="display:flex; gap:8px; margin-bottom:8px;">
-        <button type="button" id="meta-toggle-horas" class="btn" style="width:auto; padding:6px 14px;">Horas</button>
-        <button type="button" id="meta-toggle-questoes" class="btn" style="width:auto; padding:6px 14px;">Questões</button>
-      </div>
-      <canvas id="meta-semanal-chart" height="90"></canvas>
+      <p style="margin:16px 0 4px; font-weight:600;">Horas por dia</p>
+      <canvas id="meta-semanal-chart-horas" height="90"></canvas>
+      <p style="margin:16px 0 4px; font-weight:600;">Questões por dia</p>
+      <canvas id="meta-semanal-chart-questoes" height="90"></canvas>
     </div>
   `;
 }
@@ -920,13 +903,13 @@ function renderChartHorasSemanais(canvas, semanas) {
 // Meta de Estudo Semanal (13/07/2026) — barras por dia da semana civil atual
 // (domingo a sábado), alternando Horas/Questões pelos botões de toggle.
 function renderChartMetaSemanal(canvas, porDia, metrica) {
-  if (chartMetaSemanalInstance) {
-    chartMetaSemanalInstance.destroy();
-    chartMetaSemanalInstance = null;
+  if (chartMetaSemanalInstances[canvas.id]) {
+    chartMetaSemanalInstances[canvas.id].destroy();
+    chartMetaSemanalInstances[canvas.id] = null;
   }
   const DIAS = ["DOM", "SEG", "TER", "QUA", "QUI", "SEX", "SAB"];
   const dados = porDia.map((d) => (metrica === "horas" ? d.horas : d.questoes));
-  chartMetaSemanalInstance = new Chart(canvas, {
+  chartMetaSemanalInstances[canvas.id] = new Chart(canvas, {
     type: "bar",
     data: {
       labels: DIAS,
