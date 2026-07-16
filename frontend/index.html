@@ -4,6 +4,30 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Painel de Métricas dos Estudos</title>
+
+  <!-- Ícones (16/07/2026) — favicon, PWA (manifest.json) e apple-touch-icon.
+       apple-touch-icon precisa de fundo sólido (não transparente): iOS
+       renderiza transparência como preto no ícone da tela inicial. -->
+  <link rel="icon" type="image/x-icon" href="assets/icons/favicon.ico" />
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/icons/favicon-32.png" />
+  <link rel="icon" type="image/png" sizes="16x16" href="assets/icons/favicon-16.png" />
+  <link rel="apple-touch-icon" sizes="180x180" href="assets/icons/apple-touch-icon.png" />
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#1f3864" />
+
+  <!-- Preview ao compartilhar o link (WhatsApp, redes) — Open Graph + Twitter
+       Card. og:image usa URL absoluta (obrigatório para a maioria dos
+       leitores de preview, que não resolvem caminho relativo). -->
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Painel de Métricas dos Estudos" />
+  <meta property="og:description" content="Acompanhamento de estudos para concursos públicos." />
+  <meta property="og:image" content="https://gustavosiebra.github.io/painel-metricas-v2/assets/icons/og-image.png" />
+  <meta property="og:url" content="https://gustavosiebra.github.io/painel-metricas-v2/" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Painel de Métricas dos Estudos" />
+  <meta name="twitter:description" content="Acompanhamento de estudos para concursos públicos." />
+  <meta name="twitter:image" content="https://gustavosiebra.github.io/painel-metricas-v2/assets/icons/og-image.png" />
+
   <link rel="stylesheet" href="css/base.css" />
   <link rel="stylesheet" href="css/layout.css" />
   <link rel="stylesheet" href="css/components.css" />
