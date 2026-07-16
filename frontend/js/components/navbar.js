@@ -42,8 +42,9 @@ export function renderNavbar(activeRoute) {
   return `
     <header class="app-topbar">
       <div class="navbar-left">
+        <button type="button" id="nav-toggle" class="nav-toggle" aria-label="Abrir menu" aria-expanded="false" aria-controls="app-nav">☰</button>
         <a href="#/dashboard" class="nav-link nav-link--brand${activeRoute === "/dashboard" ? " nav-link--active" : ""}" data-path="/dashboard"><strong>Painel de Métricas</strong></a>
-        <nav class="app-nav">${linksHtml}</nav>
+        <nav class="app-nav" id="app-nav">${linksHtml}</nav>
       </div>
       <div class="navbar-right">
         <a href="#/parametros" class="settings-link${activeRoute === "/parametros" ? " nav-link--active" : ""}" data-path="/parametros" title="Configurações">⚙</a>
@@ -56,9 +57,25 @@ export function renderNavbar(activeRoute) {
 }
 
 export function wireNavbar(container) {
+  const appNav = container.querySelector("#app-nav");
+  const navToggle = container.querySelector("#nav-toggle");
+  if (navToggle && appNav) {
+    navToggle.addEventListener("click", () => {
+      const aberto = appNav.classList.toggle("app-nav--open");
+      navToggle.setAttribute("aria-expanded", String(aberto));
+    });
+  }
+
   container.querySelectorAll(".nav-link").forEach((el) => {
     el.addEventListener("click", (e) => {
       e.preventDefault();
+      // Fecha o menu mobile ao navegar (13/07/2026) — sem isso, o menu
+      // aberto atravessava pra tela seguinte, sobrando visível por cima
+      // do conteúdo novo até o usuário fechar manualmente.
+      if (appNav) {
+        appNav.classList.remove("app-nav--open");
+        if (navToggle) navToggle.setAttribute("aria-expanded", "false");
+      }
       navigate(el.dataset.path);
     });
   });

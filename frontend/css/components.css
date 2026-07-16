@@ -222,6 +222,43 @@
   color: #fff;
 }
 
+/* Menu hamburguer (13/07/2026, pedido do usuário — em celulares pequenos as
+   abas "Nova Sessão Sessões Catálogo Planejamento Prioridade" estouravam a
+   largura e "Histórico" quebrava sozinho numa 2ª linha, feio e confuso).
+   Escondido em telas largas (o menu continua inline, sem mudança nenhuma);
+   abaixo de 640px vira o único jeito de abrir a lista de abas, que passa a
+   ficar fechada por padrão até o clique. */
+.nav-toggle {
+  display: none;
+  background: none;
+  border: none;
+  color: #fff;
+  font-size: 22px;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+}
+
+@media (max-width: 640px) {
+  .nav-toggle {
+    display: block;
+  }
+  .app-nav {
+    display: none;
+    width: 100%;
+    flex-direction: column;
+    gap: 0;
+    margin-top: var(--spacing-2);
+  }
+  .app-nav.app-nav--open {
+    display: flex;
+  }
+  .app-nav .nav-link {
+    padding: var(--spacing-2) 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+  }
+}
+
 /* Sub-abas dentro de uma página (05/07/2026) — usado no Catálogo pra separar
    Cadastro (Concurso/Banca/Disciplina/Caderno) de Peso, sem virar duas
    entradas na navbar principal. */
