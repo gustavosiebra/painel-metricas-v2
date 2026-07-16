@@ -51,47 +51,47 @@ export async function renderParametersPage(container) {
         <h3 style="margin-top:0;">Limiares e Janelas</h3>
         <form id="thresholds-form">
           <div class="form-field">
-            <label>Wilson — Consolidado a partir de (%)</label>
+            <label for="th_consolidado">Wilson — Consolidado a partir de (%)</label>
             <input type="number" id="th_consolidado" min="0" max="100" step="0.1" value="${p.wilson_thresholds.consolidado}" />
           </div>
           <div class="form-field">
-            <label>Wilson — Atenção a partir de (%)</label>
+            <label for="th_atencao">Wilson — Atenção a partir de (%)</label>
             <input type="number" id="th_atencao" min="0" max="100" step="0.1" value="${p.wilson_thresholds.atencao}" />
           </div>
           <div class="form-field">
-            <label>N mínimo — Diagnóstico (questões)</label>
+            <label for="th_min_n_diag">N mínimo — Diagnóstico (questões)</label>
             <input type="number" id="th_min_n_diag" min="1" step="1" value="${p.diagnostico_min_n}" />
           </div>
           <div class="form-field">
-            <label>N mínimo — Estabilidade (sessões)</label>
+            <label for="th_min_n_estab">N mínimo — Estabilidade (sessões)</label>
             <input type="number" id="th_min_n_estab" min="1" step="1" value="${p.estabilidade_min_n}" />
           </div>
           <div class="form-field">
-            <label>Janela de Tendência — curta (questões)</label>
+            <label for="th_janela_curta">Janela de Tendência — curta (questões)</label>
             <input type="number" id="th_janela_curta" min="1" step="1" value="${p.janela_tendencia.curta}" />
           </div>
           <div class="form-field">
-            <label>Janela de Tendência — longa (questões)</label>
+            <label for="th_janela_longa">Janela de Tendência — longa (questões)</label>
             <input type="number" id="th_janela_longa" min="1" step="1" value="${p.janela_tendencia.longa}" />
           </div>
           <div class="form-field">
-            <label>Produtividade recente — janela (dias)</label>
+            <label for="th_produtividade_janela">Produtividade recente — janela (dias)</label>
             <input type="number" id="th_produtividade_janela" min="1" step="1" value="${p.produtividade_janela_dias}" />
           </div>
           <div class="form-field">
-            <label>Tendência Semanal — mínimo de questões por semana</label>
+            <label for="th_tendencia_min_questoes">Tendência Semanal — mínimo de questões por semana</label>
             <input type="number" id="th_tendencia_min_questoes" min="1" step="1" value="${p.tendencia_semanal_min_questoes}" />
           </div>
           <div class="form-field">
-            <label>Meta semanal — horas de estudo</label>
+            <label for="th_meta_horas">Meta semanal — horas de estudo</label>
             <input type="number" id="th_meta_horas" min="0" step="0.5" value="${p.meta_semanal_horas}" />
           </div>
           <div class="form-field">
-            <label>Meta semanal — questões resolvidas</label>
+            <label for="th_meta_questoes">Meta semanal — questões resolvidas</label>
             <input type="number" id="th_meta_questoes" min="0" step="1" value="${p.meta_semanal_questoes}" />
           </div>
           <div class="form-field">
-            <label>Faixas de Retenção (dias desde o último toque no caderno)</label>
+            <label class="form-field-heading">Faixas de Retenção (dias desde o último toque no caderno)</label>
             <div id="retencao-buckets"></div>
             <button type="button" id="add-bucket" class="btn-link">+ adicionar faixa</button>
           </div>
@@ -157,8 +157,8 @@ export async function renderParametersPage(container) {
   function bucketRowHtml(b) {
     return `
       <div class="bucket-row" style="display:flex; gap:8px; margin-bottom:8px; align-items:center;">
-        <input type="number" class="bucket-max" placeholder="Até quantos dias (vazio = sem teto)" min="0" step="1" value="${b.max ?? ""}" style="flex:1;" />
-        <input type="text" class="bucket-label" placeholder="Rótulo" value="${escapeHtml(b.label || "")}" style="flex:1;" />
+        <input type="number" class="bucket-max" name="bucket_max" aria-label="Até quantos dias" placeholder="Até quantos dias (vazio = sem teto)" min="0" step="1" value="${b.max ?? ""}" style="flex:1;" />
+        <input type="text" class="bucket-label" name="bucket_label" aria-label="Rótulo da faixa" placeholder="Rótulo" value="${escapeHtml(b.label || "")}" style="flex:1;" />
         <button type="button" class="btn-link remove-bucket">Remover</button>
       </div>
     `;
@@ -185,12 +185,12 @@ export async function renderParametersPage(container) {
         <p style="color:var(--color-text-muted);">Alimenta a Calibração de Confiança. Texto de ação recomendada é seu — escreva como preferir.</p>
         <form id="risk-rule-form" style="margin-bottom:16px;">
           <div style="display:flex; gap:8px; flex-wrap:wrap;">
-            <select id="rr_learning_level">${LEARNING_LEVELS.map((l) => `<option value="${l}">${l}</option>`).join("")}</select>
-            <select id="rr_weight">${WEIGHTS.map((w) => `<option value="${w}">${w}</option>`).join("")}</select>
-            <select id="rr_risk">${RISK_LEVELS.map((r) => `<option value="${r}">${r}</option>`).join("")}</select>
+            <select id="rr_learning_level" aria-label="Situação">${LEARNING_LEVELS.map((l) => `<option value="${l}">${l}</option>`).join("")}</select>
+            <select id="rr_weight" aria-label="Peso">${WEIGHTS.map((w) => `<option value="${w}">${w}</option>`).join("")}</select>
+            <select id="rr_risk" aria-label="Risco">${RISK_LEVELS.map((r) => `<option value="${r}">${r}</option>`).join("")}</select>
           </div>
           <div class="form-field" style="margin-top:8px;">
-            <input type="text" id="rr_action" placeholder="Ação recomendada" style="width:100%; padding:8px; border:1px solid var(--color-border); border-radius:var(--radius);" />
+            <input type="text" id="rr_action" aria-label="Ação recomendada" placeholder="Ação recomendada" style="width:100%; padding:8px; border:1px solid var(--color-border); border-radius:var(--radius);" />
           </div>
           <button type="submit" class="btn" style="width:auto; padding:8px 16px;">Salvar regra</button>
         </form>

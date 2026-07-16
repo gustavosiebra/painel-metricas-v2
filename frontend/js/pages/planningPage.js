@@ -123,16 +123,16 @@ export async function renderPlanningPage(container) {
       <div class="card" style="margin-bottom:16px; max-width:640px; background:var(--color-bg-subtle, #f5f5f5);">
         <h3 style="margin-top:0;">${escapeHtml(e.name)}</h3>
         <div class="form-field">
-          <label>Data da prova</label>
-          <input type="date" class="edit-exam-date" value="${e.exam_date || ""}" />
+          <label for="edit-exam-date-${e.id}">Data da prova</label>
+          <input type="date" id="edit-exam-date-${e.id}" class="edit-exam-date" value="${e.exam_date || ""}" />
         </div>
         <div class="form-field">
-          <label>Prazo de inscrição</label>
-          <input type="date" class="edit-registration-date" value="${e.registration_date || ""}" />
+          <label for="edit-registration-date-${e.id}">Prazo de inscrição</label>
+          <input type="date" id="edit-registration-date-${e.id}" class="edit-registration-date" value="${e.registration_date || ""}" />
         </div>
         <div class="form-field">
-          <label>Valor da taxa (R$)</label>
-          <input type="number" class="edit-fee" min="0" step="0.01" value="${e.fee_amount ?? ""}" />
+          <label for="edit-fee-${e.id}">Valor da taxa (R$)</label>
+          <input type="number" id="edit-fee-${e.id}" class="edit-fee" min="0" step="0.01" value="${e.fee_amount ?? ""}" />
         </div>
         <button class="btn-link" data-save="${e.id}">Salvar</button>
         &nbsp;|&nbsp;

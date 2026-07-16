@@ -159,7 +159,7 @@ export async function renderStudyFormPage(container, params) {
             <option value="__new__">+ Cadastrar novo concurso…</option>
           </select>
           <div id="new-exam-box" style="display:none; margin-top:8px;">
-            <input type="text" id="new_exam_name" placeholder="Nome do novo concurso" />
+            <input type="text" id="new_exam_name" aria-label="Nome do novo concurso" placeholder="Nome do novo concurso" />
           </div>
         </div>
         <div class="form-field">
@@ -172,7 +172,7 @@ export async function renderStudyFormPage(container, params) {
             <option value="__new__">+ Cadastrar nova banca…</option>
           </select>
           <div id="new-board-box" style="display:none; margin-top:8px;">
-            <input type="text" id="new_board_name" placeholder="Nome da nova banca" />
+            <input type="text" id="new_board_name" aria-label="Nome da nova banca" placeholder="Nome da nova banca" />
           </div>
         </div>
         <div class="form-field" id="board-multi-field" style="display:none;">
@@ -182,7 +182,7 @@ export async function renderStudyFormPage(container, params) {
               .map(
                 (b) => `
               <label>
-                <input type="checkbox" class="board-multi-checkbox" value="${b.id}" ${initialBoardIds.includes(b.id) ? "checked" : ""} />
+                <input type="checkbox" id="board-multi-${b.id}" name="board_multi" class="board-multi-checkbox" value="${b.id}" ${initialBoardIds.includes(b.id) ? "checked" : ""} />
                 ${escapeHtml(b.name)}
               </label>`
               )
@@ -198,7 +198,7 @@ export async function renderStudyFormPage(container, params) {
             <option value="__new__">+ Cadastrar nova disciplina…</option>
           </select>
           <div id="new-discipline-box" style="display:none; margin-top:8px;">
-            <input type="text" id="new_discipline_name" placeholder="Nome da nova disciplina" />
+            <input type="text" id="new_discipline_name" aria-label="Nome da nova disciplina" placeholder="Nome da nova disciplina" />
           </div>
         </div>
         <div class="card" id="weight-shortcut-box" style="display:none; margin:8px 0; padding:12px; background:var(--color-bg-subtle, #f5f5f5);">
@@ -222,7 +222,7 @@ export async function renderStudyFormPage(container, params) {
             <option value="" disabled selected>Selecione a disciplina primeiro…</option>
           </select>
           <div id="new-caderno-box" style="display:none; margin-top:8px;">
-            <input type="text" id="new_caderno_name" placeholder="Nome do novo caderno" />
+            <input type="text" id="new_caderno_name" aria-label="Nome do novo caderno" placeholder="Nome do novo caderno" />
           </div>
         </div>
         <div id="measurable-fields" style="display:none;">
@@ -235,7 +235,7 @@ export async function renderStudyFormPage(container, params) {
             <input type="number" id="correct_total" min="0" step="1" value="${result?.correct_total ?? ""}" />
           </div>
           <div class="form-field">
-            <label>Erros (calculado)</label>
+            <label for="wrong_total_display">Erros (calculado)</label>
             <input type="text" id="wrong_total_display" disabled value="${result?.wrong_total ?? 0}" />
           </div>
           <div class="form-field" id="score-field" style="display:none;">

@@ -266,7 +266,7 @@ function renderSection({ titulo, itens, userId, colunasExtra, filtroDisciplina, 
     tipo === "questionSet" && filtroDisciplina && filtroDisciplina.length > 0
       ? `
         <div class="form-field" style="max-width:280px; margin-bottom:0; margin-right:12px;">
-          <select data-filter-discipline>
+          <select data-filter-discipline id="filter-discipline-${tipo}" aria-label="Filtrar por disciplina">
             <option value="">Escolha uma disciplina…</option>
             ${filtroDisciplina.map((d) => `<option value="${d.id}">${escapeHtml(d.name)}</option>`).join("")}
           </select>
@@ -285,7 +285,7 @@ function renderSection({ titulo, itens, userId, colunasExtra, filtroDisciplina, 
         <div style="display:flex; align-items:end; flex-wrap:wrap; margin-bottom:8px;">
           ${filtroDisciplinaHtml}
           <div class="form-field" style="max-width:320px; margin-bottom:0;">
-            <input type="text" data-filter-input="${tipo}" placeholder="Buscar por nome..." />
+            <input type="text" data-filter-input="${tipo}" id="filter-input-${tipo}" aria-label="Buscar por nome" placeholder="Buscar por nome..." />
           </div>
         </div>
         ${placeholderHtml}
@@ -387,13 +387,13 @@ async function carregarPeso(container, userId) {
         <td>${escapeHtml(r.concurso_nome || "—")}</td>
         <td>${escapeHtml(r.disciplina_nome || "—")}</td>
         <td>
-          <select class="edit-weight">
+          <select class="edit-weight" name="edit_weight" aria-label="Peso">
             <option value="baixo" ${r.weight === "baixo" ? "selected" : ""}>Baixo</option>
             <option value="alto" ${r.weight === "alto" ? "selected" : ""}>Alto</option>
           </select>
         </td>
-        <td><input type="number" class="edit-target" min="0" max="100" step="0.1" value="${r.target_accuracy ?? ""}" style="width:80px;" /></td>
-        <td><input type="number" class="edit-expected" min="0" step="1" value="${r.expected_questions ?? ""}" style="width:80px;" /></td>
+        <td><input type="number" class="edit-target" name="edit_target" aria-label="Meta de acerto (%)" min="0" max="100" step="0.1" value="${r.target_accuracy ?? ""}" style="width:80px;" /></td>
+        <td><input type="number" class="edit-expected" name="edit_expected" aria-label="Questões esperadas" min="0" step="1" value="${r.expected_questions ?? ""}" style="width:80px;" /></td>
         <td>${wilsonText}</td>
         <td>${escapeHtml(r.classificacao || "—")}</td>
         <td>
