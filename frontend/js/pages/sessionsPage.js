@@ -168,13 +168,15 @@ export async function renderSessionsPage(container) {
             <td>${desempenho}</td>
             <td>${s.duration_minutes} min</td>
             <td>
-              <button class="btn-link" data-edit="${s.id}">Editar</button>
-              &nbsp;|&nbsp;
-              <button class="btn-link" data-toggle="${s.id}" data-next-status="${isArchived ? "ativo" : "inativo"}">
-                ${isArchived ? "Reativar" : "Arquivar"}
-              </button>
-              &nbsp;|&nbsp;
-              <button class="btn-link" style="color:var(--color-error);" data-delete="${s.id}">Apagar definitivamente</button>
+              <div class="row-actions">
+                <button class="btn-link" data-edit="${s.id}">Editar</button>
+                <span class="row-actions__sep">|</span>
+                <button class="btn-link" data-toggle="${s.id}" data-next-status="${isArchived ? "ativo" : "inativo"}">
+                  ${isArchived ? "Reativar" : "Arquivar"}
+                </button>
+                <span class="row-actions__sep">|</span>
+                <button class="btn-link" style="color:var(--color-error);" data-delete="${s.id}">Apagar definitivamente</button>
+              </div>
             </td>
           </tr>
         `;

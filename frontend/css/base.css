@@ -27,6 +27,14 @@ html, body {
   margin: 0;
   padding: 0;
   height: 100%;
+  /* Trava de segurança (16/07/2026) — em mobile, campos nativos (input
+     type="date" no Safari/iOS, principalmente) podem renderizar alguns
+     pixels mais largos que o container mesmo com width:100%, e sem isso a
+     página inteira ganha um scroll horizontal fantasma (o sintoma reportado:
+     "a data está extrapolando a tela"). Nada nesta app depende de rolagem
+     horizontal na página — tabelas que precisam disso já têm seu próprio
+     container com overflow-x:auto (ver sessionsPage.js/historyPage.js/etc). */
+  overflow-x: hidden;
 }
 
 body {

@@ -57,6 +57,14 @@
   outline-offset: 1px;
 }
 
+/* input[type=date] no Safari/iOS (16/07/2026) — o controle nativo de data
+   tem um min-width interno que às vezes vence o width:100% herdado de
+   .form-field input, empurrando a caixa pra fora do container. min-width:0
+   remove esse piso e deixa o width:100% mandar de verdade. */
+.form-field input[type="date"] {
+  min-width: 0;
+}
+
 /* Campo em erro (05/07/2026) — ex.: nome duplicado ao cadastrar Concurso/
    Banca/Disciplina/Caderno sob demanda em Nova Sessão. Some sozinho quando o
    campo recebe um novo input (ver studyFormPage.js). */
@@ -257,6 +265,38 @@
     padding: var(--spacing-2) 0;
     border-bottom: 1px solid rgba(255, 255, 255, 0.15);
   }
+
+  /* Configurações/nome/Sair (16/07/2026, pedido do usuário) — em telas
+     largas .navbar-right fica fixo à direita da topbar (sem mudança). Em
+     mobile, ficava visível na topbar O TEMPO TODO e, ao abrir o menu
+     hamburguer, o wrap do flexbox empurrava o mesmo bloco pra baixo do menu
+     — dando a impressão de estar duplicado em dois lugares. Agora fica
+     escondido por padrão e só aparece (dentro do próprio menu) quando o
+     hamburguer está aberto: :has() detecta o estado do #app-nav dentro de
+     .navbar-left e revela o irmão .navbar-right. Um só lugar, um só estado. */
+  .navbar-right {
+    display: none;
+  }
+
+  .navbar-left:has(#app-nav.app-nav--open) + .navbar-right {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--spacing-2);
+    width: 100%;
+    padding-top: var(--spacing-2);
+    margin-top: var(--spacing-2);
+    border-top: 1px solid rgba(255, 255, 255, 0.15);
+  }
+
+  .navbar-left:has(#app-nav.app-nav--open) + .navbar-right .settings-link {
+    margin-right: 0;
+  }
+
+  .navbar-left:has(#app-nav.app-nav--open) + .navbar-right .settings-link::after {
+    content: " Configurações";
+    font-size: 14px;
+  }
 }
 
 /* Sub-abas dentro de uma página (05/07/2026) — usado no Catálogo pra separar
@@ -324,6 +364,40 @@
 .data-table--fixed td {
   overflow-wrap: break-word;
   word-break: break-word;
+}
+
+/* Coluna Ações com múltiplos links (16/07/2026) — em telas largas continua
+   uma linha só com "|" separando (Editar | Arquivar | Apagar), igual antes.
+   Abaixo de 640px a coluna Ações fica estreita demais pra três links lado a
+   lado (bug reportado: "editar/arquivar/apagar" quebrando no meio da
+   palavra, com "|" soltos). Empilha em coluna, some com os separadores (não
+   fazem sentido entre linhas) e dá padding vertical pra cada link virar um
+   alvo de toque decente. */
+.row-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.row-actions__sep {
+  color: var(--color-border);
+}
+
+@media (max-width: 640px) {
+  .row-actions {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0;
+  }
+
+  .row-actions__sep {
+    display: none;
+  }
+
+  .row-actions .btn-link {
+    padding: 5px 0;
+  }
 }
 
 /* Fase 6 — Dashboard. 10 cartões fixos (6 KPI + 4 Situação): 5 colunas fixas
@@ -428,4 +502,22 @@
   margin: 0;
   font-size: 12px;
   color: var(--color-text-muted);
+}
+
+/* Toolbar do Dashboard (+ Nova Sessão / Exportar Imagem). Alinhada à direita
+   em telas largas (padrão de ação de página); abaixo de 640px centraliza
+   (16/07/2026, pedido do usuário — em mobile "à direita" ficava com sobra
+   de espaço assimétrica de um lado só, parecia desalinhado). */
+.dashboard-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: var(--spacing-3);
+}
+
+@media (max-width: 640px) {
+  .dashboard-toolbar {
+    justify-content: center;
+  }
 }

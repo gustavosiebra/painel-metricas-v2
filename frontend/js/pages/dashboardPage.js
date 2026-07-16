@@ -81,7 +81,7 @@ export async function renderDashboardPage(container) {
             <h1>Painel de Métricas — Dashboard</h1>
             <p>Exportado em ${escapeHtml(new Date().toLocaleString("pt-BR"))}</p>
           </div>
-          <div class="dashboard-toolbar" style="display:flex; justify-content:flex-end; gap:8px; flex-wrap:wrap; margin-bottom:var(--spacing-3);">
+          <div class="dashboard-toolbar">
             <a href="#/sessoes/nova" class="btn" style="width:auto; padding:8px 16px;">+ Nova Sessão</a>
             <button id="export-img-btn" class="btn" style="width:auto; padding:8px 16px; background:var(--color-surface); color:var(--color-primary); border:1px solid var(--color-border);">Exportar Imagem</button>
           </div>
