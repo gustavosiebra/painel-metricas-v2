@@ -33,6 +33,16 @@ function renderCurrent() {
   const renderFn = routes.get(path) || routes.get("/");
   container.innerHTML = "";
   if (renderFn) renderFn(container, params);
+  // 16/07/2026 — achado analisando um vídeo do usuário no celular: como é
+  // uma SPA (só troca o innerHTML, nunca recarrega o document), a posição de
+  // scroll (inclusive horizontal) sobrevive de uma página pra outra. Se uma
+  // tela ficou rolada pra algum lado (ex.: o bug do grid de KPIs no
+  // Dashboard, corrigido em components.css), navegar pra QUALQUER outra
+  // página — mesmo uma sem overflow nenhum — abria já deslocada, cortada,
+  // exigindo ajuste manual. Isso é o motivo real por trás de "eu não queria
+  // ter que ajustar a tela manualmente": não bastava corrigir o elemento que
+  // overflowava, cada navegação precisa resetar a posição de leitura.
+  window.scrollTo(0, 0);
 }
 
 export function startRouter(appContainer, guard) {
