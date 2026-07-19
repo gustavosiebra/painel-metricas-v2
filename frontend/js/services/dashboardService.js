@@ -596,12 +596,33 @@ export async function getHorasSemanais(nSemanas = 12, ultimaDataOverride = null)
 // classificação Wilson por caderno: preliminar/critico/atencao/consolidado.
 const CLASSIFICACOES = ["consolidado", "atencao", "critico", "preliminar"];
 
+// Filtro por caderno ATIVO (19/07/2026) — bug encontrado pelo usuário: clicar
+// num card de Situação (ex.: "Atenção") leva pra Prioridade filtrada, mas às
+// vezes não retorna nada mesmo o card mostrando "1". Causa: v_diagnostico_caderno
+// classifica pelo HISTÓRICO de sessões (não olha se o caderno segue ativo no
+// catálogo), enquanto a tela de Prioridade (v_recorrencia_caderno →
+// v_prioridade_caderno) exige question_sets.status = 'ativo' — um caderno
+// arquivado (Catálogo > Apagar/Arquivar) pode ter classificação Wilson válida
+// (dado histórico real) mas nunca vai aparecer em Prioridade, porque essa
+// tela é sobre o que priorizar ESTUDAR AGORA, não sobre histórico. Verificado
+// no banco (19/07/2026): "Licitação e Contratos Administrativos" tinha
+// classificacao='atencao' em v_diagnostico_caderno mas question_sets.status=
+// 'inativo', ausente de v_recorrencia_caderno. Como o único propósito destes
+// contadores é servir de link pra Prioridade (título do card: "Ver cadernos
+// [situação] em Prioridade"), o contador tem que refletir só o que aquele
+// clique de fato vai conseguir mostrar — daí o filtro por ativo aqui.
 export async function getContadoresSituacao() {
-  const { data, error } = await supabase.from("v_diagnostico_caderno").select("classificacao");
-  if (error) throw error;
+  const [diagResult, cadernosAtivosResult] = await Promise.all([
+    supabase.from("v_diagnostico_caderno").select("question_set_id, classificacao"),
+    supabase.from("question_sets").select("id").eq("status", "ativo"),
+  ]);
+  if (diagResult.error) throw diagResult.error;
+  if (cadernosAtivosResult.error) throw cadernosAtivosResult.error;
 
+  const idsAtivos = new Set((cadernosAtivosResult.data || []).map((q) => q.id));
   const counts = Object.fromEntries(CLASSIFICACOES.map((c) => [c, 0]));
-  for (const row of data || []) {
+  for (const row of diagResult.data || []) {
+    if (!idsAtivos.has(row.question_set_id)) continue;
     if (row.classificacao in counts) counts[row.classificacao] += 1;
   }
   return counts;
