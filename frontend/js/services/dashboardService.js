@@ -6,6 +6,45 @@ import { supabase } from "../supabaseClient.js";
 
 const TYPES_WITH_MEASURABLE_RESULT = ["questao", "simulado", "discursiva", "caderno_erros"];
 
+// 19/07/2026 — helper pra formatar Date como YYYY-MM-DD usando os componentes
+// LOCAIS (getFullYear/getMonth/getDate), nunca .toISOString().slice(0,10).
+// toISOString() converte pra UTC antes de fatiar a string — pra quem está em
+// fuso atrás de UTC (Brasil, UTC-3), um horário de fim-de-dia local (23:59:59)
+// vira madrugada do dia seguinte em UTC, e a data exibida "vaza" um dia à
+// frente do que realmente é no relógio do usuário. Bug real encontrado em
+// getMetaSemanalAtual (rótulo mostrava "19/07–26/07", 8 dias, devia ser
+// "19/07–25/07", 7 dias, domingo a sábado).
+function toLocalISODate(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+// 19/07/2026 — normaliza qualquer entrada de data pro MEIO-DIA... não, pra
+// MEIA-NOITE local do calendário certo, ANTES de fazer qualquer conta com
+// setDate(). Existem dois tipos de entrada nesse arquivo e cada um precisa de
+// um tratamento diferente pra chegar no mesmo calendário local:
+//   - isDateOnly=true: veio de uma coluna `date` do Postgres (ex.: `dia` de
+//     media_movel_semanal), serializada como "2026-07-17" sem hora. String
+//     ISO sem hora é interpretada pelo JS como MEIA-NOITE UTC — então pra
+//     recuperar o calendário certo tem que ler com getters UTC (getUTCDate
+//     etc.), não locais, senão o dia "vaza" pra trás em fuso atrás de UTC.
+//   - isDateOnly=false: veio de uma coluna `timestamptz` (ex.: `occurred_at`),
+//     um instante de verdade. Aqui é o oposto: tem que ler com getters LOCAIS
+//     pra saber em que dia do calendário DO USUÁRIO aquele instante caiu
+//     (uma sessão às 22h30 em Brasília é salva como madrugada em UTC).
+// Sem essa normalização, medir "de que dia até que dia é essa semana"
+// misturava os dois critérios sem querer e podia render 1 dia errado pra
+// qualquer lado dependendo de qual delas alimentava a função.
+function normalizeToLocalMidnight(dateLike, isDateOnly) {
+  const d = new Date(dateLike);
+  const y = isDateOnly ? d.getUTCFullYear() : d.getFullYear();
+  const m = isDateOnly ? d.getUTCMonth() : d.getMonth();
+  const dia = isDateOnly ? d.getUTCDate() : d.getDate();
+  return new Date(y, m, dia);
+}
+
 // KPIs de topo: horas totais, disciplinas em estudo (qualquer tipo, não só
 // mensurável) e o Diagnóstico Wilson geral (v_diagnostico_geral). "Sessões
 // ativas" foi removido do retorno (decisão do usuário, 03/07/2026): contagem
@@ -121,11 +160,25 @@ export async function getMediaMovelSemanal() {
 // que juntar semanas até bater o piso). O volume bruto (questoes/acertos/
 // erros) continua sempre exposto mesmo quando insuficiente — só o % some,
 // porque só a razão vira enganosa com amostra pequena, volume absoluto não.
-export function getTendenciaSemanal(diario, nSemanas = 12, minQuestoes = null) {
+//
+// Âncora compartilhada (19/07/2026, pedido do usuário) — antes ancorava
+// sempre no último dia do próprio `diario` (só tipos mensuráveis). Horas
+// Semanais (getHorasSemanais, mais abaixo) ancora no último dia de QUALQUER
+// tipo de estudo — se o registro mais recente for de um tipo não-mensurável
+// (ex.: Flashcard), as duas grades de semana ficavam deslocadas uma da
+// outra (ex.: sábado–sexta vs. domingo–sábado), confuso de comparar lado a
+// lado. `ultimaDataOverride` (opcional) permite que dashboardPage.js passe a
+// MESMA âncora pros dois — sempre a data de QUALQUER atividade mais recente,
+// nunca só a mensurável, já que ela é um superconjunto (toda data mensurável
+// também tem atividade "de qualquer tipo", nunca o contrário). Sem o
+// override, cai no comportamento antigo (retrocompatível).
+export function getTendenciaSemanal(diario, nSemanas = 12, minQuestoes = null, ultimaDataOverride = null) {
   if (!diario || diario.length === 0) {
     return { semanas: [], semanaAtual: null, semanaAnterior: null, deltaSemana: null };
   }
-  const ultimaData = new Date(diario[diario.length - 1].dia);
+  const ultimaData = ultimaDataOverride
+    ? normalizeToLocalMidnight(ultimaDataOverride, false) // veio de occurred_at (timestamptz)
+    : normalizeToLocalMidnight(diario[diario.length - 1].dia, true); // veio de `dia` (date)
   const semanas = [];
   for (let w = 0; w < nSemanas; w++) {
     const fim = new Date(ultimaData);
@@ -133,15 +186,15 @@ export function getTendenciaSemanal(diario, nSemanas = 12, minQuestoes = null) {
     const inicio = new Date(fim);
     inicio.setDate(inicio.getDate() - 6);
     const diasNaSemana = diario.filter((d) => {
-      const dt = new Date(d.dia);
+      const dt = normalizeToLocalMidnight(d.dia, true);
       return dt >= inicio && dt <= fim;
     });
     const questoes = diasNaSemana.reduce((acc, d) => acc + Number(d.questoes || 0), 0);
     const acertos = diasNaSemana.reduce((acc, d) => acc + Number(d.acertos || 0), 0);
     const suficiente = minQuestoes == null || questoes >= minQuestoes;
     semanas.unshift({
-      inicio: inicio.toISOString().slice(0, 10),
-      fim: fim.toISOString().slice(0, 10),
+      inicio: toLocalISODate(inicio),
+      fim: toLocalISODate(fim),
       questoes,
       acertos,
       erros: questoes - acertos, // volume bruto, não % — pedido do usuário (03/07/2026): ver acertos/erros crescendo/encolhendo em número absoluto, não só razão
@@ -165,6 +218,20 @@ export function getTendenciaSemanal(diario, nSemanas = 12, minQuestoes = null) {
 // calendário, então precisa ser a semana civil atual, não uma janela corrida.
 // Só horas e questões (nunca %) — ver comentário de meta_semanal_horas em
 // parameterService.js sobre por que % de acerto não vira meta aqui.
+//
+// Semana anterior (19/07/2026, pedido do usuário) — só os totais (sem
+// porDia), pra dar contexto discreto de "quanto rendi na semana passada" no
+// início de cada semana nova, quando a semana atual ainda está zerada.
+// Deliberadamente NÃO vira um gráfico/comparação de tendência — isso já
+// existe em Acertos vs. Erros por Semana / Horas Semanais; aqui é só uma
+// referência de fundo, não o foco do widget.
+//
+// Bug de fuso corrigido (19/07/2026): as datas usavam
+// fim.toISOString().slice(0,10), que converte pra UTC antes de fatiar — em
+// fuso atrás de UTC (Brasil), o fim do dia local (sábado 23:59:59) virava
+// madrugada de domingo em UTC, e o rótulo mostrava "19/07–26/07" (8 dias) em
+// vez de "19/07–25/07" (7 dias, domingo a sábado). Trocado por
+// toLocalISODate, que usa os componentes locais da data em vez de UTC.
 export async function getMetaSemanalAtual() {
   const hoje = new Date();
   const inicio = new Date(hoje);
@@ -174,23 +241,38 @@ export async function getMetaSemanalAtual() {
   fim.setDate(inicio.getDate() + 6);
   fim.setHours(23, 59, 59, 999);
 
-  const { data, error } = await supabase
-    .from("study_sessions")
-    .select("occurred_at, duration_minutes, session_results(questions_total)")
-    .eq("status", "ativo")
-    .gte("occurred_at", inicio.toISOString())
-    .lte("occurred_at", fim.toISOString());
-  if (error) throw error;
+  const inicioAnterior = new Date(inicio);
+  inicioAnterior.setDate(inicio.getDate() - 7);
+  const fimAnterior = new Date(inicio);
+  fimAnterior.setDate(inicio.getDate() - 1);
+  fimAnterior.setHours(23, 59, 59, 999);
+
+  const [atualResult, anteriorResult] = await Promise.all([
+    supabase
+      .from("study_sessions")
+      .select("occurred_at, duration_minutes, session_results(questions_total)")
+      .eq("status", "ativo")
+      .gte("occurred_at", inicio.toISOString())
+      .lte("occurred_at", fim.toISOString()),
+    supabase
+      .from("study_sessions")
+      .select("duration_minutes, session_results(questions_total)")
+      .eq("status", "ativo")
+      .gte("occurred_at", inicioAnterior.toISOString())
+      .lte("occurred_at", fimAnterior.toISOString()),
+  ]);
+  if (atualResult.error) throw atualResult.error;
+  if (anteriorResult.error) throw anteriorResult.error;
 
   const porDia = Array.from({ length: 7 }, (_, i) => {
     const d = new Date(inicio);
     d.setDate(inicio.getDate() + i);
-    return { dia: d.toISOString().slice(0, 10), horas: 0, questoes: 0 };
+    return { dia: toLocalISODate(d), horas: 0, questoes: 0 };
   });
 
   let horasTotais = 0;
   let questoesTotais = 0;
-  for (const s of data || []) {
+  for (const s of atualResult.data || []) {
     const horas = Number(s.duration_minutes || 0) / 60;
     const result = Array.isArray(s.session_results) ? s.session_results[0] : s.session_results;
     const questoes = Number(result?.questions_total || 0);
@@ -203,12 +285,22 @@ export async function getMetaSemanalAtual() {
     }
   }
 
+  let horasTotaisAnterior = 0;
+  let questoesTotaisAnterior = 0;
+  for (const s of anteriorResult.data || []) {
+    horasTotaisAnterior += Number(s.duration_minutes || 0) / 60;
+    const result = Array.isArray(s.session_results) ? s.session_results[0] : s.session_results;
+    questoesTotaisAnterior += Number(result?.questions_total || 0);
+  }
+
   return {
-    inicio: inicio.toISOString().slice(0, 10),
-    fim: fim.toISOString().slice(0, 10),
+    inicio: toLocalISODate(inicio),
+    fim: toLocalISODate(fim),
     horasTotais: Math.round(horasTotais * 10) / 10,
     questoesTotais,
     porDia: porDia.map((d) => ({ ...d, horas: Math.round(d.horas * 10) / 10 })),
+    anteriorHoras: Math.round(horasTotaisAnterior * 10) / 10,
+    anteriorQuestoes: questoesTotaisAnterior,
   };
 }
 
@@ -430,6 +522,23 @@ export async function getHorasPorTipoEstudo() {
   return linhas;
 }
 
+// Última data de atividade, QUALQUER tipo de estudo (19/07/2026) — âncora
+// compartilhada entre getHorasSemanais e getTendenciaSemanal (ver comentário
+// em getTendenciaSemanal). É a data mais recente possível, já que "qualquer
+// tipo" é superconjunto de "tipo mensurável" — nunca fica atrás da âncora que
+// getTendenciaSemanal usaria sozinha.
+export async function getUltimaDataAtividade() {
+  const { data, error } = await supabase
+    .from("study_sessions")
+    .select("occurred_at")
+    .eq("status", "ativo")
+    .order("occurred_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return data?.occurred_at ?? null;
+}
+
 // Horas Semanais, valor bruto (07/07/2026, pedido do usuário) — consistência
 // de esforço semana a semana. Sem suavização de propósito, mesma decisão já
 // tomada pro gráfico de Acertos vs. Erros por Semana: uma semana fraca de
@@ -438,31 +547,41 @@ export async function getHorasPorTipoEstudo() {
 // critério do KPI "Horas estudadas"), por isso não reaproveita os blocos
 // semanais de getTendenciaSemanal (que só olha tipos mensuráveis) — busca e
 // ancora no próprio dia mais recente com qualquer sessão.
-export async function getHorasSemanais(nSemanas = 12) {
+//
+// ultimaDataOverride (19/07/2026) — mesma âncora compartilhada de
+// getTendenciaSemanal (ver comentário lá). Sem o parâmetro, mantém o
+// comportamento antigo (ancora na própria última sessão).
+export async function getHorasSemanais(nSemanas = 12, ultimaDataOverride = null) {
   const { data, error } = await supabase.from("study_sessions").select("occurred_at, duration_minutes").eq("status", "ativo");
   if (error) throw error;
 
   const sessoes = data || [];
   if (sessoes.length === 0) return [];
 
-  const ultimaData = sessoes.reduce((max, s) => (s.occurred_at > max ? s.occurred_at : max), sessoes[0].occurred_at);
-  const fimTotal = new Date(ultimaData);
+  const ultimaDataRaw =
+    ultimaDataOverride ?? sessoes.reduce((max, s) => (s.occurred_at > max ? s.occurred_at : max), sessoes[0].occurred_at);
+  const fimTotal = normalizeToLocalMidnight(ultimaDataRaw, false); // occurred_at é timestamptz
 
   const semanas = [];
   for (let w = 0; w < nSemanas; w++) {
-    const fim = new Date(fimTotal);
-    fim.setDate(fim.getDate() - w * 7);
-    const inicio = new Date(fim);
-    inicio.setDate(inicio.getDate() - 6);
+    const fimDia = new Date(fimTotal);
+    fimDia.setDate(fimDia.getDate() - w * 7);
+    const inicioDia = new Date(fimDia);
+    inicioDia.setDate(inicioDia.getDate() - 6);
+    // Limite de filtro usa fim-do-dia (23:59:59.999 local), não meia-noite —
+    // senão uma sessão feita à tarde/noite do próprio dia-limite (qualquer
+    // hora depois de 00:00:00) ficaria de fora por "passar" de fimDia.
+    const fimBoundary = new Date(fimDia);
+    fimBoundary.setHours(23, 59, 59, 999);
     const minutos = sessoes
       .filter((s) => {
         const dt = new Date(s.occurred_at);
-        return dt >= inicio && dt <= fim;
+        return dt >= inicioDia && dt <= fimBoundary;
       })
       .reduce((acc, s) => acc + Number(s.duration_minutes || 0), 0);
     semanas.unshift({
-      inicio: inicio.toISOString().slice(0, 10),
-      fim: fim.toISOString().slice(0, 10),
+      inicio: toLocalISODate(inicioDia),
+      fim: toLocalISODate(fimDia),
       horas: Math.round((minutos / 60) * 10) / 10,
     });
   }

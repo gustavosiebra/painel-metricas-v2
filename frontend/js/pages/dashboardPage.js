@@ -21,6 +21,7 @@ import {
   getHorasPorTipoEstudo,
   getHorasSemanais,
   getMetaSemanalAtual,
+  getUltimaDataAtividade,
   pickProximaAcao,
 } from "../services/dashboardService.js";
 
@@ -149,19 +150,22 @@ export async function renderDashboardPage(container) {
   const content = container.querySelector("#dashboard-content");
   const { user } = getState();
 
-  let kpis, ranking, mediaMovelDiaria, situacao, produtividadeVitalicia, produtividadeRecente, janelaDisciplina, janelaCaderno, retencaoPorDisciplina, horasPorDisciplina, horasPorTipoEstudo, horasSemanais, metaSemanal, janelaProdutividadeDias, tendenciaMinQuestoes, metaHoras, metaQuestoes;
+  let kpis, ranking, mediaMovelDiaria, situacao, produtividadeVitalicia, produtividadeRecente, janelaDisciplina, janelaCaderno, retencaoPorDisciplina, horasPorDisciplina, horasPorTipoEstudo, horasSemanais, metaSemanal, janelaProdutividadeDias, tendenciaMinQuestoes, metaHoras, metaQuestoes, ultimaDataAtividade;
   try {
     // Janela de Produtividade Recente (07/07/2026, pedido do usuário) —
     // configurável em Configurações (padrão 28 dias); busca ANTES do
     // Promise.all principal porque getProdutividadeGeral(janela) depende
     // desse valor. Piso de N da Tendência Semanal (08/07/2026) e Metas de
     // Estudo Semanal (13/07/2026) seguem o mesmo padrão — buscados à parte
-    // porque só são usados DEPOIS do Promise.all principal.
-    [janelaProdutividadeDias, tendenciaMinQuestoes, metaHoras, metaQuestoes] = await Promise.all([
+    // porque só são usados DEPOIS do Promise.all principal. Última data de
+    // atividade (19/07/2026) segue o mesmo motivo: precisa estar pronta ANTES
+    // de chamar getHorasSemanais logo abaixo, que a recebe como parâmetro.
+    [janelaProdutividadeDias, tendenciaMinQuestoes, metaHoras, metaQuestoes, ultimaDataAtividade] = await Promise.all([
       getParam(user.id, "produtividade_janela_dias"),
       getParam(user.id, "tendencia_semanal_min_questoes"),
       getParam(user.id, "meta_semanal_horas"),
       getParam(user.id, "meta_semanal_questoes"),
+      getUltimaDataAtividade(),
     ]);
 
     [
@@ -190,7 +194,7 @@ export async function renderDashboardPage(container) {
       getRetencaoPorDisciplina(),
       getHorasPorDisciplina(),
       getHorasPorTipoEstudo(),
-      getHorasSemanais(),
+      getHorasSemanais(12, ultimaDataAtividade),
       getMetaSemanalAtual(),
     ]);
   } catch (err) {
@@ -199,7 +203,7 @@ export async function renderDashboardPage(container) {
   }
 
   const proximaAcao = pickProximaAcao(ranking);
-  const tendenciaSemanal = getTendenciaSemanal(mediaMovelDiaria, 12, tendenciaMinQuestoes);
+  const tendenciaSemanal = getTendenciaSemanal(mediaMovelDiaria, 12, tendenciaMinQuestoes, ultimaDataAtividade);
 
   // Ordem por impacto de decisão (03/07/2026), não pela ordem em que cada
   // métrica foi construída: 1) visão geral (KPIs + Cadernos por Situação),
@@ -403,10 +407,12 @@ function renderMetaSemanal(meta, metaHoras, metaQuestoes) {
         <div style="flex:1; min-width:220px;">
           <p style="margin:0;">Horas estudadas: <strong>${meta.horasTotais}h</strong> / ${metaHoras}h${badgeMeta(meta.horasTotais, metaHoras, "h", (v) => Math.round(v * 10) / 10)}</p>
           ${barra(meta.horasTotais, metaHoras)}
+          <p style="margin:4px 0 0; font-size:12px; color:var(--color-text-muted);">Semana passada: ${meta.anteriorHoras}h</p>
         </div>
         <div style="flex:1; min-width:220px;">
           <p style="margin:0;">Questões resolvidas: <strong>${meta.questoesTotais}</strong> / ${metaQuestoes}${badgeMeta(meta.questoesTotais, metaQuestoes, " questões", (v) => v)}</p>
           ${barra(meta.questoesTotais, metaQuestoes)}
+          <p style="margin:4px 0 0; font-size:12px; color:var(--color-text-muted);">Semana passada: ${meta.anteriorQuestoes} questões</p>
         </div>
       </div>
       <div style="display:flex; gap:8px; margin-bottom:8px;">
