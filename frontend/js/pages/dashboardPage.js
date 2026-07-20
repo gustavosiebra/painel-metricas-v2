@@ -424,10 +424,10 @@ function renderMetaSemanal(meta, metaHoras, metaQuestoes) {
            revelar os dois na hora de gerar a imagem (onclone), sem precisar
            redesenhar nada nem mudar o que aparece na tela real. -->
       <div id="meta-semanal-bloco-horas">
-        <canvas id="meta-semanal-chart-horas" height="90"></canvas>
+        <div class="chart-wrap"><canvas id="meta-semanal-chart-horas"></canvas></div>
       </div>
       <div id="meta-semanal-bloco-questoes" style="display:none;">
-        <canvas id="meta-semanal-chart-questoes" height="90"></canvas>
+        <div class="chart-wrap"><canvas id="meta-semanal-chart-questoes"></canvas></div>
       </div>
     </div>
   `;
@@ -484,7 +484,7 @@ function renderMediaMovelSemanal(t) {
     <div class="card" style="margin-bottom:24px;">
       <h3 style="margin-top:0;">Tendência Semanal (% de acerto)</h3>
       ${deltaHtml}
-      <canvas id="media-movel-chart" height="90"></canvas>
+      <div class="chart-wrap"><canvas id="media-movel-chart"></canvas></div>
       ${notaRodape}
     </div>
   `;
@@ -500,7 +500,7 @@ function renderAcertosErrosSemana(t) {
     <div class="card" style="margin-bottom:24px;">
       <h3 style="margin-top:0;">Acertos vs. Erros por Semana (volume)</h3>
       <p style="color:var(--color-text-muted); margin-top:0;">Volume bruto de questões por semana (não percentual) — mostra se o número de erros está caindo em valores absolutos, complementando o gráfico de % de acerto acima.</p>
-      <canvas id="acertos-erros-chart" height="90"></canvas>
+      <div class="chart-wrap"><canvas id="acertos-erros-chart"></canvas></div>
     </div>
   `;
 }
@@ -515,7 +515,7 @@ function renderHorasSemanais(semanas) {
     <div class="card" style="margin-bottom:24px;">
       <h3 style="margin-top:0;">Horas Semanais</h3>
       <p style="color:var(--color-text-muted); margin-top:0;">Total de horas estudadas por semana.</p>
-      <canvas id="horas-semanais-chart" height="90"></canvas>
+      <div class="chart-wrap"><canvas id="horas-semanais-chart"></canvas></div>
     </div>
   `;
 }
@@ -555,7 +555,7 @@ function renderHorasPorDisciplina(linhas) {
       <p style="color:var(--color-text-muted); margin-top:0;">Disciplinas com fatia muito pequena podem não aparecer visível no gráfico. Sessões sem disciplina vinculada (Caderno de Erros, Simulado, Flashcard por baralho raiz) não entram aqui — esse tempo aparece em "Horas por Tipo de Estudo" abaixo.</p>
       <div style="display:flex; gap:24px; flex-wrap:wrap; align-items:flex-start;">
         <div style="max-width:340px; flex:1; min-width:280px;">
-          <canvas id="horas-disciplina-chart" height="260"></canvas>
+          <div class="chart-wrap chart-wrap--donut"><canvas id="horas-disciplina-chart"></canvas></div>
         </div>
         <div style="flex:1; min-width:280px; overflow-x:auto;">
           <table class="data-table">
@@ -600,7 +600,7 @@ function renderHorasPorTipoEstudo(linhas) {
       <p style="color:var(--color-text-muted); margin-top:0;">Estudos com fatia muito pequena podem não aparecer visível no gráfico.</p>
       <div style="display:flex; gap:24px; flex-wrap:wrap; align-items:flex-start;">
         <div style="max-width:340px; flex:1; min-width:280px;">
-          <canvas id="horas-tipo-chart" height="260"></canvas>
+          <div class="chart-wrap chart-wrap--donut"><canvas id="horas-tipo-chart"></canvas></div>
         </div>
         <div style="flex:1; min-width:280px; overflow-x:auto;">
           <table class="data-table">
@@ -721,7 +721,7 @@ function renderRetencaoGeral(linhas) {
     <div class="card" style="margin-bottom:24px;">
       <h3 style="margin-top:0;">Retenção por Intervalo de Revisão</h3>
       <p style="color:var(--color-text-muted); margin-top:0;">Acerto médio agrupado pelo intervalo desde a última vez que você tocou naquele caderno (qualquer tipo de estudo conta como "toque"). Proxy por caderno — não por questão individual (question_attempts não é usado, registro é agregado desde a Fase 4). Curva no estilo da curva de esquecimento (Anki): se sobe da direita pra esquerda, revisão está segurando retenção.</p>
-      <canvas id="retencao-geral-chart" height="80"></canvas>
+      <div class="chart-wrap"><canvas id="retencao-geral-chart"></canvas></div>
       <div style="overflow-x:auto;">
         <table class="data-table" style="margin-top:16px;">
           <tr><th>Intervalo desde o último toque</th><th>% acerto</th><th>Questões</th></tr>
@@ -849,6 +849,7 @@ function renderChartMediaMovel(canvas, semanas, minQuestoes = null) {
     },
     options: {
       responsive: true,
+      maintainAspectRatio: false,
       scales: { y: { min: 0, max: 100, ticks: { callback: (v) => formatPct(v) } } },
       plugins: {
         legend: { display: false },
@@ -912,6 +913,7 @@ function renderChartAcertosErros(canvas, semanas) {
     },
     options: {
       responsive: true,
+      maintainAspectRatio: false,
       scales: { y: { beginAtZero: true, title: { display: true, text: "Questões" } } },
     },
   });
@@ -938,6 +940,7 @@ function renderChartHorasSemanais(canvas, semanas) {
     },
     options: {
       responsive: true,
+      maintainAspectRatio: false,
       scales: { y: { beginAtZero: true, title: { display: true, text: "Horas" } } },
       plugins: {
         legend: { display: false },
@@ -971,6 +974,7 @@ function renderChartMetaSemanal(canvas, porDia, metrica) {
     },
     options: {
       responsive: true,
+      maintainAspectRatio: false,
       scales: { y: { beginAtZero: true } },
       plugins: { legend: { display: false } },
     },
@@ -998,6 +1002,7 @@ function renderChartHoras(canvas, linhas) {
     },
     options: {
       responsive: true,
+      maintainAspectRatio: false,
       plugins: {
         legend: { position: "right" },
         tooltip: {
@@ -1033,6 +1038,7 @@ function renderChartHorasTipo(canvas, linhas) {
     },
     options: {
       responsive: true,
+      maintainAspectRatio: false,
       plugins: {
         legend: { position: "right" },
         tooltip: {
@@ -1070,6 +1076,7 @@ function renderChartRetencao(canvas, linhas) {
     },
     options: {
       responsive: true,
+      maintainAspectRatio: false,
       scales: { y: { min: 0, max: 100, ticks: { callback: (v) => formatPct(v) } } },
       plugins: {
         legend: { display: false },
