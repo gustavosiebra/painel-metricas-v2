@@ -45,6 +45,20 @@ function normalizeToLocalMidnight(dateLike, isDateOnly) {
   return new Date(y, m, dia);
 }
 
+// Segunda-feira da semana civil que contém `date` (19/07/2026, pedido do
+// usuário: semana passa a começar na segunda em vez de domingo, em TODOS os
+// blocos semanais do dashboard — Metas de Estudo, Tendência Semanal e Horas
+// Semanais). date.getDay(): 0=domingo, 1=segunda, ..., 6=sábado. Se cair
+// domingo, a segunda dessa mesma semana é 6 dias ANTES (não 1 dia à frente —
+// domingo fecha a semana, não abre).
+function getSegundaDaSemana(date) {
+  const d = new Date(date);
+  const diaSemana = d.getDay();
+  const offset = diaSemana === 0 ? 6 : diaSemana - 1;
+  d.setDate(d.getDate() - offset);
+  return d;
+}
+
 // KPIs de topo: horas totais, disciplinas em estudo (qualquer tipo, não só
 // mensurável) e o Diagnóstico Wilson geral (v_diagnostico_geral). "Sessões
 // ativas" foi removido do retorno (decisão do usuário, 03/07/2026): contagem
@@ -179,12 +193,17 @@ export function getTendenciaSemanal(diario, nSemanas = 12, minQuestoes = null, u
   const ultimaData = ultimaDataOverride
     ? normalizeToLocalMidnight(ultimaDataOverride, false) // veio de occurred_at (timestamptz)
     : normalizeToLocalMidnight(diario[diario.length - 1].dia, true); // veio de `dia` (date)
+  // 19/07/2026: em vez de janela corrida de 7 dias terminando exatamente na
+  // última atividade (o que deslocava o início da semana pro dia da semana
+  // em que por acaso caiu a última sessão), a grade agora é alinhada à
+  // segunda-feira — cada bloco é sempre segunda a domingo.
+  const segundaAtual = getSegundaDaSemana(ultimaData);
   const semanas = [];
   for (let w = 0; w < nSemanas; w++) {
-    const fim = new Date(ultimaData);
-    fim.setDate(fim.getDate() - w * 7);
-    const inicio = new Date(fim);
-    inicio.setDate(inicio.getDate() - 6);
+    const inicio = new Date(segundaAtual);
+    inicio.setDate(inicio.getDate() - w * 7);
+    const fim = new Date(inicio);
+    fim.setDate(inicio.getDate() + 6);
     const diasNaSemana = diario.filter((d) => {
       const dt = normalizeToLocalMidnight(d.dia, true);
       return dt >= inicio && dt <= fim;
@@ -212,10 +231,11 @@ export function getTendenciaSemanal(diario, nSemanas = 12, minQuestoes = null, u
 }
 
 // Meta de Estudo Semanal (13/07/2026, pedido do usuário) — semana de
-// CALENDÁRIO (domingo a sábado), diferente de Horas Semanais/Tendência
-// Semanal (janela corrida de 7 dias terminando no dado mais recente, feita
-// pra OBSERVAR tendência ao longo do tempo). Aqui é meta que reseta no
-// calendário, então precisa ser a semana civil atual, não uma janela corrida.
+// CALENDÁRIO (segunda a domingo — mudou de domingo-sábado em 19/07/2026, ver
+// getSegundaDaSemana), diferente de Horas Semanais/Tendência Semanal (janela
+// corrida de 7 dias terminando no dado mais recente, feita pra OBSERVAR
+// tendência ao longo do tempo). Aqui é meta que reseta no calendário, então
+// precisa ser a semana civil atual, não uma janela corrida.
 // Só horas e questões (nunca %) — ver comentário de meta_semanal_horas em
 // parameterService.js sobre por que % de acerto não vira meta aqui.
 //
@@ -234,11 +254,10 @@ export function getTendenciaSemanal(diario, nSemanas = 12, minQuestoes = null, u
 // toLocalISODate, que usa os componentes locais da data em vez de UTC.
 export async function getMetaSemanalAtual() {
   const hoje = new Date();
-  const inicio = new Date(hoje);
-  inicio.setDate(hoje.getDate() - hoje.getDay()); // domingo desta semana
+  const inicio = getSegundaDaSemana(hoje); // segunda desta semana
   inicio.setHours(0, 0, 0, 0);
   const fim = new Date(inicio);
-  fim.setDate(inicio.getDate() + 6);
+  fim.setDate(inicio.getDate() + 6); // domingo
   fim.setHours(23, 59, 59, 999);
 
   const inicioAnterior = new Date(inicio);
@@ -561,13 +580,16 @@ export async function getHorasSemanais(nSemanas = 12, ultimaDataOverride = null)
   const ultimaDataRaw =
     ultimaDataOverride ?? sessoes.reduce((max, s) => (s.occurred_at > max ? s.occurred_at : max), sessoes[0].occurred_at);
   const fimTotal = normalizeToLocalMidnight(ultimaDataRaw, false); // occurred_at é timestamptz
+  // 19/07/2026: grade alinhada à segunda-feira, mesmo critério de
+  // getTendenciaSemanal — ver comentário lá.
+  const segundaAtual = getSegundaDaSemana(fimTotal);
 
   const semanas = [];
   for (let w = 0; w < nSemanas; w++) {
-    const fimDia = new Date(fimTotal);
-    fimDia.setDate(fimDia.getDate() - w * 7);
-    const inicioDia = new Date(fimDia);
-    inicioDia.setDate(inicioDia.getDate() - 6);
+    const inicioDia = new Date(segundaAtual);
+    inicioDia.setDate(inicioDia.getDate() - w * 7);
+    const fimDia = new Date(inicioDia);
+    fimDia.setDate(inicioDia.getDate() + 6);
     // Limite de filtro usa fim-do-dia (23:59:59.999 local), não meia-noite —
     // senão uma sessão feita à tarde/noite do próprio dia-limite (qualquer
     // hora depois de 00:00:00) ficaria de fora por "passar" de fimDia.

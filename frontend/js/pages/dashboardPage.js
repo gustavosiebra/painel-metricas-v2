@@ -948,13 +948,14 @@ function renderChartHorasSemanais(canvas, semanas) {
 }
 
 // Meta de Estudo Semanal (13/07/2026) — barras por dia da semana civil atual
-// (domingo a sábado), alternando Horas/Questões pelos botões de toggle.
+// (segunda a domingo — mudou de domingo-sábado em 19/07/2026), alternando
+// Horas/Questões pelos botões de toggle.
 function renderChartMetaSemanal(canvas, porDia, metrica) {
   if (chartMetaSemanalInstances[canvas.id]) {
     chartMetaSemanalInstances[canvas.id].destroy();
     chartMetaSemanalInstances[canvas.id] = null;
   }
-  const DIAS = ["DOM", "SEG", "TER", "QUA", "QUI", "SEX", "SAB"];
+  const DIAS = ["SEG", "TER", "QUA", "QUI", "SEX", "SAB", "DOM"];
   const dados = porDia.map((d) => (metrica === "horas" ? d.horas : d.questoes));
   chartMetaSemanalInstances[canvas.id] = new Chart(canvas, {
     type: "bar",
