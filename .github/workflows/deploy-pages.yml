@@ -10,6 +10,7 @@ on:
     branches: [main]
     paths:
       - "frontend/**"
+      - "scripts/inject-cache-version.mjs"
       - ".github/workflows/deploy-pages.yml"
   workflow_dispatch:
 
@@ -38,6 +39,21 @@ jobs:
 
       - name: Configurar Pages
         uses: actions/configure-pages@v5
+
+      # Cache-busting (19/07/2026) — site estático sem bundler, então JS/CSS
+      # ficavam em cache no navegador/CDN mesmo depois de um deploy novo
+      # (caso real: correção da semana civil não aparecia no celular). Este
+      # passo acrescenta "?v=<sha do commit>" em toda tag <link>/<script>
+      # local do index.html e em todo import (estático e dinâmico) dos
+      # módulos JS, só nesta cópia publicada — o repositório em si nunca é
+      # alterado. Ver scripts/inject-cache-version.mjs.
+      - name: Configurar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Cache-busting dos assets
+        run: node scripts/inject-cache-version.mjs "${{ github.sha }}"
 
       - name: Empacotar frontend/
         uses: actions/upload-pages-artifact@v3
