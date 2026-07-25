@@ -164,7 +164,6 @@ export async function renderSessionsPage(container) {
           <tr>
             <td>${new Date(s.occurred_at).toLocaleDateString("pt-BR")}</td>
             <td>${escapeHtml(disciplinesById[s.discipline_id] || "—")}</td>
-            <td>${escapeHtml(questionSetsById[s.question_set_id] || "—")}</td>
             <td>${STUDY_TYPE_LABELS[s.study_type] || s.study_type}</td>
             <td>${desempenho}</td>
             <td>${s.duration_minutes} min</td>
@@ -191,7 +190,6 @@ export async function renderSessionsPage(container) {
             <tr>
               <th data-sort-col="occurred_at" style="cursor:pointer;">Data${sortIndicator("occurred_at")}</th>
               <th data-sort-col="discipline" style="cursor:pointer;">Disciplina${sortIndicator("discipline")}</th>
-              <th>Caderno</th>
               <th data-sort-col="study_type" style="cursor:pointer;">Tipo${sortIndicator("study_type")}</th>
               <th>Desempenho</th>
               <th>Tempo</th>
