@@ -163,7 +163,12 @@ function aplicarFiltros(content, tipo) {
   const nameInput = content.querySelector(`[data-filter-input="${tipo}"]`);
   const disciplineSelect = tipo === "questionSet" ? content.querySelector("[data-filter-discipline]") : null;
 
-  const termo = (nameInput?.value || "").trim().toLowerCase();
+  // normalizeForCompare (19/07/2026, pedido do usuário — caso real: buscou
+  // "Vedações Constitucionais" sem os acentos certos e não achou nada, mesmo
+  // o caderno existindo) — antes era só .toLowerCase(), que não ajuda quando
+  // quem digita omite acento (comum ao digitar rápido/no celular): "vedacoes"
+  // não batia com "Vedações" porque "ç"≠"c" e "ã"≠"a" pra .includes().
+  const termo = normalizeForCompare(nameInput?.value || "");
   const disciplinaId = disciplineSelect ? disciplineSelect.value : "";
   const exigeFiltro = table?.dataset.exigeFiltro === "true";
 
@@ -252,7 +257,7 @@ function renderSection({ titulo, itens, userId, colunasExtra, filtroDisciplina, 
         : `<span style="color:var(--color-text-muted);">—</span>`;
       const filterDiscipline = tipo === "questionSet" ? ` data-filter-discipline="${item.discipline_id || ""}"` : "";
       return `
-        <tr data-filter-row data-filter-nome="${escapeHtml(item.name.toLowerCase())}"${filterDiscipline}>
+        <tr data-filter-row data-filter-nome="${escapeHtml(normalizeForCompare(item.name))}"${filterDiscipline}>
           <td>${escapeHtml(item.name)}</td>
           ${extraCols}
           <td>${dono}</td>
@@ -461,6 +466,19 @@ async function carregarPeso(container, userId) {
     const { error } = await supabase.from("exam_disciplines").delete().eq("exam_id", examId).eq("discipline_id", disciplineId);
     if (error) throw error;
   }
+}
+
+// Mesmo padrão de normalização usado em studyFormPage.js (checagem de nome
+// duplicado) — NFD separa a letra da marca de acento e o regexp remove só a
+// marca, deixando a busca tolerante a acento E maiúscula/minúscula.
+const DIACRITICOS_REGEX = new RegExp("[\\u0300-\\u036f]", "g");
+
+function normalizeForCompare(text) {
+  return text
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(DIACRITICOS_REGEX, "");
 }
 
 function escapeHtml(str) {
