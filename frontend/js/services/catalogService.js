@@ -31,13 +31,29 @@ export async function listExams() {
   return data;
 }
 
+// PAGINADO (19/07/2026, correção de bug real): o Supabase/PostgREST corta
+// toda consulta em 1000 linhas por padrão, e o catálogo do usuário já passa
+// de 1100 cadernos. Sem paginação, tudo que ficava depois da posição 1000 na
+// ordem alfabética (nomes de T/U/V em diante — ex.: "Vedações
+// Constitucionais", posição 1109) simplesmente nunca chegava ao navegador:
+// não aparecia no seletor de Nova Sessão, nem na busca do Catálogo, e a
+// checagem de nome duplicado também não enxergava — foi assim que 3 cópias
+// duplicadas do mesmo caderno foram criadas sem nenhum aviso. Busca em blocos
+// de 1000 (.range) até vir um bloco incompleto.
 export async function listQuestionSets() {
-  const { data, error } = await supabase
-    .from("question_sets")
-    .select("id, name, discipline_id, exam_id, status, learning_level, user_id")
-    .order("name");
-  if (error) throw error;
-  return data;
+  const PAGE = 1000;
+  const all = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase
+      .from("question_sets")
+      .select("id, name, discipline_id, exam_id, status, learning_level, user_id")
+      .order("name")
+      .range(from, from + PAGE - 1);
+    if (error) throw error;
+    all.push(...data);
+    if (data.length < PAGE) break;
+  }
+  return all;
 }
 
 // Cadastro sob demanda de Concurso, Banca, Disciplina e Caderno (Fase 4/10).
@@ -148,13 +164,22 @@ export async function listExamsAdmin() {
   return data;
 }
 
+// Mesmo problema/solução de listQuestionSets (corte de 1000 linhas do
+// PostgREST) — o admin enxerga a tabela inteira, que já passa de 1100 linhas.
 export async function listQuestionSetsAdmin() {
-  const { data, error } = await supabase
-    .from("question_sets")
-    .select("id, name, discipline_id, user_id, created_at")
-    .order("created_at", { ascending: false });
-  if (error) throw error;
-  return data;
+  const PAGE = 1000;
+  const all = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase
+      .from("question_sets")
+      .select("id, name, discipline_id, user_id, created_at")
+      .order("created_at", { ascending: false })
+      .range(from, from + PAGE - 1);
+    if (error) throw error;
+    all.push(...data);
+    if (data.length < PAGE) break;
+  }
+  return all;
 }
 
 // Dono de cada item (email + nome de exibição) — junta auth.users, que não é
