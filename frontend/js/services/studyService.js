@@ -153,21 +153,34 @@ export async function getSessionById(sessionId) {
 // notes, score_is_estimate e study_session_boards (multibancas) entraram
 // aqui só pra alimentar o CSV; a tabela em tela continua mostrando as mesmas
 // colunas de antes (ver renderTable em sessionsPage.js).
+// PAGINADO (19/07/2026, preventivo): o .limit(5000) anterior era ilusório —
+// o Supabase/PostgREST corta toda consulta em 1000 linhas por padrão, não
+// importa o limit pedido. Mesmo bug que escondia cadernos além da posição
+// 1000 no catálogo (ver listQuestionSets em catalogService.js). Hoje ainda
+// há menos de 1000 sessões, mas ao passar disso a tela Sessões e o Exportar
+// CSV truncariam em silêncio. Mesma solução: blocos de 1000 via .range()
+// até vir bloco incompleto (ou atingir o limit pedido).
 export async function listSessions({ disciplineId, status, limit = 5000 } = {}) {
-  let query = supabase
-    .from("study_sessions")
-    .select(
-      "id, occurred_at, study_type, duration_minutes, discipline_id, question_set_id, exam_id, board_id, self_confidence, notes, status, session_results(questions_total, correct_total, wrong_total, score, score_is_estimate), study_session_boards(board_id)"
-    )
-    .order("occurred_at", { ascending: false })
-    .limit(limit);
+  const PAGE = 1000;
+  const all = [];
+  for (let from = 0; from < limit; from += PAGE) {
+    let query = supabase
+      .from("study_sessions")
+      .select(
+        "id, occurred_at, study_type, duration_minutes, discipline_id, question_set_id, exam_id, board_id, self_confidence, notes, status, session_results(questions_total, correct_total, wrong_total, score, score_is_estimate), study_session_boards(board_id)"
+      )
+      .order("occurred_at", { ascending: false })
+      .range(from, Math.min(from + PAGE, limit) - 1);
 
-  if (disciplineId) query = query.eq("discipline_id", disciplineId);
-  if (status) query = query.eq("status", status);
+    if (disciplineId) query = query.eq("discipline_id", disciplineId);
+    if (status) query = query.eq("status", status);
 
-  const { data, error } = await query;
-  if (error) throw error;
-  return data;
+    const { data, error } = await query;
+    if (error) throw error;
+    all.push(...data);
+    if (data.length < PAGE) break;
+  }
+  return all;
 }
 
 // Exclusão lógica — nunca DELETE físico de sessão (RN-009).
