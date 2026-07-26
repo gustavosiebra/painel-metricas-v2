@@ -321,7 +321,13 @@ export async function renderStudyFormPage(container, params) {
     // propósito (marca a opção "Nenhum caderno específico"); string = id
     // real de um caderno já escolhido antes (edição).
     function populateQuestionSets(disciplineId, selectedId) {
-      const filtered = questionSets.filter((q) => q.discipline_id === disciplineId);
+      // status !== "inativo" (19/07/2026, pedido do usuário — caso real:
+      // 3 cadernos "Vedações Constitucionais" duplicados em AFO, arquivados
+      // em vez de apagados) — cadernos arquivados saem do que é oferecido
+      // pra escolher/criar, mas o próprio caderno já vinculado a ESTA sessão
+      // (edição) continua aparecendo mesmo se foi arquivado depois — senão a
+      // edição de uma sessão antiga perderia essa referência silenciosamente.
+      const filtered = questionSets.filter((q) => q.discipline_id === disciplineId && (q.status !== "inativo" || q.id === selectedId));
       // CSS trunca a caixa fechada, mas a lista aberta de um <select> nativo
       // ignora CSS de largura — o navegador sempre dimensiona o popup pelo
       // texto mais longo. Cadernos importados do TEC passam de 100
@@ -626,7 +632,10 @@ export async function renderStudyFormPage(container, params) {
         }
         // Escopo da checagem de duplicata é a disciplina — o mesmo nome de
         // caderno pode existir legitimamente em disciplinas diferentes.
-        const cadernosDaDisciplina = questionSets.filter((q) => q.discipline_id === disciplineId);
+        // Cadernos arquivados (status "inativo", 19/07/2026) ficam de fora:
+        // já foram tirados de circulação de propósito, não fazem mais
+        // sentido bloquear um nome novo por causa de um arquivado.
+        const cadernosDaDisciplina = questionSets.filter((q) => q.discipline_id === disciplineId && q.status !== "inativo");
         if (isDuplicateName(name, cadernosDaDisciplina)) {
           input.classList.add("input-error");
           alertBox.innerHTML = `<div class="alert alert--error">Já existe um caderno chamado "${escapeHtml(name)}" nessa disciplina — selecione-o na lista em vez de cadastrar de novo.</div>`;
