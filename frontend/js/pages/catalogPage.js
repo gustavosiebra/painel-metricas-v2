@@ -203,7 +203,10 @@ function wireSection(content, tipo, acoes, onChange) {
         await acoes.update(id, trimmed);
         await onChange();
       } catch (err) {
-        window.alert("Erro ao editar: " + (err.message || "desconhecido"));
+        // 23505 = unique_violation — renomear pra um nome que já existe agora
+        // é bloqueado pelo banco (índices de unicidade, 26/07/2026).
+        const msg = err?.code === "23505" ? "Já existe um item seu com esse nome." : err.message || "desconhecido";
+        window.alert("Erro ao editar: " + msg);
       }
     });
   });

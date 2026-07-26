@@ -710,7 +710,17 @@ export async function renderStudyFormPage(container, params) {
       }
       setTimeout(() => navigate("/sessoes"), 800);
     } catch (err) {
-      alertBox.innerHTML = `<div class="alert alert--error">Erro ao salvar: ${escapeHtml(err.message)}</div>`;
+      // 23505 = unique_violation (26/07/2026): trava de unicidade criada no
+      // banco (índices *_owner_*_name_uniq) depois do caso das 3 cópias de
+      // "Vedações Constitucionais" — a checagem client-side acima continua
+      // (mensagem melhor, aponta o campo), mas a garantia final é o banco,
+      // imune a corrida entre abas e lista desatualizada. Traduz o erro
+      // técnico ("duplicate key value violates...") pra algo acionável.
+      const msg =
+        err?.code === "23505"
+          ? "Esse nome já existe no catálogo — o banco bloqueou a duplicata. Recarregue a página e selecione o item existente na lista."
+          : err.message;
+      alertBox.innerHTML = `<div class="alert alert--error">Erro ao salvar: ${escapeHtml(msg)}</div>`;
     }
   }
 }
