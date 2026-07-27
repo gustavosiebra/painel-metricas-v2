@@ -704,11 +704,33 @@ export async function renderStudyFormPage(container, params) {
       if (editingId) {
         await updateStudySession(editingId, payload);
         alertBox.innerHTML = `<div class="alert alert--success">Sessão atualizada com sucesso.</div>`;
+        setTimeout(() => navigate("/sessoes"), 800);
       } else {
-        await createStudySession(payload);
-        alertBox.innerHTML = `<div class="alert alert--success">Sessão registrada com sucesso.</div>`;
+        const created = await createStudySession(payload);
+        // Atalho pro fluxo T1–T7 (27/07/2026): sessão nova com erros não
+        // navega sozinha — oferece registrar os erros AGORA, com disciplina/
+        // caderno/banca herdados e vínculo à sessão recém-criada. A janela
+        // certa de classificar é logo após a correção, não "depois".
+        if (wrongTotal > 0 && hasMeasurableResult(studyType)) {
+          alertBox.innerHTML = `
+            <div class="alert alert--success">
+              Sessão registrada — ${wrongTotal} erro(s) no bloco.
+              <button type="button" id="goto-erros" class="btn-link">Registrar erros agora</button>
+              ou <button type="button" id="goto-sessoes" class="btn-link">ir para Sessões</button>.
+            </div>
+          `;
+          const paramsErros = {};
+          if (created?.id) paramsErros.sessionId = created.id;
+          if (disciplineId) paramsErros.disciplineId = disciplineId;
+          if (questionSetId) paramsErros.questionSetId = questionSetId;
+          if (boardIds.length === 1) paramsErros.boardId = boardIds[0];
+          alertBox.querySelector("#goto-erros").addEventListener("click", () => navigate("/erros", paramsErros));
+          alertBox.querySelector("#goto-sessoes").addEventListener("click", () => navigate("/sessoes"));
+        } else {
+          alertBox.innerHTML = `<div class="alert alert--success">Sessão registrada com sucesso.</div>`;
+          setTimeout(() => navigate("/sessoes"), 800);
+        }
       }
-      setTimeout(() => navigate("/sessoes"), 800);
     } catch (err) {
       // 23505 = unique_violation (26/07/2026): trava de unicidade criada no
       // banco (índices *_owner_*_name_uniq) depois do caso das 3 cópias de

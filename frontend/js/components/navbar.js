@@ -17,6 +17,7 @@ export function renderNavbar(activeRoute) {
   const links = [
     { path: "/sessoes/nova", label: "Nova Sessão" },
     { path: "/sessoes", label: "Sessões" },
+    { path: "/erros", label: "Erros" },
     { path: "/catalogo", label: "Catálogo" },
     { path: "/planejamento", label: "Planejamento" },
     { path: "/prioridade", label: "Prioridade" },
