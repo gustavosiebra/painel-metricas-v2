@@ -179,6 +179,28 @@
   margin-top: var(--spacing-2);
 }
 
+/* Variante empilhada (28/07/2026, pedido do usuário para Nova Sessão): campos
+   em coluna única e card ajustado ao conteúdo, como era antes da grade de 2
+   colunas. Faz sentido aqui e não contradiz a padronização: Nova Sessão é uma
+   página de formulário ÚNICO, sem card de lista ao lado para desalinhar — o
+   motivo que obrigou os outros cards a ocuparem a largura do conteúdo não se
+   aplica. O formulário é longo e de preenchimento sequencial, então coluna
+   única lê melhor que zigue-zague entre duas colunas. */
+.card--form-stack {
+  max-width: 560px;
+}
+
+.card--form-stack form,
+.card--form-stack .form-subgrid {
+  display: block;
+}
+
+.card--form-stack form > button[type="submit"] {
+  width: 100%;
+  justify-self: stretch;
+  margin-top: var(--spacing-2);
+}
+
 /* Wrappers que agrupam campos dentro do form (ex.: bloco de resultado
    mensurável e o atalho de Peso em Nova Sessão) atravessam a grade inteira,
    então precisam repetir a grade internamente — senão os campos ficariam
