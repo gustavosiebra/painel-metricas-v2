@@ -235,8 +235,8 @@ export async function renderSimuladosPage(container) {
       ${formHtml}
       <div class="card" style="margin-bottom:16px;">
         <h3 style="margin-top:0;">Histórico</h3>
-        <div style="display:flex; gap:12px; align-items:end; flex-wrap:wrap; margin-bottom:8px;">
-          <div class="form-field" style="margin-bottom:0; min-width:220px;">
+        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:var(--spacing-2); margin-bottom:8px;">
+          <div class="form-field" style="margin-bottom:0;">
             <label for="att-f-template">Modelo</label>
             <select id="att-f-template">
               <option value="">Todos</option>
@@ -289,14 +289,14 @@ export async function renderSimuladosPage(container) {
             .filter((b) => (b.module || "(sem módulo)") === m)
             .map(
               (b) => `
-            <div style="display:flex; gap:8px; align-items:end; flex-wrap:wrap; margin-bottom:6px;" data-att-bloco="${b.id}">
-              <span style="flex:1; min-width:200px;">${escapeHtml(b.name)} <span style="color:var(--color-text-muted); font-size:12px;">(${b.questions}q × peso ${b.weight})</span></span>
-              <div class="form-field" style="margin-bottom:0; width:90px;">
+            <div class="form-grid-row form-grid-row--tentativa" data-att-bloco="${b.id}">
+              <span class="form-grid-row__label">${escapeHtml(b.name)} <span style="color:var(--color-text-muted); font-size:12px;">(${b.questions}q × peso ${b.weight})</span></span>
+              <div class="form-field">
                 <label for="att-c-${b.id}">Acertos</label>
                 <input type="number" id="att-c-${b.id}" data-att-correct="${b.id}" min="0" max="${b.questions}" step="1" required value="0" />
               </div>
               ${liquido ? `
-              <div class="form-field" style="margin-bottom:0; width:90px;">
+              <div class="form-field">
                 <label for="att-w-${b.id}">Erros</label>
                 <input type="number" id="att-w-${b.id}" data-att-wrong="${b.id}" min="0" max="${b.questions}" step="1" required value="0" />
               </div>` : ""}
@@ -597,12 +597,12 @@ export async function renderSimuladosPage(container) {
               <option value="liquido" ${editing?.scoring_mode === "liquido" ? "selected" : ""}>Líquida / Cebraspe (nota = (acertos − erros) × peso; branco neutro)</option>
             </select>
           </div>
-          <div style="display:flex; gap:12px; flex-wrap:wrap;">
-            <div class="form-field" style="flex:1; min-width:200px;">
+          <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:var(--spacing-2);">
+            <div class="form-field">
               <label for="tpl-duracao">Duração da prova (min, opcional)</label>
               <input type="number" id="tpl-duracao" min="1" step="1" placeholder="Ex.: 240" value="${editing?.duration_minutes ?? ""}" />
             </div>
-            <div class="form-field" style="flex:1; min-width:200px;">
+            <div class="form-field">
               <label for="tpl-corte">Corte estimado (opcional)</label>
               <input type="number" id="tpl-corte" min="0" step="0.01" placeholder="Editável depois" value="${editing?.cutoff_score ?? ""}" />
             </div>
@@ -641,9 +641,9 @@ export async function renderSimuladosPage(container) {
       const row = document.createElement("div");
       row.setAttribute("data-tpl-bloco-row", "");
       if (bloco) row.setAttribute("data-b-id", bloco.id);
-      row.style.cssText = "display:flex; gap:8px; align-items:end; flex-wrap:wrap; margin-bottom:6px;";
+      row.className = "form-grid-row form-grid-row--blocos";
       row.innerHTML = `
-        <div class="form-field" style="flex:2; min-width:170px; margin-bottom:0;">
+        <div class="form-field">
           <label>Módulo</label>
           <select data-b-modulo>
             ${MODULOS_PADRAO.map((m) => `<option value="${escapeHtml(m)}" ${bloco ? (bloco.module === m ? "selected" : "") : m === MODULOS_PADRAO[0] ? "selected" : ""}>${escapeHtml(m)}</option>`).join("")}
@@ -651,7 +651,7 @@ export async function renderSimuladosPage(container) {
           </select>
           <input type="text" data-b-modulo-outro placeholder="Nome do módulo" style="${bloco && !moduloConhecido ? "" : "display:none;"} margin-top:6px;" value="${bloco && !moduloConhecido ? escapeHtml(bloco.module || "") : ""}" />
         </div>
-        <div class="form-field" style="flex:2; min-width:180px; margin-bottom:0;">
+        <div class="form-field">
           <label>Disciplina</label>
           <select data-b-disciplina required>
             <option value="" disabled ${bloco ? "" : "selected"}>— Selecione —</option>
@@ -660,17 +660,17 @@ export async function renderSimuladosPage(container) {
           </select>
           <input type="text" data-b-disciplina-nova placeholder="Nome da nova disciplina" style="display:none; margin-top:6px;" />
         </div>
-        <div class="form-field" style="width:80px; margin-bottom:0;">
+        <div class="form-field">
           <label>Questões</label>
           <input type="number" data-b-questoes required min="1" step="1" value="${bloco?.questions ?? ""}" />
         </div>
-        <div class="form-field" style="width:80px; margin-bottom:0;">
+        <div class="form-field">
           <label>Peso</label>
           <input type="number" data-b-peso required min="0.01" step="0.01" value="${bloco?.weight ?? 1}" />
         </div>
         ${travado
-          ? `<span style="color:var(--color-text-muted); font-size:12px; margin-bottom:10px;" title="Bloco com resultados registrados — remover apagaria dados de tentativas antigas.">em uso</span>`
-          : `<button type="button" class="btn-link" data-b-remover style="color:var(--color-error); margin-bottom:8px;">remover</button>`}
+          ? `<span class="form-grid-row__action" style="color:var(--color-text-muted);" title="Bloco com resultados registrados — remover apagaria dados de tentativas antigas.">em uso</span>`
+          : `<button type="button" class="btn-link form-grid-row__action" data-b-remover style="color:var(--color-error);">remover</button>`}
       `;
       const moduloSelect = row.querySelector("[data-b-modulo]");
       const moduloOutro = row.querySelector("[data-b-modulo-outro]");
@@ -699,9 +699,9 @@ export async function renderSimuladosPage(container) {
               : "modulo:__outro__";
       const row = document.createElement("div");
       row.setAttribute("data-tpl-criterio-row", "");
-      row.style.cssText = "display:flex; gap:8px; align-items:end; flex-wrap:wrap; margin-bottom:6px;";
+      row.className = "form-grid-row form-grid-row--criterios";
       row.innerHTML = `
-        <div class="form-field" style="flex:2; min-width:200px; margin-bottom:0;">
+        <div class="form-field">
           <label>Escopo</label>
           <select data-c-escopo>
             <option value="total" ${escopoAtual === "total" ? "selected" : ""}>Total da prova</option>
@@ -711,7 +711,7 @@ export async function renderSimuladosPage(container) {
           </select>
           <input type="text" data-c-modulo-outro placeholder="Nome do módulo" style="${escopoAtual === "modulo:__outro__" ? "" : "display:none;"} margin-top:6px;" value="${escopoAtual === "modulo:__outro__" ? escapeHtml(regra?.module_name || "") : ""}" />
         </div>
-        <div class="form-field" style="flex:1; min-width:140px; margin-bottom:0;">
+        <div class="form-field">
           <label>Unidade</label>
           <select data-c-unidade>
             <option value="questoes" ${!regra || regra.kind === "questoes" ? "selected" : ""}>Nº de questões</option>
@@ -719,11 +719,11 @@ export async function renderSimuladosPage(container) {
             <option value="pontos" ${regra?.kind === "pontos" ? "selected" : ""}>Pontos</option>
           </select>
         </div>
-        <div class="form-field" style="width:90px; margin-bottom:0;">
+        <div class="form-field">
           <label>Mínimo</label>
           <input type="number" data-c-valor required min="0" step="0.01" value="${regra?.value ?? ""}" />
         </div>
-        <button type="button" class="btn-link" data-c-remover style="color:var(--color-error); margin-bottom:8px;">remover</button>
+        <button type="button" class="btn-link form-grid-row__action" data-c-remover style="color:var(--color-error);">remover</button>
       `;
       const escopoSelect = row.querySelector("[data-c-escopo]");
       const moduloOutro = row.querySelector("[data-c-modulo-outro]");

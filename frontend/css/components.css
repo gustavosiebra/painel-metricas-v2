@@ -132,6 +132,61 @@
   color: var(--color-primary);
 }
 
+/* Linhas de formulário com colunas alinhadas (28/07/2026, pedido do usuário —
+   impacto visual). Blocos e critérios em Simulados usavam flex com valores
+   avulsos por campo (flex:2/min-width:170px aqui, width:80px ali), então as
+   colunas não batiam entre as duas listas e os campos numéricos ficavam
+   espremidos ao lado de selects enormes. Grid com trilhas fixas alinha tudo:
+   os dois selects dividem o espaço que sobra, os números têm largura própria
+   e igual, a ação fecha a linha. Abaixo de 720px cai pra 2 colunas e o resto
+   flui pra linha seguinte (auto-flow), sem espremer nada. */
+.form-grid-row {
+  display: grid;
+  gap: var(--spacing-2);
+  align-items: end;
+  margin-bottom: var(--spacing-2);
+}
+
+.form-grid-row--blocos {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 96px 96px 84px;
+}
+
+.form-grid-row--criterios {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 96px 84px;
+}
+
+/* Grade de acertos ao registrar tentativa: nome do bloco + campos numéricos
+   com a MESMA largura dos numéricos acima. */
+.form-grid-row--tentativa {
+  grid-template-columns: minmax(0, 1fr) 96px 96px;
+}
+
+@media (max-width: 720px) {
+  .form-grid-row--blocos,
+  .form-grid-row--criterios,
+  .form-grid-row--tentativa {
+    grid-template-columns: minmax(0, 1fr) 96px 96px;
+  }
+}
+
+.form-grid-row .form-field {
+  margin-bottom: 0;
+}
+
+/* Alinha a ação (remover / "em uso") com a base dos campos, já que ela não
+   tem <label> em cima. */
+.form-grid-row__action {
+  padding-bottom: 9px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+/* Rótulo do bloco na grade de tentativa — mesma linha de base dos inputs. */
+.form-grid-row__label {
+  padding-bottom: 9px;
+  overflow-wrap: anywhere;
+}
+
 /* Campo em erro (05/07/2026) — ex.: nome duplicado ao cadastrar Concurso/
    Banca/Disciplina/Caderno sob demanda em Nova Sessão. Some sozinho quando o
    campo recebe um novo input (ver studyFormPage.js). */
