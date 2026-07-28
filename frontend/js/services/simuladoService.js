@@ -116,17 +116,67 @@ export async function setTemplateStatus(id, status) {
   if (error) throw error;
 }
 
-// Ajustes pós-cadastro (27/07/2026): corte estimado é classificatório
-// (emerge do resultado, muda a cada edição do concurso) e a duração pode ter
-// sido esquecida no cadastro — os dois editáveis sem recriar o modelo.
-// Estrutura (blocos/critérios) continua imutável de propósito: alterá-la
-// invalidaria a comparação entre tentativas já registradas.
-export async function updateTemplateBasics(id, { cutoffScore, durationMinutes }) {
+// Edição completa do modelo (27/07/2026) — abre o modelo inteiro, não só
+// corte/duração. Blocos: os que vêm com id são atualizados; sem id, criados;
+// os que sumiram da tela são apagados — MAS a página bloqueia remover bloco
+// que já tem resultado registrado (o delete cascatearia em
+// exam_attempt_blocks e corromperia tentativas antigas). Regras não têm essa
+// dependência: são substituídas em bloco (apaga todas, insere as novas).
+export async function updateTemplate({ id, userId, name, boardId, scoringMode, durationMinutes, cutoffScore, notes, blocks, rules }) {
   const { error } = await supabase
     .from("exam_templates")
-    .update({ cutoff_score: cutoffScore ?? null, duration_minutes: durationMinutes ?? null })
+    .update({
+      name,
+      board_id: boardId || null,
+      scoring_mode: scoringMode,
+      duration_minutes: durationMinutes ?? null,
+      cutoff_score: cutoffScore ?? null,
+      notes: notes || null,
+    })
     .eq("id", id);
   if (error) throw error;
+
+  const manter = blocks.filter((b) => b.id).map((b) => b.id);
+  let delQuery = supabase.from("exam_template_blocks").delete().eq("template_id", id);
+  if (manter.length > 0) delQuery = delQuery.not("id", "in", `(${manter.join(",")})`);
+  const { error: delError } = await delQuery;
+  if (delError) throw delError;
+
+  for (const [i, b] of blocks.entries()) {
+    const payload = {
+      user_id: userId,
+      template_id: id,
+      position: i,
+      name: b.name,
+      module: b.module || null,
+      discipline_id: b.disciplineId || null,
+      questions: b.questions,
+      weight: b.weight,
+    };
+    if (b.id) {
+      const { error: upError } = await supabase.from("exam_template_blocks").update(payload).eq("id", b.id);
+      if (upError) throw upError;
+    } else {
+      const { error: insError } = await supabase.from("exam_template_blocks").insert(payload);
+      if (insError) throw insError;
+    }
+  }
+
+  const { error: delRules } = await supabase.from("exam_template_rules").delete().eq("template_id", id);
+  if (delRules) throw delRules;
+  if (rules && rules.length > 0) {
+    const { error: insRules } = await supabase.from("exam_template_rules").insert(
+      rules.map((r) => ({
+        user_id: userId,
+        template_id: id,
+        scope: r.scope,
+        module_name: r.scope === "modulo" ? r.moduleName : null,
+        kind: r.kind,
+        value: r.value,
+      }))
+    );
+    if (insRules) throw insRules;
+  }
 }
 
 // results: [{ blockId, correct, wrong }] — wrong só relevante no modo líquido.

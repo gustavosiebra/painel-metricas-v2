@@ -27,7 +27,7 @@ import {
   listAttemptBlocks,
   createTemplate,
   setTemplateStatus,
-  updateTemplateBasics,
+  updateTemplate,
   createAttempt,
   deleteAttempt,
 } from "../services/simuladoService.js";
@@ -562,37 +562,50 @@ export async function renderSimuladosPage(container) {
   }
 
   // ======================= ABA MODELOS =======================
-  function renderModelos() {
+  // editing = null (novo) ou o template sendo editado. O MESMO formulário
+  // serve os dois modos (27/07/2026, feedback do usuário: editar por prompt
+  // encadeado era gambiarra — agora abre o modelo inteiro preenchido).
+  function renderModelos(editing = null) {
+    const blocosDoEdit = editing ? blocksDoModelo(editing.id) : [];
+    const regrasDoEdit = editing ? regrasDoModelo(editing.id) : [];
+    // Bloco com resultado já registrado não pode ser removido: o delete
+    // cascatearia em exam_attempt_blocks e corromperia tentativas antigas.
+    const blocosTravados = new Set(attemptBlocks.map((r) => r.block_id));
+    const temTentativas = editing ? attempts.some((a) => a.template_id === editing.id) : false;
+
     tabModelos.innerHTML = `
       <div class="card" style="margin-bottom:16px; max-width:820px;">
-        <h3 style="margin-top:0;">Novo modelo de prova</h3>
+        <h3 style="margin-top:0;">${editing ? `Editar modelo: ${escapeHtml(editing.name)}` : "Novo modelo de prova"}</h3>
+        ${temTentativas ? `<div class="alert" style="background:#fff4e5; color:#b45309; border:1px solid #ffe0b2;">Este modelo já tem tentativas registradas. Mudar questões ou pesos altera a nota das tentativas antigas — a comparação entre elas deixa de ser exata. Blocos já usados não podem ser removidos.</div>` : ""}
         <div id="tpl-alert"></div>
         <form id="tpl-form">
           <div class="form-field">
             <label for="tpl-nome">Nome do modelo</label>
-            <input type="text" id="tpl-nome" required placeholder='Ex.: "TCE-SC FGV — Eng. Civil" ou "Simulado Dojô Nível 5"' />
+            <input type="text" id="tpl-nome" required placeholder='Ex.: "TCE-SC FGV — Eng. Civil" ou "Simulado Dojô Nível 5"' value="${editing ? escapeHtml(editing.name) : ""}" />
           </div>
           <div class="form-field">
             <label for="tpl-banca">Banca (opcional)</label>
             <select id="tpl-banca">
-              <option value="" selected>— Não informar —</option>
-              ${boards.map((b) => `<option value="${b.id}">${escapeHtml(b.name)}</option>`).join("")}
+              <option value="">— Não informar —</option>
+              ${boards.map((b) => `<option value="${b.id}" ${editing?.board_id === b.id ? "selected" : ""}>${escapeHtml(b.name)}</option>`).join("")}
             </select>
           </div>
           <div class="form-field">
             <label for="tpl-modo">Correção</label>
             <select id="tpl-modo">
-              <option value="bruto" selected>Bruta (nota = acertos × peso)</option>
-              <option value="liquido">Líquida / Cebraspe (nota = (acertos − erros) × peso; branco neutro)</option>
+              <option value="bruto" ${editing?.scoring_mode !== "liquido" ? "selected" : ""}>Bruta (nota = acertos × peso)</option>
+              <option value="liquido" ${editing?.scoring_mode === "liquido" ? "selected" : ""}>Líquida / Cebraspe (nota = (acertos − erros) × peso; branco neutro)</option>
             </select>
           </div>
-          <div class="form-field" style="max-width:220px;">
-            <label for="tpl-duracao">Duração da prova (min, opcional)</label>
-            <input type="number" id="tpl-duracao" min="1" step="1" placeholder="Ex.: 240" />
-          </div>
-          <div class="form-field" style="max-width:220px;">
-            <label for="tpl-corte">Corte estimado (opcional)</label>
-            <input type="number" id="tpl-corte" min="0" step="0.01" placeholder="Editável depois" />
+          <div style="display:flex; gap:12px; flex-wrap:wrap;">
+            <div class="form-field" style="flex:1; min-width:200px;">
+              <label for="tpl-duracao">Duração da prova (min, opcional)</label>
+              <input type="number" id="tpl-duracao" min="1" step="1" placeholder="Ex.: 240" value="${editing?.duration_minutes ?? ""}" />
+            </div>
+            <div class="form-field" style="flex:1; min-width:200px;">
+              <label for="tpl-corte">Corte estimado (opcional)</label>
+              <input type="number" id="tpl-corte" min="0" step="0.01" placeholder="Editável depois" value="${editing?.cutoff_score ?? ""}" />
+            </div>
           </div>
           <p style="font-weight:600; margin:12px 0 4px;">Blocos <span style="color:var(--color-text-muted); font-weight:normal; font-size:12px;">(uma linha por disciplina do edital, agrupada por módulo)</span></p>
           <div id="tpl-blocos"></div>
@@ -602,9 +615,10 @@ export async function renderSimuladosPage(container) {
           <button type="button" id="tpl-add-criterio" class="btn-link">+ Adicionar critério</button>
           <div class="form-field" style="margin-top:12px;">
             <label for="tpl-notas">Observações (opcional)</label>
-            <input type="text" id="tpl-notas" />
+            <input type="text" id="tpl-notas" value="${editing ? escapeHtml(editing.notes || "") : ""}" />
           </div>
-          <button type="submit" class="btn" style="width:auto; padding:8px 20px;">Salvar modelo</button>
+          <button type="submit" class="btn" style="width:auto; padding:8px 20px;">${editing ? "Salvar alterações" : "Salvar modelo"}</button>
+          ${editing ? `<button type="button" id="tpl-cancelar" class="btn-link" style="margin-left:12px;">Cancelar</button>` : ""}
         </form>
       </div>
       <div class="card">
@@ -617,37 +631,46 @@ export async function renderSimuladosPage(container) {
     const blocosBox = tabModelos.querySelector("#tpl-blocos");
     const criteriosBox = tabModelos.querySelector("#tpl-criterios");
 
-    function addBlocoRow() {
+    if (editing) {
+      tabModelos.querySelector("#tpl-cancelar").addEventListener("click", () => renderModelos(null));
+    }
+
+    function addBlocoRow(bloco) {
+      const travado = bloco ? blocosTravados.has(bloco.id) : false;
+      const moduloConhecido = !bloco || MODULOS_PADRAO.includes(bloco.module);
       const row = document.createElement("div");
       row.setAttribute("data-tpl-bloco-row", "");
+      if (bloco) row.setAttribute("data-b-id", bloco.id);
       row.style.cssText = "display:flex; gap:8px; align-items:end; flex-wrap:wrap; margin-bottom:6px;";
       row.innerHTML = `
         <div class="form-field" style="flex:2; min-width:170px; margin-bottom:0;">
           <label>Módulo</label>
           <select data-b-modulo>
-            ${MODULOS_PADRAO.map((m, i) => `<option value="${escapeHtml(m)}" ${i === 0 ? "selected" : ""}>${escapeHtml(m)}</option>`).join("")}
-            <option value="__outro__">Outro…</option>
+            ${MODULOS_PADRAO.map((m) => `<option value="${escapeHtml(m)}" ${bloco ? (bloco.module === m ? "selected" : "") : m === MODULOS_PADRAO[0] ? "selected" : ""}>${escapeHtml(m)}</option>`).join("")}
+            <option value="__outro__" ${bloco && !moduloConhecido ? "selected" : ""}>Outro…</option>
           </select>
-          <input type="text" data-b-modulo-outro placeholder="Nome do módulo" style="display:none; margin-top:6px;" />
+          <input type="text" data-b-modulo-outro placeholder="Nome do módulo" style="${bloco && !moduloConhecido ? "" : "display:none;"} margin-top:6px;" value="${bloco && !moduloConhecido ? escapeHtml(bloco.module || "") : ""}" />
         </div>
         <div class="form-field" style="flex:2; min-width:180px; margin-bottom:0;">
           <label>Disciplina</label>
           <select data-b-disciplina required>
-            <option value="" disabled selected>— Selecione —</option>
-            ${disciplines.map((d) => `<option value="${d.id}">${escapeHtml(d.name)}</option>`).join("")}
+            <option value="" disabled ${bloco ? "" : "selected"}>— Selecione —</option>
+            ${disciplines.map((d) => `<option value="${d.id}" ${bloco?.discipline_id === d.id ? "selected" : ""}>${escapeHtml(d.name)}</option>`).join("")}
             <option value="__new__">+ Cadastrar nova disciplina…</option>
           </select>
           <input type="text" data-b-disciplina-nova placeholder="Nome da nova disciplina" style="display:none; margin-top:6px;" />
         </div>
         <div class="form-field" style="width:80px; margin-bottom:0;">
           <label>Questões</label>
-          <input type="number" data-b-questoes required min="1" step="1" />
+          <input type="number" data-b-questoes required min="1" step="1" value="${bloco?.questions ?? ""}" />
         </div>
         <div class="form-field" style="width:80px; margin-bottom:0;">
           <label>Peso</label>
-          <input type="number" data-b-peso required min="0.01" step="0.01" value="1" />
+          <input type="number" data-b-peso required min="0.01" step="0.01" value="${bloco?.weight ?? 1}" />
         </div>
-        <button type="button" class="btn-link" data-b-remover style="color:var(--color-error); margin-bottom:8px;">remover</button>
+        ${travado
+          ? `<span style="color:var(--color-text-muted); font-size:12px; margin-bottom:10px;" title="Bloco com resultados registrados — remover apagaria dados de tentativas antigas.">em uso</span>`
+          : `<button type="button" class="btn-link" data-b-remover style="color:var(--color-error); margin-bottom:8px;">remover</button>`}
       `;
       const moduloSelect = row.querySelector("[data-b-modulo]");
       const moduloOutro = row.querySelector("[data-b-modulo-outro]");
@@ -659,11 +682,21 @@ export async function renderSimuladosPage(container) {
       discSelect.addEventListener("change", () => {
         discNova.style.display = discSelect.value === "__new__" ? "block" : "none";
       });
-      row.querySelector("[data-b-remover]").addEventListener("click", () => row.remove());
+      const btnRemover = row.querySelector("[data-b-remover]");
+      if (btnRemover) btnRemover.addEventListener("click", () => row.remove());
       blocosBox.appendChild(row);
     }
 
-    function addCriterioRow() {
+    function addCriterioRow(regra) {
+      const escopoAtual = !regra
+        ? "total"
+        : regra.scope === "total"
+          ? "total"
+          : regra.scope === "cada_bloco"
+            ? "cada_bloco"
+            : MODULOS_PADRAO.includes(regra.module_name)
+              ? `modulo:${regra.module_name}`
+              : "modulo:__outro__";
       const row = document.createElement("div");
       row.setAttribute("data-tpl-criterio-row", "");
       row.style.cssText = "display:flex; gap:8px; align-items:end; flex-wrap:wrap; margin-bottom:6px;";
@@ -671,24 +704,24 @@ export async function renderSimuladosPage(container) {
         <div class="form-field" style="flex:2; min-width:200px; margin-bottom:0;">
           <label>Escopo</label>
           <select data-c-escopo>
-            <option value="total" selected>Total da prova</option>
-            ${MODULOS_PADRAO.map((m) => `<option value="modulo:${escapeHtml(m)}">Módulo: ${escapeHtml(m)}</option>`).join("")}
-            <option value="modulo:__outro__">Módulo: outro…</option>
-            <option value="cada_bloco">Cada bloco (ex.: não zerar nenhum)</option>
+            <option value="total" ${escopoAtual === "total" ? "selected" : ""}>Total da prova</option>
+            ${MODULOS_PADRAO.map((m) => `<option value="modulo:${escapeHtml(m)}" ${escopoAtual === `modulo:${m}` ? "selected" : ""}>Módulo: ${escapeHtml(m)}</option>`).join("")}
+            <option value="modulo:__outro__" ${escopoAtual === "modulo:__outro__" ? "selected" : ""}>Módulo: outro…</option>
+            <option value="cada_bloco" ${escopoAtual === "cada_bloco" ? "selected" : ""}>Cada bloco (ex.: não zerar nenhum)</option>
           </select>
-          <input type="text" data-c-modulo-outro placeholder="Nome do módulo" style="display:none; margin-top:6px;" />
+          <input type="text" data-c-modulo-outro placeholder="Nome do módulo" style="${escopoAtual === "modulo:__outro__" ? "" : "display:none;"} margin-top:6px;" value="${escopoAtual === "modulo:__outro__" ? escapeHtml(regra?.module_name || "") : ""}" />
         </div>
         <div class="form-field" style="flex:1; min-width:140px; margin-bottom:0;">
           <label>Unidade</label>
           <select data-c-unidade>
-            <option value="questoes" selected>Nº de questões</option>
-            <option value="pct">% de acerto</option>
-            <option value="pontos">Pontos</option>
+            <option value="questoes" ${!regra || regra.kind === "questoes" ? "selected" : ""}>Nº de questões</option>
+            <option value="pct" ${regra?.kind === "pct" ? "selected" : ""}>% de acerto</option>
+            <option value="pontos" ${regra?.kind === "pontos" ? "selected" : ""}>Pontos</option>
           </select>
         </div>
         <div class="form-field" style="width:90px; margin-bottom:0;">
           <label>Mínimo</label>
-          <input type="number" data-c-valor required min="0" step="0.01" />
+          <input type="number" data-c-valor required min="0" step="0.01" value="${regra?.value ?? ""}" />
         </div>
         <button type="button" class="btn-link" data-c-remover style="color:var(--color-error); margin-bottom:8px;">remover</button>
       `;
@@ -701,9 +734,14 @@ export async function renderSimuladosPage(container) {
       criteriosBox.appendChild(row);
     }
 
-    tabModelos.querySelector("#tpl-add-bloco").addEventListener("click", addBlocoRow);
-    tabModelos.querySelector("#tpl-add-criterio").addEventListener("click", addCriterioRow);
-    addBlocoRow();
+    tabModelos.querySelector("#tpl-add-bloco").addEventListener("click", () => addBlocoRow(null));
+    tabModelos.querySelector("#tpl-add-criterio").addEventListener("click", () => addCriterioRow(null));
+    if (editing) {
+      blocosDoEdit.forEach((b) => addBlocoRow(b));
+      regrasDoEdit.forEach((r) => addCriterioRow(r));
+    } else {
+      addBlocoRow(null);
+    }
 
     tabModelos.querySelector("#tpl-form").addEventListener("submit", async (e) => {
       e.preventDefault();
@@ -757,6 +795,7 @@ export async function renderSimuladosPage(container) {
             disciplineName = d?.name || "";
           }
           blocks.push({
+            id: row.dataset.bId || null,
             name: disciplineName,
             module: modulo,
             disciplineId,
@@ -776,7 +815,6 @@ export async function renderSimuladosPage(container) {
           }
           return { scope, moduleName, kind: row.querySelector("[data-c-unidade]").value, value: Number(row.querySelector("[data-c-valor]").value) };
         });
-        // Critério de módulo precisa apontar pra um módulo que existe nos blocos.
         for (const r of rules) {
           if (r.scope === "modulo" && !blocks.some((b) => b.module === r.moduleName)) {
             tplAlert.innerHTML = `<div class="alert alert--error">O critério aponta pro módulo "${escapeHtml(r.moduleName || "")}", mas nenhum bloco pertence a ele.</div>`;
@@ -786,7 +824,7 @@ export async function renderSimuladosPage(container) {
 
         const corteRaw = tabModelos.querySelector("#tpl-corte").value;
         const duracaoRaw = tabModelos.querySelector("#tpl-duracao").value;
-        await createTemplate({
+        const dados = {
           userId: user.id,
           name: tabModelos.querySelector("#tpl-nome").value.trim(),
           boardId: tabModelos.querySelector("#tpl-banca").value || null,
@@ -796,9 +834,11 @@ export async function renderSimuladosPage(container) {
           notes: tabModelos.querySelector("#tpl-notas").value.trim(),
           blocks,
           rules,
-        });
+        };
+        if (editing) await updateTemplate({ id: editing.id, ...dados });
+        else await createTemplate(dados);
         await carregarDados();
-        renderModelos();
+        renderModelos(null);
         renderTentativas();
       } catch (err) {
         const msg = err?.code === "23505" ? "Já existe uma disciplina sua com esse nome — selecione-a na lista." : err.message;
@@ -824,12 +864,12 @@ export async function renderSimuladosPage(container) {
           return `
             <tr data-tpl-row="${t.id}" style="cursor:pointer;${t.status === "inativo" ? " opacity:0.6;" : ""}">
               <td>${escapeHtml(t.name)}</td>
-              <td>${blocos.length} bloco(s) · ${totalQ}q · ${fmtNota(totalPts)} pts</td>
+              <td>${blocos.length} bloco(s) · ${totalQ}q · ${fmtNota(totalPts)} pts${t.duration_minutes ? ` · ${t.duration_minutes} min` : ""}</td>
               <td>${t.scoring_mode === "liquido" ? "Líquida" : "Bruta"}</td>
               <td>${nTentativas}</td>
               <td>
                 <div class="row-actions">
-                  <button class="btn-link" data-tpl-corte="${t.id}">Editar corte/duração</button>
+                  <button class="btn-link" data-tpl-edit="${t.id}">Editar</button>
                   <span class="row-actions__sep">|</span>
                   <button class="btn-link" data-tpl-toggle="${t.id}" data-next="${t.status === "ativo" ? "inativo" : "ativo"}">${t.status === "ativo" ? "Arquivar" : "Reativar"}</button>
                 </div>
@@ -868,38 +908,25 @@ export async function renderSimuladosPage(container) {
         });
       });
 
+      listBox.querySelectorAll("[data-tpl-edit]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const t = templates.find((x) => x.id === btn.dataset.tplEdit);
+          renderModelos(t);
+          tabModelos.scrollIntoView({ behavior: "smooth", block: "start" });
+        });
+      });
+
       listBox.querySelectorAll("[data-tpl-toggle]").forEach((btn) => {
         btn.addEventListener("click", async () => {
           btn.disabled = true;
           try {
             await setTemplateStatus(btn.dataset.tplToggle, btn.dataset.next);
             await carregarDados();
-            renderModelos();
+            renderModelos(null);
             renderTentativas();
           } catch (err) {
             window.alert("Erro: " + (err.message || "desconhecido"));
             btn.disabled = false;
-          }
-        });
-      });
-
-      listBox.querySelectorAll("[data-tpl-corte]").forEach((btn) => {
-        btn.addEventListener("click", async () => {
-          const t = templates.find((x) => x.id === btn.dataset.tplCorte);
-          const duracaoRaw = window.prompt("Duração da prova em minutos (vazio = não informar):", t.duration_minutes ?? "");
-          if (duracaoRaw === null) return;
-          const corteRaw = window.prompt("Corte estimado (classificatório; vazio = sem corte):", t.cutoff_score ?? "");
-          if (corteRaw === null) return;
-          try {
-            await updateTemplateBasics(t.id, {
-              cutoffScore: corteRaw.trim() === "" ? null : Number(corteRaw),
-              durationMinutes: duracaoRaw.trim() === "" ? null : Number(duracaoRaw),
-            });
-            await carregarDados();
-            renderModelos();
-            renderTentativas();
-          } catch (err) {
-            window.alert("Erro: " + (err.message || "desconhecido"));
           }
         });
       });
