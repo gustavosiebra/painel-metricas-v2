@@ -30,7 +30,7 @@ async function listAll(table, select, orderCol, ascending = true) {
 export async function listTemplates() {
   return listAll(
     "exam_templates",
-    "id, name, board_id, scoring_mode, min_total_pct, cutoff_score, notes, status, created_at",
+    "id, name, board_id, scoring_mode, duration_minutes, min_total_pct, cutoff_score, notes, status, created_at",
     "created_at",
     false
   );
@@ -64,7 +64,7 @@ export async function listAttemptBlocks() {
 
 // blocks: [{ name, module, disciplineId, questions, weight }] na ordem da tela.
 // rules: [{ scope, moduleName, kind, value }] — todos precisam passar (AND).
-export async function createTemplate({ userId, name, boardId, scoringMode, cutoffScore, notes, blocks, rules }) {
+export async function createTemplate({ userId, name, boardId, scoringMode, durationMinutes, cutoffScore, notes, blocks, rules }) {
   const { data: tpl, error } = await supabase
     .from("exam_templates")
     .insert({
@@ -72,6 +72,7 @@ export async function createTemplate({ userId, name, boardId, scoringMode, cutof
       name,
       board_id: boardId || null,
       scoring_mode: scoringMode,
+      duration_minutes: durationMinutes ?? null,
       cutoff_score: cutoffScore ?? null,
       notes: notes || null,
     })

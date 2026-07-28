@@ -309,6 +309,8 @@ export async function renderSimuladosPage(container) {
           .join("")}
       `;
       blocosBox.querySelectorAll("input").forEach((inp) => inp.addEventListener("input", atualizarResumo));
+      const tempoInput = tabTentativas.querySelector("#att-tempo");
+      if (tempoInput) tempoInput.oninput = atualizarResumo;
       atualizarResumo();
 
       function atualizarResumo() {
@@ -318,9 +320,19 @@ export async function renderSimuladosPage(container) {
           wrong: Number(blocosBox.querySelector(`[data-att-wrong="${b.id}"]`)?.value || 0),
         }));
         const calc = calcularTentativa(template, blocos, regras, resultados);
+        // Ritmo (27/07/2026): duração oficial da prova no modelo permite
+        // comparar min/questão usados vs orçamento — estourar tempo no
+        // simulado significa faltar prova no final do dia real.
+        const duracaoProva = template.duration_minutes ? Number(template.duration_minutes) : null;
+        const tempoUsado = Number(tabTentativas.querySelector("#att-tempo")?.value || 0);
+        const totalQ = blocos.reduce((acc, b) => acc + b.questions, 0);
+        const ritmoHtml = duracaoProva && totalQ > 0
+          ? `<p style="margin:0 0 4px; font-size:13px;">Ritmo: ${tempoUsado > 0 ? `${fmtNota(tempoUsado / totalQ)} min/questão` : "—"} · orçamento da prova: ${fmtNota(duracaoProva / totalQ)} min/questão (${duracaoProva} min)${tempoUsado > 0 ? (tempoUsado <= duracaoProva ? ' · <span style="color:var(--color-success);">dentro do tempo ✓</span>' : ' · <span style="color:var(--color-error);">estourou o tempo ✗</span>') : ""}</p>`
+          : "";
         resumoBox.style.display = "block";
         resumoBox.innerHTML = `
           <p style="font-weight:600; margin:8px 0 4px;">Nota: ${fmtNota(calc.nota)} / ${fmtNota(calc.max)} (${formatPct(calc.pct)})${template.cutoff_score != null ? ` · corte estimado ${fmtNota(template.cutoff_score)}: ${calc.cutoffOk ? '<span style="color:var(--color-success);">acima ✓</span>' : '<span style="color:var(--color-error);">abaixo ✗</span>'}` : ""}</p>
+          ${ritmoHtml}
           ${calc.avaliacoes.length ? `<p style="margin:0 0 8px; font-size:13px;">${calc.avaliacoes.map((a) => `${a.ok === false ? "✗" : a.ok === true ? "✓" : "?"} ${escapeHtml(descreverRegra(a.regra))} <span style="color:var(--color-text-muted);">(${fmtMedida(a.medida, a.regra.kind)})</span>`).join(" · ")}</p>` : ""}
           ${calc.temCriterios ? `<p style="margin:0 0 8px; font-weight:600; color:${calc.habilitado ? "var(--color-success)" : "var(--color-error)"};">${calc.habilitado ? "Habilitado nos critérios do edital" : "ELIMINADO pelos critérios do edital"}</p>` : ""}
         `;
@@ -419,7 +431,7 @@ export async function renderSimuladosPage(container) {
             </tr>
             <tr data-att-detail="${a.id}" style="display:none;">
               <td colspan="7" style="background:var(--color-bg-subtle, #f5f5f5);">
-                ${detalheTentativa(template, calc)}
+                ${detalheTentativa(template, calc, a)}
               </td>
             </tr>
           `;
@@ -462,8 +474,12 @@ export async function renderSimuladosPage(container) {
 
     // Detalhe: critérios avaliados + blocos ordenados por pontos recuperáveis
     // (desc) — a ordem JÁ é a resposta de "onde investir".
-    function detalheTentativa(template, calc) {
+    function detalheTentativa(template, calc, tentativa) {
       const ordenado = [...calc.porBloco].sort((a, b) => b.recuperavel - a.recuperavel);
+      const totalQ = calc.porBloco.reduce((acc, x) => acc + x.bloco.questions, 0);
+      const ritmoHtml = template.duration_minutes && tentativa?.duration_minutes && totalQ > 0
+        ? `<p style="margin:8px 0 4px;"><strong>Tempo:</strong> ${fmtNota(tentativa.duration_minutes)} min de ${template.duration_minutes} min permitidos (${fmtNota(Number(tentativa.duration_minutes) / totalQ)} vs orçamento ${fmtNota(Number(template.duration_minutes) / totalQ)} min/questão)${Number(tentativa.duration_minutes) <= Number(template.duration_minutes) ? ' · <span style="color:var(--color-success);">dentro do tempo ✓</span>' : ' · <span style="color:var(--color-error);">estourou o tempo ✗</span>'}</p>`
+        : "";
       const criteriosHtml = calc.avaliacoes.length
         ? `<p style="margin:8px 0 4px;"><strong>Critérios:</strong> ${calc.avaliacoes.map((a) => `${a.ok === false ? '<span style="color:var(--color-error);">✗</span>' : a.ok === true ? '<span style="color:var(--color-success);">✓</span>' : "?"} ${escapeHtml(descreverRegra(a.regra))} <span style="color:var(--color-text-muted);">(obteve ${fmtMedida(a.medida, a.regra.kind)})</span>`).join(" · ")}</p>`
         : "";
@@ -471,6 +487,7 @@ export async function renderSimuladosPage(container) {
         ? `<p style="margin:4px 0; color:var(--color-error);">Abaixo do mínimo: ${calc.legadoFalhas.map(escapeHtml).join("; ")}</p>`
         : "";
       return `
+        ${ritmoHtml}
         ${criteriosHtml}
         ${legadoHtml}
         <div style="overflow-x:auto;">
@@ -568,6 +585,10 @@ export async function renderSimuladosPage(container) {
               <option value="bruto" selected>Bruta (nota = acertos × peso)</option>
               <option value="liquido">Líquida / Cebraspe (nota = (acertos − erros) × peso; branco neutro)</option>
             </select>
+          </div>
+          <div class="form-field" style="max-width:220px;">
+            <label for="tpl-duracao">Duração da prova (min, opcional)</label>
+            <input type="number" id="tpl-duracao" min="1" step="1" placeholder="Ex.: 240" />
           </div>
           <div class="form-field" style="max-width:220px;">
             <label for="tpl-corte">Corte estimado (opcional)</label>
@@ -764,11 +785,13 @@ export async function renderSimuladosPage(container) {
         }
 
         const corteRaw = tabModelos.querySelector("#tpl-corte").value;
+        const duracaoRaw = tabModelos.querySelector("#tpl-duracao").value;
         await createTemplate({
           userId: user.id,
           name: tabModelos.querySelector("#tpl-nome").value.trim(),
           boardId: tabModelos.querySelector("#tpl-banca").value || null,
           scoringMode: tabModelos.querySelector("#tpl-modo").value,
+          durationMinutes: duracaoRaw === "" ? null : Number(duracaoRaw),
           cutoffScore: corteRaw === "" ? null : Number(corteRaw),
           notes: tabModelos.querySelector("#tpl-notas").value.trim(),
           blocks,
@@ -814,7 +837,7 @@ export async function renderSimuladosPage(container) {
             </tr>
             <tr data-tpl-detail="${t.id}" style="display:none;">
               <td colspan="5" style="background:var(--color-bg-subtle, #f5f5f5);">
-                <p style="margin:4px 0; font-size:12px; color:var(--color-text-muted);">${t.cutoff_score != null ? `Corte estimado: ${fmtNota(t.cutoff_score)} · ` : ""}${escapeHtml(t.notes || "")}</p>
+                <p style="margin:4px 0; font-size:12px; color:var(--color-text-muted);">${t.duration_minutes ? `Duração: ${t.duration_minutes} min · ` : ""}${t.cutoff_score != null ? `Corte estimado: ${fmtNota(t.cutoff_score)} · ` : ""}${escapeHtml(t.notes || "")}</p>
                 ${regras.length ? `<p style="margin:4px 0;"><strong>Habilitação:</strong> ${regras.map((r) => escapeHtml(descreverRegra(r))).join(" E ")}</p>` : ""}
                 <div style="overflow-x:auto;">
                   <table class="data-table" style="margin:8px 0;">
