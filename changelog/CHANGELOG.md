@@ -110,3 +110,86 @@ Critérios de aceite verificados com SQL real (transações revertidas, nenhum d
   - **Bug encontrado e corrigido por conta própria antes de apresentar o resultado**: a primeira versão da view somava a quantidade de TODOS os níveis da hierarquia (nó pai + filhos), inflando o total — no índice do TEC, o número do nó pai já inclui a contagem dos filhos, então somar os dois é contar a mesma questão várias vezes. Corrigido adicionando `is_leaf` (nó-folha, sem subitem) em `historical_question_stats`, recalculado a partir da estrutura original de cada planilha; a view agora soma só os nós-folha. Validado: soma por banca bate exatamente com o total de cada arquivo (Cebraspe 3425, FCC 1315, Vunesp 2501, FGV 2027 — conferido, não estimado).
   - View `v_peso_historico_civil` (security_invoker) resultante — % por disciplina dentro de cada banca, ex. FGV (banca do TCE-SC): Edificações 46,03%, PNFL 20,82%, Obras Rodoviárias 16,82%, Obras Hídricas 16,33%. Continua só como referência — não entra automaticamente em `v_prioridade` (NEG-007).
   - Recomendação dada ao usuário: repetir esse levantamento por banca específica de cada edital-alvo em vez de banca genérica, já que histórico de banca diferente dilui o sinal (já seguida — FGV é a banca real do TCE-SC).
+
+---
+
+## Fase 10 — Uso real, correções e novas ferramentas (03/07 a 28/07/2026)
+
+> Seção reconstruída em 28/07/2026 a partir do histórico do Git (62 commits, `b4d329a`..`b5e4af2`). O changelog tinha parado em 02/07 — a partir daqui volta a ser atualizado junto das mudanças relevantes.
+>
+> **Convenção de commit adotada a partir de 19/07/2026** (`c9d34db` em diante): `tipo(escopo): assunto` no título (tipos: `feat`, `fix`, `style`, `revert`) e corpo explicando a **causa raiz e a decisão**, não só o que mudou. Commits anteriores a essa data seguem estilos mistos (`Fase 6-D: ...`, `Corrige ...`) e não foram reescritos — reescrever histórico já publicado exigiria `push --force`, risco alto para ganho estético baixo.
+
+### Dashboard — construção e amadurecimento (03/07 a 08/07)
+- Contadores de cadernos por Situação (Diagnóstico Wilson) e Produtividade/Eficiência (`ee4d838`, `0c245c3`).
+- **Eficiência Global removida** (`91a8ddc`): misturava acerto com horas não mensuráveis (leitura, videoaula), viciando o número. Eficiência Estrita mantida.
+- Fase 6-C a 6-F (`1469d1d`, `db45f86`, `4e67485`, `ef30e7b`): tendência semanal legível (blocos semanais em vez de ~400 pontos diários), janela de tendência exposta, acertos vs. erros por semana, horas por disciplina, curva de retenção, reorganização do dashboard por impacto de decisão e "Próxima Ação" em linguagem simples.
+- Chart.js vendorizado localmente (`d3b7230`) — CDN bloqueado no ambiente do usuário.
+- Retenção por Intervalo ocultada (07/07): a consulta tinha dado real (~12.700 questões), mas o % ficava quase idêntico em todas as faixas (55–61%), sem curva perceptível — nada a comunicar com o dataset atual. Código mantido, sem chamada.
+- Piso de N (50 questões) na Tendência Semanal (`ab493af`) — semana com poucas questões não exibe %, para não distorcer o gráfico.
+- Gráfico Horas por Tipo de Estudo (`dffaa29`).
+
+### Catálogo e cadastro sob demanda (05/07 a 06/07)
+- Cadastro sob demanda de Concurso/Banca/Disciplina direto em Nova Sessão (`53dc49b`), com validação de nome duplicado (`7f47efe`) — endurecida para ignorar acento, não só maiúscula/minúscula (`7e4b09e`), depois de achar "ALECE"/"Alece" duplicado 5× no banco.
+- **Decisão de segurança revertida** (`43e40d5`): antes, item cadastrado por admin virava global e vazava para todo usuário novo. Agora **todos**, inclusive admin, criam item pessoal.
+- Catálogo recriado para todo usuário com editar/apagar local; Dicionário Admin removido (`f089520`); Peso virou sub-aba do Catálogo e Configurações virou ícone na navbar (`d74bafd`).
+- Cadernos só renderizam sob filtro (`58d7af3`) — a lista passa de 1.000 linhas.
+
+### Correções de fluxo em Nova Sessão (11/07 a 15/07)
+- Tipo de estudo reordenado antes de Disciplina e alfabetizado (`aa832d0`); passou a exigir seleção consciente em vez de cair num default acidental (`f44b657`).
+- **Bug de submit silencioso** (`da39a22`): o campo Caderno ficava `required` e escondido (`display:none`) quando "Nenhuma disciplina específica" era escolhida — o navegador bloqueava o envio sem mostrar aviso nenhum; clicar em Salvar simplesmente não fazia nada.
+- Flashcard dispensa disciplina obrigatória (`6bf5ce0`) — o usuário estuda pelo baralho raiz do Anki, intercalando disciplinas.
+- Confiança autodeclarada: "Não informar" desabilitada quando o campo é obrigatório (`94047f4`).
+
+### Metas de Estudo e Planejamento (15/07 a 16/07)
+- Widget Metas de Estudo Semanal no Dashboard + nova aba Planejamento (concursos com datas, contador e valor de inscrição) (`850f306`).
+- Indicador visual ao bater a meta (`ab5b54e`); toggle Horas/Questões restaurado com os dois gráficos sempre desenhados, para a Exportar Imagem revelar ambos via `onclone` (`88a4a48`, `e33bde7`).
+
+### Mobile e identidade visual (16/07)
+- Menu hamburguer abaixo de 640px (`f1e15de`), depois convertido em dropdown flutuante (`b8c3321`) — o menu inline empurrava a barra de usuário para dentro de si.
+- Favicon, apple-touch-icon, ícones PWA e OG image de compartilhamento (`910836c`, `6ab2166`).
+- **Causa raiz do "preciso arrastar a tela"** (`3dba83e`, `710b4a5`, `6ab2166`): item de flex sem `min-width:0` não encolhe além do maior conteúdo não-quebrável, então uma tabela larga em qualquer lugar esticava a página inteira; e o router não resetava o scroll ao navegar, levando o deslocamento de uma tela para a seguinte. KPI grid voltou a 2 colunas com `minmax(0,1fr)` em vez de teto fixo de 200px.
+
+### Correções de data e semana (19/07)
+- Fuso horário nas datas semanais corrigido e âncora unificada entre gráficos (`dfdeb6c`).
+- **Semana civil passa a começar na segunda-feira** (`c9d34db`) em todos os blocos semanais (Metas, Tendência, Horas Semanais).
+- Contador de Situação passa a contar só cadernos ativos (`a687286`) — evitava link para uma Prioridade vazia.
+
+### Deploy e cache (19/07)
+- **Cache-busting automático** (`8298d06`): site estático sem bundler mantinha JS/CSS em cache mesmo após deploy novo (a correção da semana civil não aparecia no celular). `scripts/inject-cache-version.mjs` roda no workflow e acrescenta `?v=<sha>` a toda tag e todo import local — só na cópia publicada, nunca no repositório. **Localhost não tem cache-busting**: em desenvolvimento, use recarregamento forçado ou "Disable cache" no DevTools.
+
+### Gráficos no mobile (19/07)
+- **Gráfico encolhia ao girar a tela e não voltava** (`99957f4`): o `<canvas>` não tinha container com altura própria, então cada resize recalculava o tamanho a partir de um pai que já havia encolhido no resize anterior — um laço que só diminuía. Wrapper `.chart-wrap` com altura fixa + `maintainAspectRatio:false` nos 7 gráficos.
+
+### Login (25/07)
+- Botão de mostrar/ocultar senha com ícone de olho (`2e15347`).
+
+### Integridade de dados do catálogo (26/07)
+- **Causa raiz de cadernos "invisíveis"** (`503b675`, `93247d3`): o PostgREST corta toda consulta em 1.000 linhas por padrão. Com 1.133 cadernos, tudo depois da posição 1.000 na ordem alfabética nunca chegava ao navegador — não aparecia no seletor, nem na busca, **e a checagem de nome duplicado não enxergava**, o que permitiu criar 3 cópias de "Vedações Constitucionais" sem aviso. `listQuestionSets` e `listSessions` passaram a paginar via `.range()`.
+- Busca do Catálogo passou a ignorar acento (`aa1d3d9`) — digitar "vedacoes" não encontrava "Vedações".
+- Cadernos arquivados saem do seletor e da checagem de duplicata (`b4d6d3d`).
+- **Trava de unicidade no banco** (migração `unique_catalog_names`, mensagem amigável em `d782905`): índices únicos com `lower()` + `unaccent()` por dono em `question_sets` (por disciplina), `disciplines`, `exam_boards` e `exams`. A validação no cliente era furável por corrida entre abas e lista desatualizada; a garantia agora é atômica no Postgres.
+
+### Registro de Erros T1–T7 (27/07)
+- Nova tela **Erros** (`cf01b04`) implementando fechamento de erro por causa raiz: cada erro (ou chute/acerto inseguro) vira um registro com disciplina, caderno, banca, subtema, tipo T1–T7, causa, regra correta, gatilho e anotação.
+- Ciclo de vida aberto → encerrado (encerrar exige ter acertado questão **nova** do mesmo ponto sabendo explicar a regra).
+- Indicadores: erros em aberto, registrados/encerrados na semana, distribuição por tipo (30 dias), **reincidência por subtema** (o indicador-mestre) e vida média do erro encerrado.
+- **Decisão de escopo**: anotação é texto simples + links, não editor rico — resumo elaborado pertence à teoria/Anki; o registro precisa ser seco para sobreviver como hábito. Não é repetição espaçada: memorização continua no Anki.
+- Tabela `error_records` com RLS por usuário; serviço paginado desde o nascimento.
+
+### Simulados e Provas (27/07 a 28/07)
+- Nova tela **Simulados** (`a72eb05`) com **modelos de prova reutilizáveis**: todo edital de objetiva se reduz a "lista de blocos (questões, peso, mínimo)" — validado contra TCE-SC/FGV, padrão TJ (Gerais ×1 / Específicos ×3), Campina Grande (peso por disciplina) e Cebraspe (correção líquida).
+- Registro de tentativa com **origem simulado × prova oficial** (treino vs. realidade), gerando automaticamente a sessão de estudo vinculada — sem digitação dupla.
+- Métricas: nota ponderada, **pontos recuperáveis ponderados** (onde cada acerto adicional compra mais pontos da prova), habilitação simulada e evolução por modelo (provas oficiais destacadas na série).
+- **v2** (`28be8f8`): blocos passam a ser (Módulo pré-cadastrado + Disciplina do catálogo, com cadastro sob demanda); habilitação virou **construtor de critérios acumuláveis** (escopo total/módulo/cada bloco × unidade questões/%/pontos), após pesquisa mostrar que edital real é multi-critério (TCE-SP: 12 questões nas Gerais **e** 36 nas Específicas). Nota de corte separada, por ser classificatória e emergente.
+- Duração oficial da prova no modelo + **métrica de ritmo** (`aa8a66d`): min/questão usados vs. orçamento da prova.
+- Edição completa do modelo no próprio formulário (`779a195`), substituindo prompts encadeados. Blocos com resultado registrado não podem ser removidos — o delete cascatearia nas tentativas antigas.
+- "Simulado" desabilitado em Nova Sessão (`59b8330`) para não duplicar registro.
+
+### Padronização visual (28/07)
+- **Auditoria de larguras** (`f78393a`, `b5e4af2`): havia 7 larguras diferentes de card de formulário (420 a 820px) em 8 páginas e 6 larguras diferentes nos campos de filtro (160 a 240px). Substituídas por `.card--form` (largura única) e `.filters-row` (grade com colunas iguais, auto-fit); linhas de bloco/critério/tentativa em Simulados passaram a `.form-grid-row` com trilhas fixas.
+
+### Dívidas conhecidas em aberto
+- `CHANGELOG.md` ficou 25 dias sem atualização (03/07 a 28/07) — reconstruído aqui a partir do Git.
+- 60 dos 80 commits (todos anteriores a 19/07) têm só título, sem corpo explicativo, e 52 não seguem `tipo(escopo):`. Não serão reescritos.
+- `weightPage.js` e `adminDictionaryPage.js` permanecem no repositório sem uso (rotas removidas), sem risco.
+- Correção do campo de data no iOS (`-webkit-appearance:none`) segue **sem validação em dispositivo real**.
