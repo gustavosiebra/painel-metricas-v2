@@ -524,8 +524,15 @@ export async function renderStudyFormPage(container, params) {
     card.querySelector("#study-form").addEventListener("submit", handleSubmit);
   }
 
+  // salvando: trava reentrada. Sem isso, cada clique no botão dispara outro
+  // INSERT — foi o que gerou sessões repetidas em 28/07/2026, quando o
+  // formulário deixou de navegar sozinho e o usuário clicou várias vezes
+  // achando que não tinha salvo.
+  let salvando = false;
+
   async function handleSubmit(event) {
     event.preventDefault();
+    if (salvando) return;
     const { user } = getState();
     getAlertBox().innerHTML = "";
 
@@ -574,6 +581,14 @@ export async function renderStudyFormPage(container, params) {
         getAlertBox().innerHTML = `<div class="alert alert--error">Escolha pelo menos uma banca na lista de Multibancas.</div>`;
         return;
       }
+    }
+
+    const submitBtn = card.querySelector('#study-form button[type="submit"]');
+    salvando = true;
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.dataset.textoOriginal = submitBtn.textContent;
+      submitBtn.textContent = "Salvando…";
     }
 
     try {
@@ -722,33 +737,16 @@ export async function renderStudyFormPage(container, params) {
       if (editingId) {
         await updateStudySession(editingId, payload);
         getAlertBox().innerHTML = `<div class="alert alert--success">Sessão atualizada com sucesso.</div>`;
-        setTimeout(() => navigate("/sessoes"), 800);
       } else {
-        const created = await createStudySession(payload);
-        // Atalho pro fluxo T1–T7 (27/07/2026): sessão nova com erros não
-        // navega sozinha — oferece registrar os erros AGORA, com disciplina/
-        // caderno/banca herdados e vínculo à sessão recém-criada. A janela
-        // certa de classificar é logo após a correção, não "depois".
-        if (wrongTotal > 0 && hasMeasurableResult(studyType)) {
-          getAlertBox().innerHTML = `
-            <div class="alert alert--success">
-              Sessão registrada — ${wrongTotal} erro(s) no bloco.
-              <button type="button" id="goto-erros" class="btn-link">Registrar erros agora</button>
-              ou <button type="button" id="goto-sessoes" class="btn-link">ir para Sessões</button>.
-            </div>
-          `;
-          const paramsErros = {};
-          if (created?.id) paramsErros.sessionId = created.id;
-          if (disciplineId) paramsErros.disciplineId = disciplineId;
-          if (questionSetId) paramsErros.questionSetId = questionSetId;
-          if (boardIds.length === 1) paramsErros.boardId = boardIds[0];
-          getAlertBox().querySelector("#goto-erros").addEventListener("click", () => navigate("/erros", paramsErros));
-          getAlertBox().querySelector("#goto-sessoes").addEventListener("click", () => navigate("/sessoes"));
-        } else {
-          getAlertBox().innerHTML = `<div class="alert alert--success">Sessão registrada com sucesso.</div>`;
-          setTimeout(() => navigate("/sessoes"), 800);
-        }
+        await createStudySession(payload);
+        getAlertBox().innerHTML = `<div class="alert alert--success">Sessão registrada com sucesso.</div>`;
       }
+      // Vai direto pra Sessões (28/07/2026, pedido do usuário — restaura o
+      // comportamento antigo). A tentativa de oferecer "Registrar erros agora"
+      // aqui deixava o usuário parado na mesma tela achando que não salvou, e
+      // levou a cliques repetidos no botão. Quem quiser registrar erro entra
+      // na aba Erros, que já tem o formulário completo.
+      navigate("/sessoes");
     } catch (err) {
       // 23505 = unique_violation (26/07/2026): trava de unicidade criada no
       // banco (índices *_owner_*_name_uniq) depois do caso das 3 cópias de
@@ -761,6 +759,14 @@ export async function renderStudyFormPage(container, params) {
           ? "Esse nome já existe no catálogo — o banco bloqueou a duplicata. Recarregue a página e selecione o item existente na lista."
           : err.message;
       getAlertBox().innerHTML = `<div class="alert alert--error">Erro ao salvar: ${escapeHtml(msg)}</div>`;
+    } finally {
+      // Libera a trava mesmo em erro/validação, senão o formulário ficaria
+      // travado sem o usuário saber por quê.
+      salvando = false;
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        if (submitBtn.dataset.textoOriginal) submitBtn.textContent = submitBtn.dataset.textoOriginal;
+      }
     }
   }
 }
