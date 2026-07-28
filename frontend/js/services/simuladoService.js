@@ -1,7 +1,12 @@
-// simuladoService (27/07/2026) — Modelos de Prova reutilizáveis + tentativas
-// (simulado ou prova oficial). Ver migração exam_templates_attempts para o
-// racional do modelo de dados. Toda listagem nasce paginada (lição do corte
-// de 1000 linhas do PostgREST).
+// simuladoService (27/07/2026; v2 no mesmo dia) — Modelos de Prova
+// reutilizáveis + tentativas (simulado ou prova oficial). Ver migrações
+// exam_templates_attempts e exam_template_modules_rules para o racional.
+// v2: blocos ganham módulo (Gerais/Específicos/...) e o modelo ganha
+// critérios de habilitação acumuláveis (exam_template_rules) — pesquisa em
+// editais mostrou que habilitação real é multi-critério (TCE-SP: 12 questões
+// nas Gerais E 36 nas Específicas; FGV: % por módulo e/ou não zerar
+// disciplina; Cebraspe: pontos líquidos; combinados: 50% por módulo E 60%
+// total). Toda listagem nasce paginada (lição do corte de 1000 linhas).
 
 import { supabase } from "../supabaseClient.js";
 import { createStudySession } from "./studyService.js";
@@ -34,10 +39,14 @@ export async function listTemplates() {
 export async function listTemplateBlocks() {
   return listAll(
     "exam_template_blocks",
-    "id, template_id, position, name, discipline_id, questions, weight, min_pct",
+    "id, template_id, position, name, module, discipline_id, questions, weight, min_pct",
     "position",
     true
   );
+}
+
+export async function listTemplateRules() {
+  return listAll("exam_template_rules", "id, template_id, scope, module_name, kind, value", "created_at", true);
 }
 
 export async function listAttempts() {
@@ -53,8 +62,9 @@ export async function listAttemptBlocks() {
   return listAll("exam_attempt_blocks", "id, attempt_id, block_id, correct, wrong", "id", true);
 }
 
-// blocks: [{ name, disciplineId, questions, weight, minPct }] na ordem da tela.
-export async function createTemplate({ userId, name, boardId, scoringMode, minTotalPct, cutoffScore, notes, blocks }) {
+// blocks: [{ name, module, disciplineId, questions, weight }] na ordem da tela.
+// rules: [{ scope, moduleName, kind, value }] — todos precisam passar (AND).
+export async function createTemplate({ userId, name, boardId, scoringMode, cutoffScore, notes, blocks, rules }) {
   const { data: tpl, error } = await supabase
     .from("exam_templates")
     .insert({
@@ -62,7 +72,6 @@ export async function createTemplate({ userId, name, boardId, scoringMode, minTo
       name,
       board_id: boardId || null,
       scoring_mode: scoringMode,
-      min_total_pct: minTotalPct ?? null,
       cutoff_score: cutoffScore ?? null,
       notes: notes || null,
     })
@@ -76,13 +85,27 @@ export async function createTemplate({ userId, name, boardId, scoringMode, minTo
       template_id: tpl.id,
       position: i,
       name: b.name,
+      module: b.module || null,
       discipline_id: b.disciplineId || null,
       questions: b.questions,
       weight: b.weight,
-      min_pct: b.minPct ?? null,
     }))
   );
   if (blocksError) throw blocksError;
+
+  if (rules && rules.length > 0) {
+    const { error: rulesError } = await supabase.from("exam_template_rules").insert(
+      rules.map((r) => ({
+        user_id: userId,
+        template_id: tpl.id,
+        scope: r.scope,
+        module_name: r.scope === "modulo" ? r.moduleName : null,
+        kind: r.kind,
+        value: r.value,
+      }))
+    );
+    if (rulesError) throw rulesError;
+  }
   return tpl;
 }
 
@@ -92,11 +115,9 @@ export async function setTemplateStatus(id, status) {
   if (error) throw error;
 }
 
-export async function updateTemplateCutoff(id, { minTotalPct, cutoffScore }) {
-  const { error } = await supabase
-    .from("exam_templates")
-    .update({ min_total_pct: minTotalPct ?? null, cutoff_score: cutoffScore ?? null })
-    .eq("id", id);
+// Corte estimado (classificatório) — editável quando o resultado real sair.
+export async function updateTemplateCutoff(id, cutoffScore) {
+  const { error } = await supabase.from("exam_templates").update({ cutoff_score: cutoffScore ?? null }).eq("id", id);
   if (error) throw error;
 }
 

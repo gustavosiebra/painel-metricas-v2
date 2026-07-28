@@ -1,18 +1,28 @@
-// Tela "Simulados" (27/07/2026) — Modelos de Prova reutilizáveis + registro
-// de tentativas (simulado × prova oficial). Racional discutido antes de
-// construir: todo edital de objetiva vira "lista de blocos (questões, peso,
-// mínimo habilitatório opcional)"; modelo fixo torna tentativas comparáveis
-// entre si; granularidade por disciplina (opção A escolhida pelo usuário)
-// habilita cruzar com a prática. Métricas: nota ponderada, habilitação
-// simulada (por bloco e total, + nota de corte), pontos recuperáveis
-// ponderados (max − nota por bloco: onde cada acerto adicional vale mais) e
-// evolução por modelo (gráfico quando há 2+ tentativas do mesmo modelo).
+// Tela "Simulados" (27/07/2026; v2 no mesmo dia, feedback do usuário) —
+// Modelos de Prova reutilizáveis + tentativas (simulado × prova oficial).
+//
+// v2, decidido com o usuário testando a v1:
+// - Bloco = linha de disciplina do edital, agrupada por MÓDULO (select
+//   pré-cadastrado: Conhecimentos Gerais / Conhecimentos Específicos /
+//   Outro…) — era texto livre por linha, virou seleção.
+// - Disciplina é obrigatória no bloco e ganhou "+ Cadastrar nova disciplina"
+//   (mesmo padrão sob demanda de Nova Sessão); o nome do bloco É o nome da
+//   disciplina — campo de nome próprio foi removido.
+// - Habilitação virou construtor de CRITÉRIOS acumuláveis (todos AND), após
+//   pesquisa em editais reais: TCE-SP exige 12 questões nas Gerais E 36 nas
+//   Específicas (mínimo absoluto por módulo); FGV usa % por módulo e/ou
+//   "zerar qualquer disciplina elimina" (cada_bloco); Cebraspe usa pontos
+//   líquidos; e há combinados (50% por módulo E 60% no total). Cada critério:
+//   escopo (total | módulo | cada bloco) × unidade (questões | % | pontos) ×
+//   valor. Nota de corte continua à parte: é CLASSIFICATÓRIA (emerge do
+//   resultado), não regra fixa de edital — campo "corte estimado" editável.
 
 import { renderNavbar, wireNavbar } from "../components/navbar.js";
-import { listDisciplines, listExamBoards } from "../services/catalogService.js";
+import { listDisciplines, listExamBoards, createDiscipline } from "../services/catalogService.js";
 import {
   listTemplates,
   listTemplateBlocks,
+  listTemplateRules,
   listAttempts,
   listAttemptBlocks,
   createTemplate,
@@ -27,6 +37,7 @@ import { formatPct } from "../utils/format.js";
 let chartEvolucaoInstance = null;
 
 const ORIGEM_LABEL = { simulado: "Simulado", prova_oficial: "Prova oficial" };
+const MODULOS_PADRAO = ["Conhecimentos Gerais", "Conhecimentos Específicos"];
 
 export async function renderSimuladosPage(container) {
   container.innerHTML = `
@@ -36,7 +47,7 @@ export async function renderSimuladosPage(container) {
         <main class="app-content">
           <h2 class="form-title">Simulados</h2>
           <p style="color:var(--color-text-muted); margin-top:-8px;">
-            Cadastre o modelo da prova uma vez (blocos, pesos, mínimos) e registre cada tentativa em segundos. Tentativas do mesmo modelo são comparáveis; "prova oficial" separa realidade de treino.
+            Cadastre o modelo da prova uma vez (módulos, disciplinas, pesos, critérios de habilitação) e registre cada tentativa em segundos. Tentativas do mesmo modelo são comparáveis; "prova oficial" separa realidade de treino.
           </p>
           <div class="subtabs">
             <button type="button" class="subtab-btn subtab-btn--active" data-subtab="tentativas">Tentativas</button>
@@ -67,15 +78,17 @@ export async function renderSimuladosPage(container) {
   let boards = [];
   let templates = [];
   let templateBlocks = [];
+  let templateRules = [];
   let attempts = [];
   let attemptBlocks = [];
 
   async function carregarDados() {
-    [disciplines, boards, templates, templateBlocks, attempts, attemptBlocks] = await Promise.all([
+    [disciplines, boards, templates, templateBlocks, templateRules, attempts, attemptBlocks] = await Promise.all([
       listDisciplines(),
       listExamBoards(),
       listTemplates(),
       listTemplateBlocks(),
+      listTemplateRules(),
       listAttempts(),
       listAttemptBlocks(),
     ]);
@@ -88,33 +101,88 @@ export async function renderSimuladosPage(container) {
     return;
   }
 
-  const disciplinesById = () => Object.fromEntries(disciplines.map((d) => [d.id, d.name]));
   const blocksDoModelo = (templateId) =>
     templateBlocks.filter((b) => b.template_id === templateId).sort((a, b) => a.position - b.position);
+  const regrasDoModelo = (templateId) => templateRules.filter((r) => r.template_id === templateId);
   const resultadosDaTentativa = (attemptId) => attemptBlocks.filter((r) => r.attempt_id === attemptId);
 
-  // ---- Cálculo central: nota/max/% por bloco e total de uma tentativa ----
-  // bruto: nota = acertos × peso. líquido (Cebraspe): (acertos − erros) × peso
-  // (pode ficar negativa; branco é neutro). Recuperável = max − nota: quanto
-  // o bloco ainda pode render, já ponderado — o ranking disso responde "onde
-  // cada acerto adicional compra mais pontos DESTA prova".
-  function calcularTentativa(template, blocos, resultados) {
+  function descreverRegra(r) {
+    const alvo = r.scope === "total" ? "Total" : r.scope === "cada_bloco" ? "Cada bloco" : r.module_name || "?";
+    const un = r.kind === "questoes" ? "questões" : r.kind === "pct" ? "%" : "pontos";
+    return `${alvo} ≥ ${fmtNota(r.value)} ${un}`;
+  }
+
+  function fmtMedida(valor, kind) {
+    if (valor == null) return "—";
+    if (kind === "pct") return formatPct(valor);
+    if (kind === "questoes") return `${Math.round(valor)} questões`;
+    return `${fmtNota(valor)} pts`;
+  }
+
+  // ---- Cálculo central: nota por bloco + avaliação de critérios ----
+  // bruto: nota = acertos × peso. líquido (Cebraspe): (acertos − erros) ×
+  // peso (pode ficar negativa; branco é neutro). Recuperável = max − nota.
+  // Critérios: TODOS precisam passar (AND); regra de módulo que não bate com
+  // nenhum bloco fica "não aplicável" (ok=null) e é sinalizada, sem eliminar.
+  // Legado v1 (min_pct por bloco / min_total_pct do modelo) continua sendo
+  // avaliado se existir em modelos antigos.
+  function calcularTentativa(template, blocos, regras, resultados) {
     const porBloco = blocos.map((b) => {
       const r = resultados.find((x) => x.block_id === b.id) || { correct: 0, wrong: 0 };
       const nota = template.scoring_mode === "liquido" ? (r.correct - r.wrong) * Number(b.weight) : r.correct * Number(b.weight);
       const max = b.questions * Number(b.weight);
       const pct = max > 0 ? (nota / max) * 100 : 0;
-      const minOk = b.min_pct == null ? null : pct >= Number(b.min_pct);
-      return { bloco: b, correct: r.correct, wrong: r.wrong, nota, max, pct, minOk, recuperavel: max - nota };
+      return { bloco: b, correct: r.correct, wrong: r.wrong, nota, max, pct, recuperavel: max - nota };
     });
     const nota = porBloco.reduce((acc, x) => acc + x.nota, 0);
     const max = porBloco.reduce((acc, x) => acc + x.max, 0);
+    const correct = porBloco.reduce((acc, x) => acc + x.correct, 0);
     const pct = max > 0 ? (nota / max) * 100 : 0;
-    const minTotalOk = template.min_total_pct == null ? null : pct >= Number(template.min_total_pct);
-    const blocosReprovados = porBloco.filter((x) => x.minOk === false);
+
+    const porModulo = {};
+    porBloco.forEach((x) => {
+      const m = x.bloco.module || "(sem módulo)";
+      if (!porModulo[m]) porModulo[m] = { correct: 0, nota: 0, max: 0 };
+      porModulo[m].correct += x.correct;
+      porModulo[m].nota += x.nota;
+      porModulo[m].max += x.max;
+    });
+
+    const medir = (agg, kind) =>
+      kind === "questoes" ? agg.correct : kind === "pontos" ? agg.nota : agg.max > 0 ? (agg.nota / agg.max) * 100 : 0;
+
+    const avaliacoes = regras.map((r) => {
+      let ok = null;
+      let medida = null;
+      if (r.scope === "total") {
+        medida = medir({ correct, nota, max }, r.kind);
+        ok = medida >= Number(r.value);
+      } else if (r.scope === "modulo") {
+        const agg = porModulo[r.module_name];
+        if (agg) {
+          medida = medir(agg, r.kind);
+          ok = medida >= Number(r.value);
+        }
+      } else {
+        const medidas = porBloco.map((x) => medir({ correct: x.correct, nota: x.nota, max: x.max }, r.kind));
+        medida = medidas.length ? Math.min(...medidas) : 0;
+        ok = medidas.every((m) => m >= Number(r.value));
+      }
+      return { regra: r, ok, medida };
+    });
+
+    // Legado v1 (modelos criados antes dos critérios).
+    const legadoFalhas = [];
+    porBloco.forEach((x) => {
+      if (x.bloco.min_pct != null && x.pct < Number(x.bloco.min_pct)) legadoFalhas.push(`${x.bloco.name} < ${formatPct(x.bloco.min_pct)}`);
+    });
+    if (template.min_total_pct != null && pct < Number(template.min_total_pct)) legadoFalhas.push(`Total < ${formatPct(template.min_total_pct)}`);
+
+    const temCriterios = regras.length > 0 || legadoFalhas.length > 0 || porBloco.some((x) => x.bloco.min_pct != null) || template.min_total_pct != null;
+    const habilitado = avaliacoes.every((a) => a.ok !== false) && legadoFalhas.length === 0;
     const cutoffOk = template.cutoff_score == null ? null : nota >= Number(template.cutoff_score);
-    const habilitado = minTotalOk !== false && blocosReprovados.length === 0;
-    return { porBloco, nota, max, pct, minTotalOk, blocosReprovados, cutoffOk, habilitado };
+
+    return { porBloco, porModulo, nota, max, correct, pct, avaliacoes, legadoFalhas, temCriterios, habilitado, cutoffOk };
   }
 
   renderTentativas();
@@ -153,7 +221,7 @@ export async function renderSimuladosPage(container) {
               <input type="number" id="att-tempo" min="0" step="1" required />
             </div>
             <div id="att-blocos"></div>
-            <p id="att-resumo" style="display:none; font-weight:600;"></p>
+            <div id="att-resumo" style="display:none;"></div>
             <div class="form-field">
               <label for="att-notas">Observações (opcional)</label>
               <input type="text" id="att-notas" />
@@ -203,24 +271,39 @@ export async function renderSimuladosPage(container) {
     function montarGradeBlocos(templateId) {
       const template = templates.find((t) => t.id === templateId);
       const blocos = blocksDoModelo(templateId);
+      const regras = regrasDoModelo(templateId);
       const liquido = template?.scoring_mode === "liquido";
+      // Agrupado visualmente por módulo — mesma ordem do cadastro.
+      const modulosOrdem = [];
+      blocos.forEach((b) => {
+        const m = b.module || "(sem módulo)";
+        if (!modulosOrdem.includes(m)) modulosOrdem.push(m);
+      });
       blocosBox.innerHTML = `
         <p style="font-weight:600; margin:12px 0 4px;">Acertos por bloco${liquido ? " (correção líquida: informe também os erros; branco é neutro)" : ""}</p>
-        ${blocos
+        ${modulosOrdem
           .map(
-            (b) => `
-          <div style="display:flex; gap:8px; align-items:end; flex-wrap:wrap; margin-bottom:6px;" data-att-bloco="${b.id}">
-            <span style="flex:1; min-width:200px;">${escapeHtml(b.name)} <span style="color:var(--color-text-muted); font-size:12px;">(${b.questions}q × peso ${b.weight})</span></span>
-            <div class="form-field" style="margin-bottom:0; width:90px;">
-              <label for="att-c-${b.id}">Acertos</label>
-              <input type="number" id="att-c-${b.id}" data-att-correct="${b.id}" min="0" max="${b.questions}" step="1" required value="0" />
+            (m) => `
+          <p style="margin:10px 0 2px; font-size:12px; text-transform:uppercase; color:var(--color-text-muted);">${escapeHtml(m)}</p>
+          ${blocos
+            .filter((b) => (b.module || "(sem módulo)") === m)
+            .map(
+              (b) => `
+            <div style="display:flex; gap:8px; align-items:end; flex-wrap:wrap; margin-bottom:6px;" data-att-bloco="${b.id}">
+              <span style="flex:1; min-width:200px;">${escapeHtml(b.name)} <span style="color:var(--color-text-muted); font-size:12px;">(${b.questions}q × peso ${b.weight})</span></span>
+              <div class="form-field" style="margin-bottom:0; width:90px;">
+                <label for="att-c-${b.id}">Acertos</label>
+                <input type="number" id="att-c-${b.id}" data-att-correct="${b.id}" min="0" max="${b.questions}" step="1" required value="0" />
+              </div>
+              ${liquido ? `
+              <div class="form-field" style="margin-bottom:0; width:90px;">
+                <label for="att-w-${b.id}">Erros</label>
+                <input type="number" id="att-w-${b.id}" data-att-wrong="${b.id}" min="0" max="${b.questions}" step="1" required value="0" />
+              </div>` : ""}
             </div>
-            ${liquido ? `
-            <div class="form-field" style="margin-bottom:0; width:90px;">
-              <label for="att-w-${b.id}">Erros</label>
-              <input type="number" id="att-w-${b.id}" data-att-wrong="${b.id}" min="0" max="${b.questions}" step="1" required value="0" />
-            </div>` : ""}
-          </div>
+          `
+            )
+            .join("")}
         `
           )
           .join("")}
@@ -234,9 +317,13 @@ export async function renderSimuladosPage(container) {
           correct: Number(blocosBox.querySelector(`[data-att-correct="${b.id}"]`)?.value || 0),
           wrong: Number(blocosBox.querySelector(`[data-att-wrong="${b.id}"]`)?.value || 0),
         }));
-        const calc = calcularTentativa(template, blocos, resultados);
+        const calc = calcularTentativa(template, blocos, regras, resultados);
         resumoBox.style.display = "block";
-        resumoBox.innerHTML = `Nota: ${fmtNota(calc.nota)} / ${fmtNota(calc.max)} (${formatPct(calc.pct)})${template.cutoff_score != null ? ` · corte ${fmtNota(template.cutoff_score)}: ${calc.cutoffOk ? "acima ✓" : "abaixo ✗"}` : ""}${calc.blocosReprovados.length ? ` · <span style="color:var(--color-error);">abaixo do mínimo em: ${calc.blocosReprovados.map((x) => escapeHtml(x.bloco.name)).join(", ")}</span>` : ""}`;
+        resumoBox.innerHTML = `
+          <p style="font-weight:600; margin:8px 0 4px;">Nota: ${fmtNota(calc.nota)} / ${fmtNota(calc.max)} (${formatPct(calc.pct)})${template.cutoff_score != null ? ` · corte estimado ${fmtNota(template.cutoff_score)}: ${calc.cutoffOk ? '<span style="color:var(--color-success);">acima ✓</span>' : '<span style="color:var(--color-error);">abaixo ✗</span>'}` : ""}</p>
+          ${calc.avaliacoes.length ? `<p style="margin:0 0 8px; font-size:13px;">${calc.avaliacoes.map((a) => `${a.ok === false ? "✗" : a.ok === true ? "✓" : "?"} ${escapeHtml(descreverRegra(a.regra))} <span style="color:var(--color-text-muted);">(${fmtMedida(a.medida, a.regra.kind)})</span>`).join(" · ")}</p>` : ""}
+          ${calc.temCriterios ? `<p style="margin:0 0 8px; font-weight:600; color:${calc.habilitado ? "var(--color-success)" : "var(--color-error)"};">${calc.habilitado ? "Habilitado nos critérios do edital" : "ELIMINADO pelos critérios do edital"}</p>` : ""}
+        `;
       }
     }
 
@@ -262,9 +349,8 @@ export async function renderSimuladosPage(container) {
           }
           results.push({ blockId: b.id, correct, wrong });
         }
-        const calc = calcularTentativa(template, blocos, results.map((r) => ({ block_id: r.blockId, correct: r.correct, wrong: r.wrong })));
+        const calc = calcularTentativa(template, blocos, regrasDoModelo(templateId), results.map((r) => ({ block_id: r.blockId, correct: r.correct, wrong: r.wrong })));
         const totalQuestoes = blocos.reduce((acc, b) => acc + b.questions, 0);
-        const totalAcertos = results.reduce((acc, r) => acc + r.correct, 0);
         try {
           await createAttempt({
             userId: user.id,
@@ -274,7 +360,7 @@ export async function renderSimuladosPage(container) {
             durationMinutes: Number(tabTentativas.querySelector("#att-tempo").value || 0),
             notes: tabTentativas.querySelector("#att-notas").value.trim(),
             results,
-            totals: { questions: totalQuestoes, correct: totalAcertos, scorePct: Math.round(calc.pct * 100) / 100 },
+            totals: { questions: totalQuestoes, correct: calc.correct, scorePct: Math.round(calc.pct * 100) / 100 },
           });
           await carregarDados();
           renderTentativas();
@@ -315,13 +401,12 @@ export async function renderSimuladosPage(container) {
         .map((a) => {
           const template = templates.find((t) => t.id === a.template_id);
           const blocos = blocksDoModelo(a.template_id);
-          const calc = calcularTentativa(template, blocos, resultadosDaTentativa(a.id));
-          const habilitadoTxt =
-            template.min_total_pct == null && !blocos.some((b) => b.min_pct != null)
-              ? "—"
-              : calc.habilitado
-                ? '<span style="color:var(--color-success);">Habilitado</span>'
-                : '<span style="color:var(--color-error);">Eliminado</span>';
+          const calc = calcularTentativa(template, blocos, regrasDoModelo(a.template_id), resultadosDaTentativa(a.id));
+          const habilitadoTxt = !calc.temCriterios
+            ? "—"
+            : calc.habilitado
+              ? '<span style="color:var(--color-success);">Habilitado</span>'
+              : '<span style="color:var(--color-error);">Eliminado</span>';
           return `
             <tr data-att-row="${a.id}" style="cursor:pointer;">
               <td>${new Date(a.occurred_at).toLocaleDateString("pt-BR")}</td>
@@ -348,7 +433,7 @@ export async function renderSimuladosPage(container) {
             ${rows}
           </table>
         </div>
-        <p style="font-size:12px; color:var(--color-text-muted); margin:8px 0 0;">Clique numa linha pra ver o detalhe por bloco e os pontos recuperáveis.</p>
+        <p style="font-size:12px; color:var(--color-text-muted); margin:8px 0 0;">Clique numa linha pra ver o detalhe por bloco, os critérios e os pontos recuperáveis.</p>
       `;
 
       listBox.querySelectorAll("[data-att-row]").forEach((tr) => {
@@ -375,25 +460,31 @@ export async function renderSimuladosPage(container) {
       });
     }
 
-    // Detalhe por bloco, ordenado por pontos recuperáveis (desc) — a ordem JÁ
-    // é a resposta de "onde investir": bloco com mais pontos ponderados em
-    // jogo primeiro.
+    // Detalhe: critérios avaliados + blocos ordenados por pontos recuperáveis
+    // (desc) — a ordem JÁ é a resposta de "onde investir".
     function detalheTentativa(template, calc) {
       const ordenado = [...calc.porBloco].sort((a, b) => b.recuperavel - a.recuperavel);
-      const dById = disciplinesById();
+      const criteriosHtml = calc.avaliacoes.length
+        ? `<p style="margin:8px 0 4px;"><strong>Critérios:</strong> ${calc.avaliacoes.map((a) => `${a.ok === false ? '<span style="color:var(--color-error);">✗</span>' : a.ok === true ? '<span style="color:var(--color-success);">✓</span>' : "?"} ${escapeHtml(descreverRegra(a.regra))} <span style="color:var(--color-text-muted);">(obteve ${fmtMedida(a.medida, a.regra.kind)})</span>`).join(" · ")}</p>`
+        : "";
+      const legadoHtml = calc.legadoFalhas.length
+        ? `<p style="margin:4px 0; color:var(--color-error);">Abaixo do mínimo: ${calc.legadoFalhas.map(escapeHtml).join("; ")}</p>`
+        : "";
       return `
+        ${criteriosHtml}
+        ${legadoHtml}
         <div style="overflow-x:auto;">
           <table class="data-table" style="margin:8px 0;">
-            <tr><th>Bloco</th><th>Acertos</th><th>Nota</th><th>%</th><th>Mínimo</th><th>Pontos recuperáveis</th></tr>
+            <tr><th>Módulo</th><th>Bloco</th><th>Acertos</th><th>Nota</th><th>%</th><th>Pontos recuperáveis</th></tr>
             ${ordenado
               .map(
                 (x) => `
               <tr>
-                <td>${escapeHtml(x.bloco.name)}${x.bloco.discipline_id ? ` <span style="color:var(--color-text-muted); font-size:11px;">(${escapeHtml(dById[x.bloco.discipline_id] || "")})</span>` : ""}</td>
+                <td style="font-size:12px; color:var(--color-text-muted);">${escapeHtml(x.bloco.module || "—")}</td>
+                <td>${escapeHtml(x.bloco.name)}</td>
                 <td>${x.correct}/${x.bloco.questions}${template.scoring_mode === "liquido" ? ` (${x.wrong} err.)` : ""}</td>
                 <td>${fmtNota(x.nota)}/${fmtNota(x.max)}</td>
                 <td>${formatPct(x.pct)}</td>
-                <td>${x.minOk == null ? "—" : x.minOk ? "✓" : `<span style="color:var(--color-error);">✗ (mín. ${formatPct(x.bloco.min_pct)})</span>`}</td>
                 <td><strong>${fmtNota(x.recuperavel)}</strong></td>
               </tr>
             `
@@ -420,7 +511,7 @@ export async function renderSimuladosPage(container) {
       const template = templates.find((t) => t.id === templateId);
       const serie = [...visiveis].sort((a, b) => new Date(a.occurred_at) - new Date(b.occurred_at));
       const dados = serie.map((a) => {
-        const calc = calcularTentativa(template, blocksDoModelo(a.template_id), resultadosDaTentativa(a.id));
+        const calc = calcularTentativa(template, blocksDoModelo(a.template_id), regrasDoModelo(a.template_id), resultadosDaTentativa(a.id));
         return { data: new Date(a.occurred_at).toLocaleDateString("pt-BR"), pct: Math.round(calc.pct * 10) / 10, origem: a.origem };
       });
       chartEvolucaoInstance = new Chart(tabTentativas.querySelector("#att-evolucao-chart"), {
@@ -435,7 +526,6 @@ export async function renderSimuladosPage(container) {
               backgroundColor: "rgba(31, 56, 100, 0.15)",
               fill: true,
               tension: 0.2,
-              // Prova oficial destacada em laranja no meio da série de treino.
               pointBackgroundColor: dados.map((d) => (d.origem === "prova_oficial" ? "#e65100" : "#1f3864")),
               pointRadius: dados.map((d) => (d.origem === "prova_oficial" ? 6 : 4)),
             },
@@ -457,7 +547,7 @@ export async function renderSimuladosPage(container) {
   // ======================= ABA MODELOS =======================
   function renderModelos() {
     tabModelos.innerHTML = `
-      <div class="card" style="margin-bottom:16px; max-width:760px;">
+      <div class="card" style="margin-bottom:16px; max-width:820px;">
         <h3 style="margin-top:0;">Novo modelo de prova</h3>
         <div id="tpl-alert"></div>
         <form id="tpl-form">
@@ -479,19 +569,16 @@ export async function renderSimuladosPage(container) {
               <option value="liquido">Líquida / Cebraspe (nota = (acertos − erros) × peso; branco neutro)</option>
             </select>
           </div>
-          <div style="display:flex; gap:12px; flex-wrap:wrap;">
-            <div class="form-field" style="flex:1; min-width:180px;">
-              <label for="tpl-min-total">Mínimo % total (opcional)</label>
-              <input type="number" id="tpl-min-total" min="0" max="100" step="0.1" placeholder="Ex.: 50" />
-            </div>
-            <div class="form-field" style="flex:1; min-width:180px;">
-              <label for="tpl-corte">Nota de corte (opcional)</label>
-              <input type="number" id="tpl-corte" min="0" step="0.01" placeholder="Editável depois" />
-            </div>
+          <div class="form-field" style="max-width:220px;">
+            <label for="tpl-corte">Corte estimado (opcional)</label>
+            <input type="number" id="tpl-corte" min="0" step="0.01" placeholder="Editável depois" />
           </div>
-          <p style="font-weight:600; margin:12px 0 4px;">Blocos <span style="color:var(--color-text-muted); font-weight:normal; font-size:12px;">(um por disciplina do edital — vincular à disciplina do catálogo habilita o cruzamento com sua prática)</span></p>
+          <p style="font-weight:600; margin:12px 0 4px;">Blocos <span style="color:var(--color-text-muted); font-weight:normal; font-size:12px;">(uma linha por disciplina do edital, agrupada por módulo)</span></p>
           <div id="tpl-blocos"></div>
           <button type="button" id="tpl-add-bloco" class="btn-link">+ Adicionar bloco</button>
+          <p style="font-weight:600; margin:16px 0 4px;">Critérios de habilitação <span style="color:var(--color-text-muted); font-weight:normal; font-size:12px;">(todos precisam ser atingidos; ex.: TCE-SP = Gerais ≥ 12 questões E Específicas ≥ 36 questões)</span></p>
+          <div id="tpl-criterios"></div>
+          <button type="button" id="tpl-add-criterio" class="btn-link">+ Adicionar critério</button>
           <div class="form-field" style="margin-top:12px;">
             <label for="tpl-notas">Observações (opcional)</label>
             <input type="text" id="tpl-notas" />
@@ -507,22 +594,29 @@ export async function renderSimuladosPage(container) {
 
     const tplAlert = tabModelos.querySelector("#tpl-alert");
     const blocosBox = tabModelos.querySelector("#tpl-blocos");
+    const criteriosBox = tabModelos.querySelector("#tpl-criterios");
 
     function addBlocoRow() {
       const row = document.createElement("div");
       row.setAttribute("data-tpl-bloco-row", "");
       row.style.cssText = "display:flex; gap:8px; align-items:end; flex-wrap:wrap; margin-bottom:6px;";
       row.innerHTML = `
-        <div class="form-field" style="flex:2; min-width:180px; margin-bottom:0;">
-          <label>Nome do bloco</label>
-          <input type="text" data-b-nome required placeholder="Ex.: Língua Portuguesa" />
-        </div>
-        <div class="form-field" style="flex:2; min-width:160px; margin-bottom:0;">
-          <label>Disciplina (opcional)</label>
-          <select data-b-disciplina>
-            <option value="" selected>—</option>
-            ${disciplines.map((d) => `<option value="${d.id}">${escapeHtml(d.name)}</option>`).join("")}
+        <div class="form-field" style="flex:2; min-width:170px; margin-bottom:0;">
+          <label>Módulo</label>
+          <select data-b-modulo>
+            ${MODULOS_PADRAO.map((m, i) => `<option value="${escapeHtml(m)}" ${i === 0 ? "selected" : ""}>${escapeHtml(m)}</option>`).join("")}
+            <option value="__outro__">Outro…</option>
           </select>
+          <input type="text" data-b-modulo-outro placeholder="Nome do módulo" style="display:none; margin-top:6px;" />
+        </div>
+        <div class="form-field" style="flex:2; min-width:180px; margin-bottom:0;">
+          <label>Disciplina</label>
+          <select data-b-disciplina required>
+            <option value="" disabled selected>— Selecione —</option>
+            ${disciplines.map((d) => `<option value="${d.id}">${escapeHtml(d.name)}</option>`).join("")}
+            <option value="__new__">+ Cadastrar nova disciplina…</option>
+          </select>
+          <input type="text" data-b-disciplina-nova placeholder="Nome da nova disciplina" style="display:none; margin-top:6px;" />
         </div>
         <div class="form-field" style="width:80px; margin-bottom:0;">
           <label>Questões</label>
@@ -532,52 +626,160 @@ export async function renderSimuladosPage(container) {
           <label>Peso</label>
           <input type="number" data-b-peso required min="0.01" step="0.01" value="1" />
         </div>
-        <div class="form-field" style="width:90px; margin-bottom:0;">
-          <label>Mín. % <span style="font-size:10px;">(opc.)</span></label>
-          <input type="number" data-b-min min="0" max="100" step="0.1" />
-        </div>
         <button type="button" class="btn-link" data-b-remover style="color:var(--color-error); margin-bottom:8px;">remover</button>
       `;
+      const moduloSelect = row.querySelector("[data-b-modulo]");
+      const moduloOutro = row.querySelector("[data-b-modulo-outro]");
+      moduloSelect.addEventListener("change", () => {
+        moduloOutro.style.display = moduloSelect.value === "__outro__" ? "block" : "none";
+      });
+      const discSelect = row.querySelector("[data-b-disciplina]");
+      const discNova = row.querySelector("[data-b-disciplina-nova]");
+      discSelect.addEventListener("change", () => {
+        discNova.style.display = discSelect.value === "__new__" ? "block" : "none";
+      });
       row.querySelector("[data-b-remover]").addEventListener("click", () => row.remove());
       blocosBox.appendChild(row);
     }
 
+    function addCriterioRow() {
+      const row = document.createElement("div");
+      row.setAttribute("data-tpl-criterio-row", "");
+      row.style.cssText = "display:flex; gap:8px; align-items:end; flex-wrap:wrap; margin-bottom:6px;";
+      row.innerHTML = `
+        <div class="form-field" style="flex:2; min-width:200px; margin-bottom:0;">
+          <label>Escopo</label>
+          <select data-c-escopo>
+            <option value="total" selected>Total da prova</option>
+            ${MODULOS_PADRAO.map((m) => `<option value="modulo:${escapeHtml(m)}">Módulo: ${escapeHtml(m)}</option>`).join("")}
+            <option value="modulo:__outro__">Módulo: outro…</option>
+            <option value="cada_bloco">Cada bloco (ex.: não zerar nenhum)</option>
+          </select>
+          <input type="text" data-c-modulo-outro placeholder="Nome do módulo" style="display:none; margin-top:6px;" />
+        </div>
+        <div class="form-field" style="flex:1; min-width:140px; margin-bottom:0;">
+          <label>Unidade</label>
+          <select data-c-unidade>
+            <option value="questoes" selected>Nº de questões</option>
+            <option value="pct">% de acerto</option>
+            <option value="pontos">Pontos</option>
+          </select>
+        </div>
+        <div class="form-field" style="width:90px; margin-bottom:0;">
+          <label>Mínimo</label>
+          <input type="number" data-c-valor required min="0" step="0.01" />
+        </div>
+        <button type="button" class="btn-link" data-c-remover style="color:var(--color-error); margin-bottom:8px;">remover</button>
+      `;
+      const escopoSelect = row.querySelector("[data-c-escopo]");
+      const moduloOutro = row.querySelector("[data-c-modulo-outro]");
+      escopoSelect.addEventListener("change", () => {
+        moduloOutro.style.display = escopoSelect.value === "modulo:__outro__" ? "block" : "none";
+      });
+      row.querySelector("[data-c-remover]").addEventListener("click", () => row.remove());
+      criteriosBox.appendChild(row);
+    }
+
     tabModelos.querySelector("#tpl-add-bloco").addEventListener("click", addBlocoRow);
+    tabModelos.querySelector("#tpl-add-criterio").addEventListener("click", addCriterioRow);
     addBlocoRow();
 
     tabModelos.querySelector("#tpl-form").addEventListener("submit", async (e) => {
       e.preventDefault();
       tplAlert.innerHTML = "";
-      const rows = [...blocosBox.querySelectorAll("[data-tpl-bloco-row]")];
-      if (rows.length === 0) {
+      const blocoRows = [...blocosBox.querySelectorAll("[data-tpl-bloco-row]")];
+      if (blocoRows.length === 0) {
         tplAlert.innerHTML = `<div class="alert alert--error">Adicione pelo menos um bloco.</div>`;
         return;
       }
-      const blocks = rows.map((r) => ({
-        name: r.querySelector("[data-b-nome]").value.trim(),
-        disciplineId: r.querySelector("[data-b-disciplina]").value || null,
-        questions: Number(r.querySelector("[data-b-questoes]").value),
-        weight: Number(r.querySelector("[data-b-peso]").value),
-        minPct: r.querySelector("[data-b-min]").value === "" ? null : Number(r.querySelector("[data-b-min]").value),
-      }));
-      const minTotalRaw = tabModelos.querySelector("#tpl-min-total").value;
-      const corteRaw = tabModelos.querySelector("#tpl-corte").value;
+
       try {
+        // Disciplinas novas: cria primeiro (com cache por nome normalizado —
+        // duas linhas com a mesma disciplina nova viram UMA criação; a trava
+        // de unicidade do banco pega o resto/corridas).
+        const novasCriadas = {};
+        const blocks = [];
+        for (const row of blocoRows) {
+          const moduloSel = row.querySelector("[data-b-modulo]").value;
+          const modulo = moduloSel === "__outro__" ? row.querySelector("[data-b-modulo-outro]").value.trim() : moduloSel;
+          if (!modulo) {
+            tplAlert.innerHTML = `<div class="alert alert--error">Informe o nome do módulo em "Outro…".</div>`;
+            return;
+          }
+          let disciplineId = row.querySelector("[data-b-disciplina]").value;
+          let disciplineName;
+          if (disciplineId === "__new__") {
+            const nome = row.querySelector("[data-b-disciplina-nova]").value.trim();
+            if (!nome) {
+              tplAlert.innerHTML = `<div class="alert alert--error">Informe o nome da nova disciplina.</div>`;
+              return;
+            }
+            const chave = normalizeForCompare(nome);
+            if (novasCriadas[chave]) {
+              disciplineId = novasCriadas[chave].id;
+              disciplineName = novasCriadas[chave].name;
+            } else {
+              const jaExiste = disciplines.find((d) => normalizeForCompare(d.name) === chave);
+              if (jaExiste) {
+                disciplineId = jaExiste.id;
+                disciplineName = jaExiste.name;
+              } else {
+                const criada = await createDiscipline({ name: nome, userId: user.id });
+                disciplines.push(criada);
+                novasCriadas[chave] = criada;
+                disciplineId = criada.id;
+                disciplineName = criada.name;
+              }
+            }
+          } else {
+            const d = disciplines.find((x) => x.id === disciplineId);
+            disciplineName = d?.name || "";
+          }
+          blocks.push({
+            name: disciplineName,
+            module: modulo,
+            disciplineId,
+            questions: Number(row.querySelector("[data-b-questoes]").value),
+            weight: Number(row.querySelector("[data-b-peso]").value),
+          });
+        }
+
+        const rules = [...criteriosBox.querySelectorAll("[data-tpl-criterio-row]")].map((row) => {
+          const escopoRaw = row.querySelector("[data-c-escopo]").value;
+          let scope, moduleName = null;
+          if (escopoRaw === "total") scope = "total";
+          else if (escopoRaw === "cada_bloco") scope = "cada_bloco";
+          else {
+            scope = "modulo";
+            moduleName = escopoRaw === "modulo:__outro__" ? row.querySelector("[data-c-modulo-outro]").value.trim() : escopoRaw.slice("modulo:".length);
+          }
+          return { scope, moduleName, kind: row.querySelector("[data-c-unidade]").value, value: Number(row.querySelector("[data-c-valor]").value) };
+        });
+        // Critério de módulo precisa apontar pra um módulo que existe nos blocos.
+        for (const r of rules) {
+          if (r.scope === "modulo" && !blocks.some((b) => b.module === r.moduleName)) {
+            tplAlert.innerHTML = `<div class="alert alert--error">O critério aponta pro módulo "${escapeHtml(r.moduleName || "")}", mas nenhum bloco pertence a ele.</div>`;
+            return;
+          }
+        }
+
+        const corteRaw = tabModelos.querySelector("#tpl-corte").value;
         await createTemplate({
           userId: user.id,
           name: tabModelos.querySelector("#tpl-nome").value.trim(),
           boardId: tabModelos.querySelector("#tpl-banca").value || null,
           scoringMode: tabModelos.querySelector("#tpl-modo").value,
-          minTotalPct: minTotalRaw === "" ? null : Number(minTotalRaw),
           cutoffScore: corteRaw === "" ? null : Number(corteRaw),
           notes: tabModelos.querySelector("#tpl-notas").value.trim(),
           blocks,
+          rules,
         });
         await carregarDados();
         renderModelos();
         renderTentativas();
       } catch (err) {
-        tplAlert.innerHTML = `<div class="alert alert--error">Erro ao salvar modelo: ${escapeHtml(err.message)}</div>`;
+        const msg = err?.code === "23505" ? "Já existe uma disciplina sua com esse nome — selecione-a na lista." : err.message;
+        tplAlert.innerHTML = `<div class="alert alert--error">Erro ao salvar modelo: ${escapeHtml(msg)}</div>`;
       }
     });
 
@@ -592,6 +794,7 @@ export async function renderSimuladosPage(container) {
       const rows = templates
         .map((t) => {
           const blocos = blocksDoModelo(t.id);
+          const regras = regrasDoModelo(t.id);
           const totalQ = blocos.reduce((acc, b) => acc + b.questions, 0);
           const totalPts = blocos.reduce((acc, b) => acc + b.questions * Number(b.weight), 0);
           const nTentativas = attempts.filter((a) => a.template_id === t.id).length;
@@ -603,7 +806,7 @@ export async function renderSimuladosPage(container) {
               <td>${nTentativas}</td>
               <td>
                 <div class="row-actions">
-                  <button class="btn-link" data-tpl-corte="${t.id}">Corte/Mínimo</button>
+                  <button class="btn-link" data-tpl-corte="${t.id}">Corte</button>
                   <span class="row-actions__sep">|</span>
                   <button class="btn-link" data-tpl-toggle="${t.id}" data-next="${t.status === "ativo" ? "inativo" : "ativo"}">${t.status === "ativo" ? "Arquivar" : "Reativar"}</button>
                 </div>
@@ -611,11 +814,12 @@ export async function renderSimuladosPage(container) {
             </tr>
             <tr data-tpl-detail="${t.id}" style="display:none;">
               <td colspan="5" style="background:var(--color-bg-subtle, #f5f5f5);">
-                <p style="margin:4px 0; font-size:12px; color:var(--color-text-muted);">${t.min_total_pct != null ? `Mínimo total: ${formatPct(t.min_total_pct)} · ` : ""}${t.cutoff_score != null ? `Nota de corte: ${fmtNota(t.cutoff_score)} · ` : ""}${escapeHtml(t.notes || "")}</p>
+                <p style="margin:4px 0; font-size:12px; color:var(--color-text-muted);">${t.cutoff_score != null ? `Corte estimado: ${fmtNota(t.cutoff_score)} · ` : ""}${escapeHtml(t.notes || "")}</p>
+                ${regras.length ? `<p style="margin:4px 0;"><strong>Habilitação:</strong> ${regras.map((r) => escapeHtml(descreverRegra(r))).join(" E ")}</p>` : ""}
                 <div style="overflow-x:auto;">
                   <table class="data-table" style="margin:8px 0;">
-                    <tr><th>Bloco</th><th>Questões</th><th>Peso</th><th>Mín. %</th></tr>
-                    ${blocos.map((b) => `<tr><td>${escapeHtml(b.name)}</td><td>${b.questions}</td><td>${b.weight}</td><td>${b.min_pct == null ? "—" : formatPct(b.min_pct)}</td></tr>`).join("")}
+                    <tr><th>Módulo</th><th>Disciplina</th><th>Questões</th><th>Peso</th></tr>
+                    ${blocos.map((b) => `<tr><td style="font-size:12px; color:var(--color-text-muted);">${escapeHtml(b.module || "—")}</td><td>${escapeHtml(b.name)}</td><td>${b.questions}</td><td>${b.weight}</td></tr>`).join("")}
                   </table>
                 </div>
               </td>
@@ -656,19 +860,13 @@ export async function renderSimuladosPage(container) {
         });
       });
 
-      // Corte/mínimo editáveis depois (quando o edital/resultado real sair).
       listBox.querySelectorAll("[data-tpl-corte]").forEach((btn) => {
         btn.addEventListener("click", async () => {
           const t = templates.find((x) => x.id === btn.dataset.tplCorte);
-          const minRaw = window.prompt("Mínimo % total pra habilitação (vazio = sem mínimo):", t.min_total_pct ?? "");
-          if (minRaw === null) return;
-          const corteRaw = window.prompt("Nota de corte (vazio = sem corte):", t.cutoff_score ?? "");
+          const corteRaw = window.prompt("Corte estimado (classificatório; vazio = sem corte):", t.cutoff_score ?? "");
           if (corteRaw === null) return;
           try {
-            await updateTemplateCutoff(t.id, {
-              minTotalPct: minRaw.trim() === "" ? null : Number(minRaw),
-              cutoffScore: corteRaw.trim() === "" ? null : Number(corteRaw),
-            });
+            await updateTemplateCutoff(t.id, corteRaw.trim() === "" ? null : Number(corteRaw));
             await carregarDados();
             renderModelos();
             renderTentativas();
@@ -689,6 +887,16 @@ function fmtNota(n) {
 function todayISO() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+const DIACRITICOS_REGEX = new RegExp("[\\u0300-\\u036f]", "g");
+
+function normalizeForCompare(text) {
+  return (text || "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(DIACRITICOS_REGEX, "");
 }
 
 function escapeHtml(str) {
