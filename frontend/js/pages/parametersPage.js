@@ -47,7 +47,7 @@ export async function renderParametersPage(container) {
 
   function renderThresholdsForm(p) {
     thresholdsSection.innerHTML = `
-      <div class="card" style="max-width:640px; margin-bottom:16px;">
+      <div class="card card--form" style="margin-bottom:16px;">
         <h3 style="margin-top:0;">Limiares e Janelas</h3>
         <form id="thresholds-form">
           <div class="form-field">
@@ -180,7 +180,7 @@ export async function renderParametersPage(container) {
     }
 
     riskSection.innerHTML = `
-      <div class="card" style="max-width:720px; margin-bottom:16px;">
+      <div class="card card--form" style="margin-bottom:16px;">
         <h3 style="margin-top:0;">Matriz de Risco (Situação × Peso)</h3>
         <p style="color:var(--color-text-muted);">Alimenta a Calibração de Confiança. Texto de ação recomendada é seu — escreva como preferir.</p>
         <form id="risk-rule-form" style="margin-bottom:16px;">

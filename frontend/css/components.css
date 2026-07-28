@@ -132,6 +132,35 @@
   color: var(--color-primary);
 }
 
+/* Padronização de larguras (28/07/2026, pedido do usuário — impacto visual).
+   Antes cada página escolhia um max-width avulso pro card de formulário
+   (420, 560, 640, 680, 720, 820px) e cada barra de filtro tinha min-width
+   próprio por campo (160 a 240px), então nada alinhava entre telas. Agora:
+   .card--form = largura única de formulário; .filters-row = grade de filtros
+   com colunas iguais que se adaptam sozinhas (auto-fit), sem min-width
+   avulso em cada campo. */
+.card--form {
+  max-width: 720px;
+}
+
+.filters-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: var(--spacing-3);
+  align-items: end;
+  margin-bottom: var(--spacing-2);
+}
+
+.filters-row .form-field {
+  margin-bottom: 0;
+}
+
+/* Botões que dividem a barra com os filtros (ex.: "+ Nova Sessão" e
+   "Exportar CSV" em Sessões) — não esticam pra ocupar a coluna inteira. */
+.filters-row .btn {
+  justify-self: start;
+}
+
 /* Linhas de formulário com colunas alinhadas (28/07/2026, pedido do usuário —
    impacto visual). Blocos e critérios em Simulados usavam flex com valores
    avulsos por campo (flex:2/min-width:170px aqui, width:80px ali), então as

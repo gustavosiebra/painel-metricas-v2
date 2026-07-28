@@ -21,7 +21,7 @@ export async function renderHistoryPage(container) {
         ${renderNavbar("/historico")}
         <main class="app-content">
           <h2 class="form-title">Histórico</h2>
-          <div class="card" style="margin-bottom:16px; max-width:420px;">
+          <div class="card card--form" style="margin-bottom:16px;">
             <div class="form-field">
               <label for="discipline-filter">Disciplina</label>
               <select id="discipline-filter"><option value="">Carregando…</option></select>

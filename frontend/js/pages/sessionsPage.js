@@ -36,12 +36,12 @@ export async function renderSessionsPage(container) {
         <main class="app-content">
           <h2 class="form-title">Sessões</h2>
           <div class="card" style="margin-bottom:16px;">
-            <div style="display:flex; gap:16px; align-items:end; flex-wrap:wrap;">
-              <div class="form-field" style="margin-bottom:0; min-width:220px;">
+            <div class="filters-row">
+              <div class="form-field">
                 <label for="filter-discipline">Disciplina</label>
                 <select id="filter-discipline"><option value="">Todas</option></select>
               </div>
-              <div class="form-field" style="margin-bottom:0;">
+              <div class="form-field">
                 <label for="filter-status">Mostrar</label>
                 <select id="filter-status">
                   <option value="ativo">Ativas</option>

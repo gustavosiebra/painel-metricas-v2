@@ -91,7 +91,7 @@ export async function renderErrorsPage(container, params) {
 
   content.innerHTML = `
     <div id="err-indicadores"></div>
-    <div class="card" style="margin-bottom:16px; max-width:640px;">
+    <div class="card card--form" style="margin-bottom:16px;">
       <h3 style="margin-top:0;">Registrar erro</h3>
       ${preSessionId ? '<p style="color:var(--color-text-muted); font-size:13px;">Os registros feitos agora ficarão vinculados à sessão que você acabou de salvar.</p>' : ""}
       <div id="err-form-alert"></div>
@@ -155,8 +155,8 @@ export async function renderErrorsPage(container, params) {
     </div>
     <div class="card">
       <h3 style="margin-top:0;">Registros</h3>
-      <div style="display:flex; gap:12px; align-items:end; flex-wrap:wrap; margin-bottom:8px;">
-        <div class="form-field" style="margin-bottom:0;">
+      <div class="filters-row">
+        <div class="form-field">
           <label for="err-f-status">Status</label>
           <select id="err-f-status">
             <option value="aberto" selected>Abertos</option>
@@ -164,28 +164,28 @@ export async function renderErrorsPage(container, params) {
             <option value="">Todos</option>
           </select>
         </div>
-        <div class="form-field" style="margin-bottom:0; min-width:180px;">
+        <div class="form-field">
           <label for="err-f-disciplina">Disciplina</label>
           <select id="err-f-disciplina">
             <option value="">Todas</option>
             ${disciplines.map((d) => `<option value="${d.id}">${escapeHtml(d.name)}</option>`).join("")}
           </select>
         </div>
-        <div class="form-field" style="margin-bottom:0;">
+        <div class="form-field">
           <label for="err-f-tipo">Tipo</label>
           <select id="err-f-tipo">
             <option value="">Todos</option>
             ${TIPOS.map((t) => `<option value="${t.value}">${t.value}</option>`).join("")}
           </select>
         </div>
-        <div class="form-field" style="margin-bottom:0; min-width:160px;">
+        <div class="form-field">
           <label for="err-f-banca">Banca</label>
           <select id="err-f-banca">
             <option value="">Todas</option>
             ${boards.map((b) => `<option value="${b.id}">${escapeHtml(b.name)}</option>`).join("")}
           </select>
         </div>
-        <div class="form-field" style="margin-bottom:0; min-width:200px;">
+        <div class="form-field">
           <label for="err-f-busca">Subtema</label>
           <input type="text" id="err-f-busca" placeholder="Buscar por subtema..." />
         </div>

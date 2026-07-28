@@ -71,7 +71,7 @@ export async function renderStudyFormPage(container, params) {
       <div style="flex:1; display:flex; flex-direction:column;">
         ${renderNavbar("/sessoes/nova")}
         <main class="app-content">
-          <div class="card" style="max-width:560px;">
+          <div class="card card--form">
             <h2 class="form-title">${editingId ? "Editar Sessão" : "Nova Sessão"}</h2>
             <div id="alert-box"></div>
             <p>Carregando catálogo…</p>

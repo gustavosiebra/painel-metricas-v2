@@ -25,7 +25,7 @@ export async function renderPlanningPage(container) {
             Data da prova, prazo de inscrição e valor da taxa de cada concurso que você está estudando.
           </p>
           <div id="alert-box"></div>
-          <div class="card" style="margin-bottom:16px; max-width:640px;">
+          <div class="card card--form" style="margin-bottom:16px;">
             <h3 style="margin-top:0;">+ Novo concurso</h3>
             <form id="new-exam-form">
               <div class="form-field">
@@ -108,7 +108,7 @@ export async function renderPlanningPage(container) {
     const valorTexto =
       e.fee_amount != null ? Number(e.fee_amount).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : "—";
     return `
-      <div class="card" style="margin-bottom:16px; max-width:640px;">
+      <div class="card card--form" style="margin-bottom:16px;">
         <h3 style="margin-top:0;">${escapeHtml(e.name)}</h3>
         ${contadorProva(e.exam_date)}
         ${contadorInscricao(e.registration_date)}
@@ -120,7 +120,7 @@ export async function renderPlanningPage(container) {
 
   function cardEdicao(e) {
     return `
-      <div class="card" style="margin-bottom:16px; max-width:640px; background:var(--color-bg-subtle, #f5f5f5);">
+      <div class="card card--form" style="margin-bottom:16px; background:var(--color-bg-subtle, #f5f5f5);">
         <h3 style="margin-top:0;">${escapeHtml(e.name)}</h3>
         <div class="form-field">
           <label for="edit-exam-date-${e.id}">Data da prova</label>

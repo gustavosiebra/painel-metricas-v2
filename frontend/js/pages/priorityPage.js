@@ -65,15 +65,15 @@ export async function renderPriorityPage(container, params) {
             Peso manual por disciplina — não substitui nem altera aquele.
           </p>
           <div class="card" style="margin-bottom:16px;">
-            <div style="display:flex; gap:16px; align-items:end; flex-wrap:wrap;">
-              <div class="form-field" style="margin-bottom:0; min-width:240px;">
+            <div class="filters-row">
+              <div class="form-field">
                 <label for="filter-discipline">Disciplina</label>
                 <select id="filter-discipline">
                   <option value="" disabled ${!classificacaoInicial ? "selected" : ""}>— Escolha —</option>
                   <option value="__todas__" ${classificacaoInicial ? "selected" : ""}>Todas as disciplinas</option>
                 </select>
               </div>
-              <div class="form-field" style="margin-bottom:0; min-width:200px;">
+              <div class="form-field">
                 <label for="filter-classificacao">Classificação Wilson</label>
                 <select id="filter-classificacao">
                   ${WILSON_FILTRO_OPCOES.map(([v, l]) => `<option value="${v}" ${classificacaoInicial === v ? "selected" : ""}>${l}</option>`).join("")}

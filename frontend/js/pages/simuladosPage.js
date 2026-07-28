@@ -194,7 +194,7 @@ export async function renderSimuladosPage(container) {
     const formHtml = ativos.length === 0
       ? `<div class="card" style="margin-bottom:16px;"><p style="color:var(--color-text-muted);">Nenhum modelo cadastrado ainda — crie um na aba Modelos primeiro.</p></div>`
       : `
-        <div class="card" style="margin-bottom:16px; max-width:680px;">
+        <div class="card card--form" style="margin-bottom:16px;">
           <h3 style="margin-top:0;">Registrar tentativa</h3>
           <div id="att-alert"></div>
           <form id="att-form">
@@ -236,14 +236,14 @@ export async function renderSimuladosPage(container) {
       <div class="card" style="margin-bottom:16px;">
         <h3 style="margin-top:0;">Histórico</h3>
         <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:var(--spacing-2); margin-bottom:8px;">
-          <div class="form-field" style="margin-bottom:0;">
+          <div class="form-field">
             <label for="att-f-template">Modelo</label>
             <select id="att-f-template">
               <option value="">Todos</option>
               ${templates.map((t) => `<option value="${t.id}">${escapeHtml(t.name)}</option>`).join("")}
             </select>
           </div>
-          <div class="form-field" style="margin-bottom:0;">
+          <div class="form-field">
             <label for="att-f-origem">Origem</label>
             <select id="att-f-origem">
               <option value="">Todas</option>
@@ -574,7 +574,7 @@ export async function renderSimuladosPage(container) {
     const temTentativas = editing ? attempts.some((a) => a.template_id === editing.id) : false;
 
     tabModelos.innerHTML = `
-      <div class="card" style="margin-bottom:16px; max-width:820px;">
+      <div class="card card--form" style="margin-bottom:16px;">
         <h3 style="margin-top:0;">${editing ? `Editar modelo: ${escapeHtml(editing.name)}` : "Novo modelo de prova"}</h3>
         ${temTentativas ? `<div class="alert" style="background:#fff4e5; color:#b45309; border:1px solid #ffe0b2;">Este modelo já tem tentativas registradas. Mudar questões ou pesos altera a nota das tentativas antigas — a comparação entre elas deixa de ser exata. Blocos já usados não podem ser removidos.</div>` : ""}
         <div id="tpl-alert"></div>
