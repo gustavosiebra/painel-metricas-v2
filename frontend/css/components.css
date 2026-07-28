@@ -139,25 +139,63 @@
    .card--form = largura única de formulário; .filters-row = grade de filtros
    com colunas iguais que se adaptam sozinhas (auto-fit), sem min-width
    avulso em cada campo. */
-/* 28/07/2026, 2ª rodada: limitar SÓ o card de formulário a 720px resolvia
-   metade do problema e criava outro — os cards de lista da mesma página
-   (Indicadores, Registros, Modelos cadastrados) continuavam ocupando a
-   largura inteira, então as bordas não se alinhavam verticalmente e a página
-   parecia montada em dois tamanhos. Agora TODO card ocupa a mesma largura
-   (a do conteúdo) e quem ganha limite é o CAMPO, não o card: input/select/
-   textarea param de esticar num card largo, mantendo linha de leitura
-   confortável. Exceção: campos dentro de .form-grid-row e .filters-row já
-   têm largura definida pela própria grade e devem preencher a coluna. */
+/* 28/07/2026, 3ª rodada. Histórico das tentativas anteriores, pra não repetir
+   o erro: (1ª) card de formulário com max-width próprio → as bordas não
+   alinhavam com os cards de lista da mesma página; (2ª) todos os cards na
+   largura do conteúdo e campo limitado a 520px → card de 1050px com campo de
+   520 deixava metade da tela vazia, e o botão de submit esticava sozinho.
+   Agora os campos PREENCHEM o card em 2 colunas (auto-fit): o card continua
+   alinhado com os de lista e o espaço é usado de verdade. Itens que não são
+   campo — título, botão, alerta, seções de blocos/critérios, textarea —
+   ocupam a linha inteira via grid-column:1/-1. Abaixo de 640px vira 1 coluna
+   naturalmente (minmax). */
 .card--form {
   max-width: none;
 }
 
-.card--form .form-field > input,
-.card--form .form-field > select,
-.card--form .form-field > textarea {
-  max-width: 520px;
+.card--form form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 0 var(--spacing-4);
+  align-items: start;
 }
 
+/* Tudo que não é campo simples atravessa a grade inteira. */
+.card--form form > *:not(.form-field) {
+  grid-column: 1 / -1;
+}
+
+/* Textarea e observações ficam melhores em linha cheia. */
+.card--form form > .form-field:has(textarea) {
+  grid-column: 1 / -1;
+}
+
+/* Botão de submit não estica: acompanha o próprio texto. */
+.card--form form > button[type="submit"],
+.card--form form > .btn {
+  width: auto;
+  justify-self: start;
+  padding: var(--spacing-2) var(--spacing-4);
+  margin-top: var(--spacing-2);
+}
+
+/* Wrappers que agrupam campos dentro do form (ex.: bloco de resultado
+   mensurável e o atalho de Peso em Nova Sessão) atravessam a grade inteira,
+   então precisam repetir a grade internamente — senão os campos ficariam
+   empilhados em coluna única esticando pela largura toda do card. */
+.form-subgrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 0 var(--spacing-4);
+  align-items: start;
+}
+
+.form-subgrid > *:not(.form-field) {
+  grid-column: 1 / -1;
+}
+
+/* Dentro das grades internas (blocos/critérios/filtros) o campo preenche a
+   coluna — quem manda ali é a própria grade. */
 .card--form .form-grid-row .form-field > input,
 .card--form .form-grid-row .form-field > select,
 .card--form .filters-row .form-field > input,

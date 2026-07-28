@@ -210,7 +210,7 @@ export async function renderStudyFormPage(container, params) {
             <input type="text" id="new_discipline_name" aria-label="Nome da nova disciplina" placeholder="Nome da nova disciplina" />
           </div>
         </div>
-        <div class="card" id="weight-shortcut-box" style="display:none; margin:8px 0; padding:12px; background:var(--color-bg-subtle, #f5f5f5);">
+        <div class="card form-subgrid" id="weight-shortcut-box" style="display:none; margin:8px 0; padding:12px; background:var(--color-bg-subtle, #f5f5f5);">
           <p style="margin:0 0 8px 0;">Ainda não há peso definido para esta disciplina neste concurso — obrigatório na primeira vez.</p>
           <div class="form-field">
             <label for="shortcut_weight">Peso</label>
@@ -234,7 +234,7 @@ export async function renderStudyFormPage(container, params) {
             <input type="text" id="new_caderno_name" aria-label="Nome do novo caderno" placeholder="Nome do novo caderno" />
           </div>
         </div>
-        <div id="measurable-fields" style="display:none;">
+        <div id="measurable-fields" class="form-subgrid" style="display:none;">
           <div class="form-field">
             <label for="questions_total">Questões</label>
             <input type="number" id="questions_total" min="0" step="1" value="${result?.questions_total ?? ""}" />
