@@ -145,9 +145,18 @@ export async function renderStudyFormPage(container, params) {
                Disciplina/Caderno já usado neste arquivo, força escolha
                consciente em vez de cair num tipo por acidente. -->
           <label for="study_type">Tipo de estudo</label>
+          <!-- "Simulado" desabilitado pra sessão NOVA (27/07/2026, decisão do
+               usuário): simulado agora se registra na tela Simulados (por
+               modelo de prova, acertos por bloco), que gera a sessão sozinha —
+               deixar os dois caminhos abertos criaria registro duplicado.
+               Continua selecionável em EDIÇÃO de sessão que já é simulado
+               (sessões antigas e as auto-geradas precisam abrir sem quebrar). -->
           <select id="study_type" required>
             <option value="" disabled ${!existingSession ? "selected" : ""}>— Selecione —</option>
-            ${STUDY_TYPES.map((t) => `<option value="${t.value}" ${existingSession?.study_type === t.value ? "selected" : ""}>${t.label}</option>`).join("")}
+            ${STUDY_TYPES.map((t) => {
+              const desabilitaSimulado = t.value === "simulado" && existingSession?.study_type !== "simulado";
+              return `<option value="${t.value}" ${desabilitaSimulado ? "disabled" : ""} ${existingSession?.study_type === t.value ? "selected" : ""}>${t.label}${desabilitaSimulado ? " (registre na tela Simulados)" : ""}</option>`;
+            }).join("")}
           </select>
         </div>
         <div class="form-field">
