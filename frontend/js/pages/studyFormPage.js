@@ -83,7 +83,13 @@ export async function renderStudyFormPage(container, params) {
   wireNavbar(container);
 
   const card = container.querySelector(".card");
-  const alertBox = container.querySelector("#alert-box");
+  // BUG (28/07/2026): guardar o #alert-box numa const aqui deixava a
+  // referência apontando pra um nó DESCARTADO — renderForm() reescreve
+  // card.innerHTML e cria outro #alert-box. Toda mensagem de erro de
+  // handleSubmit era escrita no nó órfão: a validação barrava o salvamento e
+  // o usuário não via aviso nenhum ("cliquei em Salvar e não aconteceu
+  // nada"). Agora é uma função que busca o elemento vivo a cada uso.
+  const getAlertBox = () => container.querySelector("#alert-box");
 
   let disciplines = [];
   let exams = [];
@@ -420,7 +426,9 @@ export async function renderStudyFormPage(container, params) {
     }
 
     function setWeightBoxVisible(visible) {
-      weightShortcutBox.style.display = visible ? "block" : "none";
+      // "" (string vazia) em vez de "block": devolve o controle pro CSS, senão
+      // o inline style sobrescreveria o display:grid de .form-subgrid.
+      weightShortcutBox.style.display = visible ? "" : "none";
       weightSelect.required = visible;
       // Sempre reseta ao trocar de combo (Concurso/Disciplina) — senão um
       // "Alto" escolhido pro combo anterior ficaria marcado por engano ao
@@ -445,7 +453,7 @@ export async function renderStudyFormPage(container, params) {
     function updateStudyTypeUI() {
       const type = studyTypeSelect.value;
       const measurable = hasMeasurableResult(type);
-      measurableFields.style.display = measurable ? "block" : "none";
+      measurableFields.style.display = measurable ? "" : "none";
       scoreField.style.display = ["simulado", "discursiva"].includes(type) ? "block" : "none";
 
       const showQuestionCounts = ["questao", "simulado", "caderno_erros"].includes(type);
@@ -519,7 +527,7 @@ export async function renderStudyFormPage(container, params) {
   async function handleSubmit(event) {
     event.preventDefault();
     const { user } = getState();
-    alertBox.innerHTML = "";
+    getAlertBox().innerHTML = "";
 
     let disciplineId = card.querySelector("#discipline_id").value;
     let examId = card.querySelector("#exam_id").value;
@@ -553,7 +561,7 @@ export async function renderStudyFormPage(container, params) {
     const correctTotalInput = card.querySelector("#correct_total");
     if (["questao", "simulado"].includes(studyType) && correctTotal > questionsTotal) {
       correctTotalInput.classList.add("input-error");
-      alertBox.innerHTML = `<div class="alert alert--error">Acertos não pode ser maior que Questões.</div>`;
+      getAlertBox().innerHTML = `<div class="alert alert--error">Acertos não pode ser maior que Questões.</div>`;
       return;
     }
 
@@ -563,7 +571,7 @@ export async function renderStudyFormPage(container, params) {
     if (multibancaBoard && boardSelectValue === multibancaBoard.id) {
       const marcadas = card.querySelectorAll(".board-multi-checkbox:checked").length;
       if (marcadas === 0) {
-        alertBox.innerHTML = `<div class="alert alert--error">Escolha pelo menos uma banca na lista de Multibancas.</div>`;
+        getAlertBox().innerHTML = `<div class="alert alert--error">Escolha pelo menos uma banca na lista de Multibancas.</div>`;
         return;
       }
     }
@@ -580,12 +588,12 @@ export async function renderStudyFormPage(container, params) {
         input.classList.remove("input-error");
         if (!name) {
           input.classList.add("input-error");
-          alertBox.innerHTML = `<div class="alert alert--error">Informe o nome do novo concurso.</div>`;
+          getAlertBox().innerHTML = `<div class="alert alert--error">Informe o nome do novo concurso.</div>`;
           return;
         }
         if (isDuplicateName(name, exams)) {
           input.classList.add("input-error");
-          alertBox.innerHTML = `<div class="alert alert--error">Já existe um concurso chamado "${escapeHtml(name)}" — selecione-o na lista em vez de cadastrar de novo.</div>`;
+          getAlertBox().innerHTML = `<div class="alert alert--error">Já existe um concurso chamado "${escapeHtml(name)}" — selecione-o na lista em vez de cadastrar de novo.</div>`;
           return;
         }
         const created = await createExam({ name, userId: user.id });
@@ -601,12 +609,12 @@ export async function renderStudyFormPage(container, params) {
         input.classList.remove("input-error");
         if (!name) {
           input.classList.add("input-error");
-          alertBox.innerHTML = `<div class="alert alert--error">Informe o nome da nova disciplina.</div>`;
+          getAlertBox().innerHTML = `<div class="alert alert--error">Informe o nome da nova disciplina.</div>`;
           return;
         }
         if (isDuplicateName(name, disciplines)) {
           input.classList.add("input-error");
-          alertBox.innerHTML = `<div class="alert alert--error">Já existe uma disciplina chamada "${escapeHtml(name)}" — selecione-a na lista em vez de cadastrar de novo.</div>`;
+          getAlertBox().innerHTML = `<div class="alert alert--error">Já existe uma disciplina chamada "${escapeHtml(name)}" — selecione-a na lista em vez de cadastrar de novo.</div>`;
           return;
         }
         const created = await createDiscipline({ name, userId: user.id });
@@ -619,7 +627,7 @@ export async function renderStudyFormPage(container, params) {
       // acima), antes do Caderno.
       if (pesoNecessario && examId) {
         if (!pesoEscolhido) {
-          alertBox.innerHTML = `<div class="alert alert--error">Escolha o Peso (Baixo ou Alto) para esta disciplina neste concurso.</div>`;
+          getAlertBox().innerHTML = `<div class="alert alert--error">Escolha o Peso (Baixo ou Alto) para esta disciplina neste concurso.</div>`;
           return;
         }
         await upsertWeight({
@@ -637,7 +645,7 @@ export async function renderStudyFormPage(container, params) {
         input.classList.remove("input-error");
         if (!name) {
           input.classList.add("input-error");
-          alertBox.innerHTML = `<div class="alert alert--error">Informe o nome do novo caderno.</div>`;
+          getAlertBox().innerHTML = `<div class="alert alert--error">Informe o nome do novo caderno.</div>`;
           return;
         }
         // Escopo da checagem de duplicata é a disciplina — o mesmo nome de
@@ -648,7 +656,7 @@ export async function renderStudyFormPage(container, params) {
         const cadernosDaDisciplina = questionSets.filter((q) => q.discipline_id === disciplineId && q.status !== "inativo");
         if (isDuplicateName(name, cadernosDaDisciplina)) {
           input.classList.add("input-error");
-          alertBox.innerHTML = `<div class="alert alert--error">Já existe um caderno chamado "${escapeHtml(name)}" nessa disciplina — selecione-o na lista em vez de cadastrar de novo.</div>`;
+          getAlertBox().innerHTML = `<div class="alert alert--error">Já existe um caderno chamado "${escapeHtml(name)}" nessa disciplina — selecione-o na lista em vez de cadastrar de novo.</div>`;
           return;
         }
         const created = await createQuestionSet({
@@ -674,12 +682,12 @@ export async function renderStudyFormPage(container, params) {
         input.classList.remove("input-error");
         if (!name) {
           input.classList.add("input-error");
-          alertBox.innerHTML = `<div class="alert alert--error">Informe o nome da nova banca.</div>`;
+          getAlertBox().innerHTML = `<div class="alert alert--error">Informe o nome da nova banca.</div>`;
           return;
         }
         if (isDuplicateName(name, boards)) {
           input.classList.add("input-error");
-          alertBox.innerHTML = `<div class="alert alert--error">Já existe uma banca chamada "${escapeHtml(name)}" — selecione-a na lista em vez de cadastrar de novo.</div>`;
+          getAlertBox().innerHTML = `<div class="alert alert--error">Já existe uma banca chamada "${escapeHtml(name)}" — selecione-a na lista em vez de cadastrar de novo.</div>`;
           return;
         }
         const created = await createExamBoard({ name, userId: user.id });
@@ -713,7 +721,7 @@ export async function renderStudyFormPage(container, params) {
 
       if (editingId) {
         await updateStudySession(editingId, payload);
-        alertBox.innerHTML = `<div class="alert alert--success">Sessão atualizada com sucesso.</div>`;
+        getAlertBox().innerHTML = `<div class="alert alert--success">Sessão atualizada com sucesso.</div>`;
         setTimeout(() => navigate("/sessoes"), 800);
       } else {
         const created = await createStudySession(payload);
@@ -722,7 +730,7 @@ export async function renderStudyFormPage(container, params) {
         // caderno/banca herdados e vínculo à sessão recém-criada. A janela
         // certa de classificar é logo após a correção, não "depois".
         if (wrongTotal > 0 && hasMeasurableResult(studyType)) {
-          alertBox.innerHTML = `
+          getAlertBox().innerHTML = `
             <div class="alert alert--success">
               Sessão registrada — ${wrongTotal} erro(s) no bloco.
               <button type="button" id="goto-erros" class="btn-link">Registrar erros agora</button>
@@ -734,10 +742,10 @@ export async function renderStudyFormPage(container, params) {
           if (disciplineId) paramsErros.disciplineId = disciplineId;
           if (questionSetId) paramsErros.questionSetId = questionSetId;
           if (boardIds.length === 1) paramsErros.boardId = boardIds[0];
-          alertBox.querySelector("#goto-erros").addEventListener("click", () => navigate("/erros", paramsErros));
-          alertBox.querySelector("#goto-sessoes").addEventListener("click", () => navigate("/sessoes"));
+          getAlertBox().querySelector("#goto-erros").addEventListener("click", () => navigate("/erros", paramsErros));
+          getAlertBox().querySelector("#goto-sessoes").addEventListener("click", () => navigate("/sessoes"));
         } else {
-          alertBox.innerHTML = `<div class="alert alert--success">Sessão registrada com sucesso.</div>`;
+          getAlertBox().innerHTML = `<div class="alert alert--success">Sessão registrada com sucesso.</div>`;
           setTimeout(() => navigate("/sessoes"), 800);
         }
       }
@@ -752,7 +760,7 @@ export async function renderStudyFormPage(container, params) {
         err?.code === "23505"
           ? "Esse nome já existe no catálogo — o banco bloqueou a duplicata. Recarregue a página e selecione o item existente na lista."
           : err.message;
-      alertBox.innerHTML = `<div class="alert alert--error">Erro ao salvar: ${escapeHtml(msg)}</div>`;
+      getAlertBox().innerHTML = `<div class="alert alert--error">Erro ao salvar: ${escapeHtml(msg)}</div>`;
     }
   }
 }
