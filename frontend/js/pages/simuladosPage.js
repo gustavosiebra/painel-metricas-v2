@@ -27,7 +27,7 @@ import {
   listAttemptBlocks,
   createTemplate,
   setTemplateStatus,
-  updateTemplateCutoff,
+  updateTemplateBasics,
   createAttempt,
   deleteAttempt,
 } from "../services/simuladoService.js";
@@ -829,7 +829,7 @@ export async function renderSimuladosPage(container) {
               <td>${nTentativas}</td>
               <td>
                 <div class="row-actions">
-                  <button class="btn-link" data-tpl-corte="${t.id}">Corte</button>
+                  <button class="btn-link" data-tpl-corte="${t.id}">Editar corte/duração</button>
                   <span class="row-actions__sep">|</span>
                   <button class="btn-link" data-tpl-toggle="${t.id}" data-next="${t.status === "ativo" ? "inativo" : "ativo"}">${t.status === "ativo" ? "Arquivar" : "Reativar"}</button>
                 </div>
@@ -886,10 +886,15 @@ export async function renderSimuladosPage(container) {
       listBox.querySelectorAll("[data-tpl-corte]").forEach((btn) => {
         btn.addEventListener("click", async () => {
           const t = templates.find((x) => x.id === btn.dataset.tplCorte);
+          const duracaoRaw = window.prompt("Duração da prova em minutos (vazio = não informar):", t.duration_minutes ?? "");
+          if (duracaoRaw === null) return;
           const corteRaw = window.prompt("Corte estimado (classificatório; vazio = sem corte):", t.cutoff_score ?? "");
           if (corteRaw === null) return;
           try {
-            await updateTemplateCutoff(t.id, corteRaw.trim() === "" ? null : Number(corteRaw));
+            await updateTemplateBasics(t.id, {
+              cutoffScore: corteRaw.trim() === "" ? null : Number(corteRaw),
+              durationMinutes: duracaoRaw.trim() === "" ? null : Number(duracaoRaw),
+            });
             await carregarDados();
             renderModelos();
             renderTentativas();

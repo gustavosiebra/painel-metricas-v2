@@ -116,9 +116,16 @@ export async function setTemplateStatus(id, status) {
   if (error) throw error;
 }
 
-// Corte estimado (classificatório) — editável quando o resultado real sair.
-export async function updateTemplateCutoff(id, cutoffScore) {
-  const { error } = await supabase.from("exam_templates").update({ cutoff_score: cutoffScore ?? null }).eq("id", id);
+// Ajustes pós-cadastro (27/07/2026): corte estimado é classificatório
+// (emerge do resultado, muda a cada edição do concurso) e a duração pode ter
+// sido esquecida no cadastro — os dois editáveis sem recriar o modelo.
+// Estrutura (blocos/critérios) continua imutável de propósito: alterá-la
+// invalidaria a comparação entre tentativas já registradas.
+export async function updateTemplateBasics(id, { cutoffScore, durationMinutes }) {
+  const { error } = await supabase
+    .from("exam_templates")
+    .update({ cutoff_score: cutoffScore ?? null, duration_minutes: durationMinutes ?? null })
+    .eq("id", id);
   if (error) throw error;
 }
 
