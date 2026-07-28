@@ -139,8 +139,30 @@
    .card--form = largura única de formulário; .filters-row = grade de filtros
    com colunas iguais que se adaptam sozinhas (auto-fit), sem min-width
    avulso em cada campo. */
+/* 28/07/2026, 2ª rodada: limitar SÓ o card de formulário a 720px resolvia
+   metade do problema e criava outro — os cards de lista da mesma página
+   (Indicadores, Registros, Modelos cadastrados) continuavam ocupando a
+   largura inteira, então as bordas não se alinhavam verticalmente e a página
+   parecia montada em dois tamanhos. Agora TODO card ocupa a mesma largura
+   (a do conteúdo) e quem ganha limite é o CAMPO, não o card: input/select/
+   textarea param de esticar num card largo, mantendo linha de leitura
+   confortável. Exceção: campos dentro de .form-grid-row e .filters-row já
+   têm largura definida pela própria grade e devem preencher a coluna. */
 .card--form {
-  max-width: 720px;
+  max-width: none;
+}
+
+.card--form .form-field > input,
+.card--form .form-field > select,
+.card--form .form-field > textarea {
+  max-width: 520px;
+}
+
+.card--form .form-grid-row .form-field > input,
+.card--form .form-grid-row .form-field > select,
+.card--form .filters-row .form-field > input,
+.card--form .filters-row .form-field > select {
+  max-width: 100%;
 }
 
 .filters-row {

@@ -377,8 +377,8 @@ export async function renderErrorsPage(container, params) {
 
     listBox.innerHTML = `
       <div style="overflow-x:auto;">
-        <table class="data-table">
-          <tr><th>Data</th><th>Disciplina</th><th>Subtema</th><th>Tipo</th><th>Status</th><th>Ações</th></tr>
+        <table class="data-table data-table--fixed" style="min-width:680px;">
+          <tr><th style="width:96px;">Data</th><th style="width:18%;">Disciplina</th><th>Subtema</th><th style="width:70px;">Tipo</th><th style="width:90px;">Status</th><th style="width:150px;">Ações</th></tr>
           ${rows}
         </table>
       </div>

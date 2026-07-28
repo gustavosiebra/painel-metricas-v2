@@ -440,8 +440,8 @@ export async function renderSimuladosPage(container) {
 
       listBox.innerHTML = `
         <div style="overflow-x:auto;">
-          <table class="data-table">
-            <tr><th>Data</th><th>Modelo</th><th>Origem</th><th>Nota</th><th>%</th><th>Habilitação</th><th></th></tr>
+          <table class="data-table data-table--fixed" style="min-width:720px;">
+            <tr><th style="width:96px;">Data</th><th>Modelo</th><th style="width:110px;">Origem</th><th style="width:90px;">Nota</th><th style="width:80px;">%</th><th style="width:110px;">Habilitação</th><th style="width:80px;"></th></tr>
             ${rows}
           </table>
         </div>
@@ -893,8 +893,8 @@ export async function renderSimuladosPage(container) {
 
       listBox.innerHTML = `
         <div style="overflow-x:auto;">
-          <table class="data-table">
-            <tr><th>Nome</th><th>Estrutura</th><th>Correção</th><th>Tentativas</th><th>Ações</th></tr>
+          <table class="data-table data-table--fixed" style="min-width:640px;">
+            <tr><th style="width:24%;">Nome</th><th>Estrutura</th><th style="width:100px;">Correção</th><th style="width:90px;">Tentativas</th><th style="width:150px;">Ações</th></tr>
             ${rows}
           </table>
         </div>
