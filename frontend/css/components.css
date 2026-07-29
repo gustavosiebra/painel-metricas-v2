@@ -201,6 +201,30 @@
   margin-top: var(--spacing-2);
 }
 
+/* Barra de ações do formulário (28/07/2026): os botões eram filhos diretos do
+   <form>, então cada um virava uma LINHA da grade — "Cancelar edição" caía
+   sozinho embaixo, esticado e longe do "Salvar". Agrupados num flex, ficam
+   lado a lado e alinhados à esquerda, como um par. */
+.form-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-3);
+  flex-wrap: wrap;
+  margin-top: var(--spacing-3);
+}
+
+.form-actions .btn {
+  width: auto;
+  padding: var(--spacing-2) var(--spacing-4);
+  margin: 0;
+}
+
+/* Colunas curtas (Tipo, Status, Ações) centralizadas — com texto à esquerda
+   elas ficavam encostadas na borda da coluna anterior, com vão à direita. */
+.data-table .cel-centro {
+  text-align: center;
+}
+
 /* Wrappers que agrupam campos dentro do form (ex.: bloco de resultado
    mensurável e o atalho de Peso em Nova Sessão) atravessam a grade inteira,
    então precisam repetir a grade internamente — senão os campos ficariam

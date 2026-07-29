@@ -154,8 +154,10 @@ export async function renderErrorsPage(container, params) {
           <label for="err-anotacao">Anotação (opcional — links são clicáveis)</label>
           <textarea id="err-anotacao" rows="3" style="width:100%; max-width:100%; box-sizing:border-box; padding:8px 12px; border:1px solid var(--color-border); border-radius:var(--radius); font-size:15px; font-family:inherit;"></textarea>
         </div>
-        <button type="submit" class="btn" style="width:auto; padding:8px 20px;" id="err-form-submit">Salvar erro</button>
-        <button type="button" class="btn-link" id="err-form-cancelar" style="margin-left:12px; display:none;">Cancelar edição</button>
+        <div class="form-actions">
+          <button type="submit" class="btn" id="err-form-submit">Salvar erro</button>
+          <button type="button" class="btn-link" id="err-form-cancelar" style="display:none;">Cancelar edição</button>
+        </div>
       </form>
     </div>
     <div class="card">
@@ -414,10 +416,10 @@ export async function renderErrorsPage(container, params) {
             <td>${data}</td>
             <td>${escapeHtml(disciplinesById[r.discipline_id] || "—")}</td>
             <td>${escapeHtml(r.subtema)}</td>
-            <td><span class="badge" style="background:#eceff1; color:#37474f;" title="${escapeHtml(TIPO_LABEL[r.tipo] || r.tipo)}">${r.tipo}</span></td>
-            <td>${encerrado ? "Encerrado" : "Aberto"}</td>
-            <td>
-              <div class="row-actions">
+            <td class="cel-centro"><span class="badge" style="background:#eceff1; color:#37474f;" title="${escapeHtml(TIPO_LABEL[r.tipo] || r.tipo)}">${r.tipo}</span></td>
+            <td class="cel-centro">${encerrado ? "Encerrado" : "Aberto"}</td>
+            <td class="cel-centro">
+              <div class="row-actions" style="justify-content:center;">
                 <button class="btn-link" data-err-edit="${r.id}">Editar</button>
                 <span class="row-actions__sep">|</span>
                 <button class="btn-link" data-err-toggle="${r.id}" data-next="${encerrado ? "aberto" : "encerrado"}">${encerrado ? "Reabrir" : "Encerrar"}</button>
@@ -444,7 +446,7 @@ export async function renderErrorsPage(container, params) {
     listBox.innerHTML = `
       <div style="overflow-x:auto;">
         <table class="data-table data-table--fixed" style="min-width:680px;">
-          <tr><th style="width:96px;">Data</th><th style="width:18%;">Disciplina</th><th>Subtema</th><th style="width:70px;">Tipo</th><th style="width:90px;">Status</th><th style="width:150px;">Ações</th></tr>
+          <tr><th style="width:96px;">Data</th><th style="width:18%;">Disciplina</th><th>Subtema</th><th class="cel-centro" style="width:70px;">Tipo</th><th class="cel-centro" style="width:90px;">Status</th><th class="cel-centro" style="width:200px;">Ações</th></tr>
           ${rows}
         </table>
       </div>

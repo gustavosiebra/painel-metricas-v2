@@ -226,7 +226,7 @@ export async function renderSimuladosPage(container) {
               <label for="att-notas">Observações (opcional)</label>
               <input type="text" id="att-notas" />
             </div>
-            <button type="submit" class="btn" style="width:auto; padding:8px 20px;">Salvar tentativa</button>
+            <div class="form-actions"><button type="submit" class="btn">Salvar tentativa</button></div>
           </form>
         </div>
       `;
@@ -423,11 +423,11 @@ export async function renderSimuladosPage(container) {
             <tr data-att-row="${a.id}" style="cursor:pointer;">
               <td>${new Date(a.occurred_at).toLocaleDateString("pt-BR")}</td>
               <td>${escapeHtml(template?.name || "—")}</td>
-              <td>${ORIGEM_LABEL[a.origem] || a.origem}</td>
-              <td>${fmtNota(calc.nota)}/${fmtNota(calc.max)}</td>
-              <td>${formatPct(calc.pct)}</td>
-              <td>${habilitadoTxt}</td>
-              <td><button class="btn-link" style="color:var(--color-error);" data-att-delete="${a.id}">Apagar</button></td>
+              <td class="cel-centro">${ORIGEM_LABEL[a.origem] || a.origem}</td>
+              <td class="cel-centro">${fmtNota(calc.nota)}/${fmtNota(calc.max)}</td>
+              <td class="cel-centro">${formatPct(calc.pct)}</td>
+              <td class="cel-centro">${habilitadoTxt}</td>
+              <td class="cel-centro"><button class="btn-link" style="color:var(--color-error);" data-att-delete="${a.id}">Apagar</button></td>
             </tr>
             <tr data-att-detail="${a.id}" style="display:none;">
               <td colspan="7" style="background:var(--color-bg-subtle, #f5f5f5);">
@@ -441,7 +441,7 @@ export async function renderSimuladosPage(container) {
       listBox.innerHTML = `
         <div style="overflow-x:auto;">
           <table class="data-table data-table--fixed" style="min-width:720px;">
-            <tr><th style="width:96px;">Data</th><th>Modelo</th><th style="width:110px;">Origem</th><th style="width:90px;">Nota</th><th style="width:80px;">%</th><th style="width:110px;">Habilitação</th><th style="width:80px;"></th></tr>
+            <tr><th style="width:96px;">Data</th><th>Modelo</th><th class="cel-centro" style="width:110px;">Origem</th><th class="cel-centro" style="width:90px;">Nota</th><th class="cel-centro" style="width:80px;">%</th><th class="cel-centro" style="width:110px;">Habilitação</th><th class="cel-centro" style="width:90px;"></th></tr>
             ${rows}
           </table>
         </div>
@@ -617,8 +617,10 @@ export async function renderSimuladosPage(container) {
             <label for="tpl-notas">Observações (opcional)</label>
             <input type="text" id="tpl-notas" value="${editing ? escapeHtml(editing.notes || "") : ""}" />
           </div>
-          <button type="submit" class="btn" style="width:auto; padding:8px 20px;">${editing ? "Salvar alterações" : "Salvar modelo"}</button>
-          ${editing ? `<button type="button" id="tpl-cancelar" class="btn-link" style="margin-left:12px;">Cancelar</button>` : ""}
+          <div class="form-actions">
+            <button type="submit" class="btn">${editing ? "Salvar alterações" : "Salvar modelo"}</button>
+            ${editing ? `<button type="button" id="tpl-cancelar" class="btn-link">Cancelar</button>` : ""}
+          </div>
         </form>
       </div>
       <div class="card">
@@ -865,10 +867,10 @@ export async function renderSimuladosPage(container) {
             <tr data-tpl-row="${t.id}" style="cursor:pointer;${t.status === "inativo" ? " opacity:0.6;" : ""}">
               <td>${escapeHtml(t.name)}</td>
               <td>${blocos.length} bloco(s) · ${totalQ}q · ${fmtNota(totalPts)} pts${t.duration_minutes ? ` · ${t.duration_minutes} min` : ""}</td>
-              <td>${t.scoring_mode === "liquido" ? "Líquida" : "Bruta"}</td>
-              <td>${nTentativas}</td>
-              <td>
-                <div class="row-actions">
+              <td class="cel-centro">${t.scoring_mode === "liquido" ? "Líquida" : "Bruta"}</td>
+              <td class="cel-centro">${nTentativas}</td>
+              <td class="cel-centro">
+                <div class="row-actions" style="justify-content:center;">
                   <button class="btn-link" data-tpl-edit="${t.id}">Editar</button>
                   <span class="row-actions__sep">|</span>
                   <button class="btn-link" data-tpl-toggle="${t.id}" data-next="${t.status === "ativo" ? "inativo" : "ativo"}">${t.status === "ativo" ? "Arquivar" : "Reativar"}</button>
@@ -894,7 +896,7 @@ export async function renderSimuladosPage(container) {
       listBox.innerHTML = `
         <div style="overflow-x:auto;">
           <table class="data-table data-table--fixed" style="min-width:640px;">
-            <tr><th style="width:24%;">Nome</th><th>Estrutura</th><th style="width:100px;">Correção</th><th style="width:90px;">Tentativas</th><th style="width:150px;">Ações</th></tr>
+            <tr><th style="width:24%;">Nome</th><th>Estrutura</th><th class="cel-centro" style="width:100px;">Correção</th><th class="cel-centro" style="width:90px;">Tentativas</th><th class="cel-centro" style="width:210px;">Ações</th></tr>
             ${rows}
           </table>
         </div>
