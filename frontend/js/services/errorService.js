@@ -49,6 +49,27 @@ export async function createErrorRecord(payload) {
   return data;
 }
 
+// Edição de registro já salvo (28/07/2026, pedido do usuário). Não mexe em
+// status/closed_at — quem cuida do ciclo de vida é setErrorStatus.
+export async function updateErrorRecord(id, payload) {
+  const { error } = await supabase
+    .from("error_records")
+    .update({
+      discipline_id: payload.disciplineId,
+      question_set_id: payload.questionSetId || null,
+      board_id: payload.boardId || null,
+      subtema: payload.subtema,
+      resultado: payload.resultado,
+      tipo: payload.tipo,
+      causa: payload.causa,
+      regra: payload.regra || null,
+      gatilho: payload.gatilho || null,
+      anotacao: payload.anotacao || null,
+    })
+    .eq("id", id);
+  if (error) throw error;
+}
+
 // Encerrar/reabrir — closed_at acompanha o status (métrica de tempo de vida
 // do erro depende dele).
 export async function setErrorStatus(id, status) {

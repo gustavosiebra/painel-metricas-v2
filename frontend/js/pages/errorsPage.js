@@ -16,7 +16,7 @@
 
 import { renderNavbar, wireNavbar } from "../components/navbar.js";
 import { listDisciplines, listExamBoards, listQuestionSets } from "../services/catalogService.js";
-import { listErrorRecords, createErrorRecord, setErrorStatus, deleteErrorRecord } from "../services/errorService.js";
+import { listErrorRecords, createErrorRecord, updateErrorRecord, setErrorStatus, deleteErrorRecord } from "../services/errorService.js";
 import { getState } from "../state.js";
 
 // Rótulos e ação corretiva sugerida por tipo (seções 2 e 7 da metodologia).
@@ -89,10 +89,14 @@ export async function renderErrorsPage(container, params) {
   // Filtros da lista — status "aberto" por padrão (o que exige ação).
   const filtros = { status: "aberto", disciplineId: "", tipo: "", boardId: "", busca: "" };
 
+  // Registro sendo editado (28/07/2026, pedido do usuário). O MESMO formulário
+  // serve criar e editar — evita duplicar campos e regras de validação.
+  let editando = null;
+
   content.innerHTML = `
     <div id="err-indicadores"></div>
     <div class="card card--form" style="margin-bottom:16px;">
-      <h3 style="margin-top:0;">Registrar erro</h3>
+      <h3 style="margin-top:0;" id="err-form-titulo">Registrar erro</h3>
       ${preSessionId ? '<p style="color:var(--color-text-muted); font-size:13px;">Os registros feitos agora ficarão vinculados à sessão que você acabou de salvar.</p>' : ""}
       <div id="err-form-alert"></div>
       <form id="err-form">
@@ -150,7 +154,8 @@ export async function renderErrorsPage(container, params) {
           <label for="err-anotacao">Anotação (opcional — links são clicáveis)</label>
           <textarea id="err-anotacao" rows="3" style="width:100%; max-width:100%; box-sizing:border-box; padding:8px 12px; border:1px solid var(--color-border); border-radius:var(--radius); font-size:15px; font-family:inherit;"></textarea>
         </div>
-        <button type="submit" class="btn" style="width:auto; padding:8px 20px;">Salvar erro</button>
+        <button type="submit" class="btn" style="width:auto; padding:8px 20px;" id="err-form-submit">Salvar erro</button>
+        <button type="button" class="btn-link" id="err-form-cancelar" style="margin-left:12px; display:none;">Cancelar edição</button>
       </form>
     </div>
     <div class="card">
@@ -221,37 +226,96 @@ export async function renderErrorsPage(container, params) {
   content.querySelector("#err-form").addEventListener("submit", async (e) => {
     e.preventDefault();
     formAlert.innerHTML = "";
+    const payload = {
+      userId: user.id,
+      sessionId: editando ? editando.session_id : preSessionId || null,
+      disciplineId: disciplinaSelect.value,
+      questionSetId: cadernoSelect.value || null,
+      boardId: content.querySelector("#err-banca").value || null,
+      subtema: content.querySelector("#err-subtema").value.trim(),
+      resultado: content.querySelector("#err-resultado").value,
+      tipo: tipoSelect.value,
+      causa: content.querySelector("#err-causa").value.trim(),
+      regra: content.querySelector("#err-regra").value.trim(),
+      gatilho: content.querySelector("#err-gatilho").value.trim(),
+      anotacao: content.querySelector("#err-anotacao").value.trim(),
+    };
     try {
-      const novo = await createErrorRecord({
-        userId: user.id,
-        sessionId: preSessionId || null,
-        disciplineId: disciplinaSelect.value,
-        questionSetId: cadernoSelect.value || null,
-        boardId: content.querySelector("#err-banca").value || null,
-        subtema: content.querySelector("#err-subtema").value.trim(),
-        resultado: content.querySelector("#err-resultado").value,
-        tipo: tipoSelect.value,
-        causa: content.querySelector("#err-causa").value.trim(),
-        regra: content.querySelector("#err-regra").value.trim(),
-        gatilho: content.querySelector("#err-gatilho").value.trim(),
-        anotacao: content.querySelector("#err-anotacao").value.trim(),
-      });
-      records.unshift(novo);
-      // Mantém disciplina/caderno/banca (registro em lote do mesmo bloco é o
-      // caso comum) — limpa só o que é específico do erro.
-      ["err-subtema", "err-causa", "err-regra", "err-gatilho", "err-anotacao"].forEach((id) => {
-        content.querySelector(`#${id}`).value = "";
-      });
-      tipoSelect.value = "";
-      acaoSugerida.style.display = "none";
-      formAlert.innerHTML = `<div class="alert alert--success">Erro registrado. Reincidência no subtema: ${contarReincidencia(novo)}×.</div>`;
+      if (editando) {
+        await updateErrorRecord(editando.id, payload);
+        Object.assign(editando, {
+          discipline_id: payload.disciplineId,
+          question_set_id: payload.questionSetId,
+          board_id: payload.boardId,
+          subtema: payload.subtema,
+          resultado: payload.resultado,
+          tipo: payload.tipo,
+          causa: payload.causa,
+          regra: payload.regra,
+          gatilho: payload.gatilho,
+          anotacao: payload.anotacao,
+        });
+        sairDoModoEdicao();
+        formAlert.innerHTML = `<div class="alert alert--success">Registro atualizado.</div>`;
+      } else {
+        const novo = await createErrorRecord(payload);
+        records.unshift(novo);
+        formAlert.innerHTML = `<div class="alert alert--success">Erro registrado. Reincidência no subtema: ${contarReincidencia(novo)}×.</div>`;
+        limparFormulario();
+      }
       renderIndicadores();
       renderLista();
-      content.querySelector("#err-subtema").focus();
     } catch (err) {
       formAlert.innerHTML = `<div class="alert alert--error">Erro ao salvar: ${escapeHtml(err.message)}</div>`;
     }
   });
+
+  content.querySelector("#err-form-cancelar").addEventListener("click", () => {
+    sairDoModoEdicao();
+    formAlert.innerHTML = "";
+  });
+
+  // Limpa TUDO (28/07/2026, pedido do usuário). Antes mantinha disciplina/
+  // caderno/banca preenchidos pensando em registro em lote do mesmo bloco, mas
+  // na prática isso fazia o erro seguinte herdar contexto errado sem aviso.
+  function limparFormulario() {
+    ["err-subtema", "err-causa", "err-regra", "err-gatilho", "err-anotacao"].forEach((id) => {
+      content.querySelector(`#${id}`).value = "";
+    });
+    disciplinaSelect.value = "";
+    cadernoSelect.innerHTML = '<option value="">— Nenhum —</option>';
+    content.querySelector("#err-banca").value = "";
+    content.querySelector("#err-resultado").value = "errada";
+    tipoSelect.value = "";
+    acaoSugerida.style.display = "none";
+  }
+
+  function entrarNoModoEdicao(rec) {
+    editando = rec;
+    content.querySelector("#err-form-titulo").textContent = "Editar erro";
+    content.querySelector("#err-form-submit").textContent = "Salvar alterações";
+    content.querySelector("#err-form-cancelar").style.display = "";
+    disciplinaSelect.value = rec.discipline_id;
+    popularCadernos(rec.discipline_id, rec.question_set_id || undefined);
+    content.querySelector("#err-banca").value = rec.board_id || "";
+    content.querySelector("#err-subtema").value = rec.subtema || "";
+    content.querySelector("#err-resultado").value = rec.resultado;
+    tipoSelect.value = rec.tipo;
+    tipoSelect.dispatchEvent(new Event("change"));
+    content.querySelector("#err-causa").value = rec.causa || "";
+    content.querySelector("#err-regra").value = rec.regra || "";
+    content.querySelector("#err-gatilho").value = rec.gatilho || "";
+    content.querySelector("#err-anotacao").value = rec.anotacao || "";
+    content.querySelector("#err-form-titulo").scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+
+  function sairDoModoEdicao() {
+    editando = null;
+    content.querySelector("#err-form-titulo").textContent = "Registrar erro";
+    content.querySelector("#err-form-submit").textContent = "Salvar erro";
+    content.querySelector("#err-form-cancelar").style.display = "none";
+    limparFormulario();
+  }
 
   ["err-f-status", "err-f-disciplina", "err-f-tipo", "err-f-banca"].forEach((id) => {
     content.querySelector(`#${id}`).addEventListener("change", (e) => {
@@ -354,6 +418,8 @@ export async function renderErrorsPage(container, params) {
             <td>${encerrado ? "Encerrado" : "Aberto"}</td>
             <td>
               <div class="row-actions">
+                <button class="btn-link" data-err-edit="${r.id}">Editar</button>
+                <span class="row-actions__sep">|</span>
                 <button class="btn-link" data-err-toggle="${r.id}" data-next="${encerrado ? "aberto" : "encerrado"}">${encerrado ? "Reabrir" : "Encerrar"}</button>
                 <span class="row-actions__sep">|</span>
                 <button class="btn-link" style="color:var(--color-error);" data-err-delete="${r.id}">Apagar</button>
@@ -390,6 +456,13 @@ export async function renderErrorsPage(container, params) {
         if (e.target.closest("button")) return;
         const detail = listBox.querySelector(`[data-err-detail="${tr.dataset.errRow}"]`);
         if (detail) detail.style.display = detail.style.display === "none" ? "" : "none";
+      });
+    });
+
+    listBox.querySelectorAll("[data-err-edit]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const rec = records.find((r) => r.id === btn.dataset.errEdit);
+        if (rec) entrarNoModoEdicao(rec);
       });
     });
 
