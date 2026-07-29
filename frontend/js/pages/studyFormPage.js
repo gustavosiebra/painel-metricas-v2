@@ -42,6 +42,7 @@ import { getWeight, upsertWeight } from "../services/weightService.js";
 // arbitrária.
 const STUDY_TYPES = [
   { value: "caderno_erros", label: "Caderno de Erros" },
+  { value: "correcao_ativa", label: "Correção Ativa" },
   { value: "discursiva", label: "Discursiva" },
   { value: "flashcard", label: "Flashcard" },
   { value: "leitura", label: "Leitura" },
@@ -61,7 +62,11 @@ const STUDY_TYPES = [
 // estudar pelo baralho RAIZ do Anki, intercalando todas as disciplinas juntas
 // (repetição espaçada intercalada retém mais do que baralho filtrado por
 // caderno) — forçar uma disciplina única por sessão não reflete esse fluxo.
-const STUDY_TYPES_ALLOW_NO_DISCIPLINE = ["caderno_erros", "simulado", "flashcard"];
+// Correção Ativa (28/07/2026): fechamento de erro pelas 4 perguntas da
+// metodologia; um fechamento típico percorre erros de várias disciplinas na
+// mesma sessão, então exigir disciplina única obrigaria a escolher uma
+// arbitrariamente (corrompendo Horas por Disciplina) ou a fatiar em N sessões.
+const STUDY_TYPES_ALLOW_NO_DISCIPLINE = ["caderno_erros", "simulado", "flashcard", "correcao_ativa"];
 
 export async function renderStudyFormPage(container, params) {
   const editingId = params?.get ? params.get("id") : null;

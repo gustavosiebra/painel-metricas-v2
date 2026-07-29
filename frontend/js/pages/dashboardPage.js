@@ -57,6 +57,7 @@ const STUDY_TYPE_LABELS = {
   leitura: "Leitura",
   videoaula: "Videoaula",
   caderno_erros: "Caderno de Erros",
+  correcao_ativa: "Correção Ativa",
 };
 
 let chartMediaMovelInstance = null;

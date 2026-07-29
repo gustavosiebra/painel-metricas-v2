@@ -23,6 +23,7 @@ const STUDY_TYPE_LABELS = {
   leitura: "Leitura",
   videoaula: "Videoaula",
   caderno_erros: "Caderno de Erros",
+  correcao_ativa: "Correção Ativa",
 };
 
 // Mesmos valores de studyFormPage.js (self_confidence: "baixa"/"media"/"alta").
