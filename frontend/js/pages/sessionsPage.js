@@ -133,6 +133,13 @@ export async function renderSessionsPage(container) {
       }
       if (va < vb) return -1 * factor;
       if (va > vb) return 1 * factor;
+      // Empate (mesmo dia, já que occurred_at é sempre meio-dia local):
+      // desempata pelo instante de criação, mais recente primeiro — assim a
+      // sessão que você acabou de salvar aparece no topo do dia.
+      const ca = a.created_at || "";
+      const cb = b.created_at || "";
+      if (ca < cb) return 1;
+      if (ca > cb) return -1;
       return 0;
     });
     return sorted;
