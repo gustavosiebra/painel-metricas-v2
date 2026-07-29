@@ -68,6 +68,21 @@ const STUDY_TYPES = [
 // arbitrariamente (corrompendo Horas por Disciplina) ou a fatiar em N sessões.
 const STUDY_TYPES_ALLOW_NO_DISCIPLINE = ["caderno_erros", "simulado", "flashcard", "correcao_ativa"];
 
+// Tipos que pedem Confiança autodeclarada (28/07/2026, revisão a pedido do
+// usuário). A regra antes era implícita — "exige confiança todo tipo que não
+// tem contagem de questões" — e por isso pegou Correção Ativa por tabela,
+// sem ninguém decidir. Critério explícito agora: confiança serve pra suprir a
+// falta de medida objetiva DO QUE VOCÊ ABSORVEU de conteúdo.
+//   Leitura/Videoaula/Revisão: consumo de conteúdo sem nenhuma medida — é o
+//     caso clássico, só a autoavaliação sobra.
+//   Discursiva: tem campo Nota, mas ele é opcional (nem toda banca fecha
+//     nota), então sem confiança a sessão poderia ficar sem medida nenhuma.
+// Ficam de fora: Questões/Simulado/Caderno de Erros (acerto já é medida
+// objetiva), Flashcard (o Anki mede retenção melhor que autoavaliação) e
+// Correção Ativa (atividade-meio: você analisa erro, não absorve conteúdo
+// novo — "confiança" não teria referente).
+const STUDY_TYPES_WITH_CONFIDENCE = ["leitura", "videoaula", "revisao", "discursiva"];
+
 export async function renderStudyFormPage(container, params) {
   const editingId = params?.get ? params.get("id") : null;
 
@@ -468,18 +483,23 @@ export async function renderStudyFormPage(container, params) {
       questionsTotalInput.required = showQuestionCounts;
       correctTotalInput.required = showQuestionCounts;
 
-      selfConfidenceSelect.required = !showQuestionCounts;
+      // Confiança: some da tela quando não se aplica ao tipo (ver
+      // STUDY_TYPES_WITH_CONFIDENCE). required acompanha a visibilidade —
+      // campo required E escondido trava o submit em silêncio (bug já
+      // corrigido antes no Caderno, 08/07/2026; não repetir aqui).
+      const usaConfianca = STUDY_TYPES_WITH_CONFIDENCE.includes(type);
+      selfConfidenceSelect.closest(".form-field").style.display = usaConfianca ? "" : "none";
+      selfConfidenceSelect.required = usaConfianca;
       // Sem isso, "Não informar" (value="") continua selecionável mesmo
       // quando o campo vira required — o navegador bloqueia o submit
       // silenciosamente (value vazio + required = inválido), mas a opção
-      // segue na lista como se fosse uma escolha válida. Desabilita a opção
-      // quando required (mesmo padrão de placeholder disabled já usado em
-      // Concurso/Banca/Disciplina/Caderno neste arquivo); se ela já estava
-      // selecionada, empurra pra "Baixa" pra não deixar o select num estado
-      // desabilitado-selecionado.
+      // segue na lista como se fosse uma escolha válida.
       const noneOption = card.querySelector("#self_confidence_none");
-      noneOption.disabled = selfConfidenceSelect.required;
-      if (selfConfidenceSelect.required && selfConfidenceSelect.value === "") {
+      noneOption.disabled = usaConfianca;
+      if (!usaConfianca) {
+        // Zera pra não gravar confiança de um tipo anterior por engano.
+        selfConfidenceSelect.value = "";
+      } else if (selfConfidenceSelect.value === "") {
         selfConfidenceSelect.value = "baixa";
       }
 
