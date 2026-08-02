@@ -423,6 +423,44 @@ export async function getRetencaoGeral() {
 }
 
 // Retenção por Disciplina (Fase 6-F, 03/07/2026) — a curva geral acima
+// Retenção em nível de CADERNO (28/07/2026, decidido com o usuário). A versão
+// por disciplina (getRetencaoPorDisciplina, mantida abaixo) somava tudo e
+// jogava fora o nome do caderno — então dava pra ver que uma disciplina tinha
+// retenção ruim numa faixa, mas não QUAL caderno causou, o que tornava o dado
+// não-acionável. Pior: a média escondia extremos (LOA com 20% em 0-3 dias
+// ficava diluída nos 60% da AFO inteira).
+//
+// Só reencontros (faixa_ordem > 1): "primeira vez neste caderno" não é
+// retenção, é linha de base — enche sozinha e pouparia o essencial.
+// Ordenado do pior acerto pro melhor: a primeira linha é sempre onde agir.
+export async function getRetencaoPorCaderno() {
+  const [retencaoResult, disciplinesResult] = await Promise.all([
+    supabase
+      .from("v_retencao_caderno")
+      .select("caderno_nome, discipline_id, faixa, faixa_ordem, questoes_total, acertos_total, pct_acerto")
+      .gt("faixa_ordem", 1),
+    supabase.from("disciplines").select("id, name"),
+  ]);
+  if (retencaoResult.error) throw retencaoResult.error;
+  if (disciplinesResult.error) throw disciplinesResult.error;
+
+  const nomePorId = new Map((disciplinesResult.data || []).map((d) => [d.id, d.name]));
+
+  return (retencaoResult.data || [])
+    // Sem questão mensurável não há acerto a interpretar (ex.: reencontro que
+    // só teve leitura/revisão registrada naquele caderno).
+    .filter((r) => Number(r.questoes_total || 0) > 0)
+    .map((r) => ({
+      cadernoNome: r.caderno_nome,
+      disciplinaNome: nomePorId.get(r.discipline_id) || "Sem disciplina",
+      faixa: r.faixa,
+      faixaOrdem: r.faixa_ordem,
+      questoes: Number(r.questoes_total),
+      pct: r.pct_acerto == null ? null : Number(r.pct_acerto),
+    }))
+    .sort((a, b) => (a.pct ?? 999) - (b.pct ?? 999));
+}
+
 // responde "minhas revisões aumentam retenção", mas esconde QUAL disciplina/
 // caderno está por trás de cada faixa. Aqui agrega a mesma v_retencao_caderno
 // por disciplina em vez de somar tudo junto — permite ver, por exemplo, se

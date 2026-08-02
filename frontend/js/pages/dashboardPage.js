@@ -16,7 +16,7 @@ import {
   getTendenciaSemanal,
   getJanelaTendenciaDisciplina,
   getJanelaTendenciaCadernoDestaques,
-  getRetencaoPorDisciplina,
+  getRetencaoPorCaderno,
   getHorasPorDisciplina,
   getHorasPorTipoEstudo,
   getHorasSemanais,
@@ -151,7 +151,7 @@ export async function renderDashboardPage(container) {
   const content = container.querySelector("#dashboard-content");
   const { user } = getState();
 
-  let kpis, ranking, mediaMovelDiaria, situacao, produtividadeVitalicia, produtividadeRecente, janelaDisciplina, janelaCaderno, retencaoPorDisciplina, horasPorDisciplina, horasPorTipoEstudo, horasSemanais, metaSemanal, janelaProdutividadeDias, tendenciaMinQuestoes, metaHoras, metaQuestoes, ultimaDataAtividade;
+  let kpis, ranking, mediaMovelDiaria, situacao, produtividadeVitalicia, produtividadeRecente, janelaDisciplina, janelaCaderno, retencaoPorCaderno, horasPorDisciplina, horasPorTipoEstudo, horasSemanais, metaSemanal, janelaProdutividadeDias, tendenciaMinQuestoes, metaHoras, metaQuestoes, ultimaDataAtividade;
   try {
     // Janela de Produtividade Recente (07/07/2026, pedido do usuário) —
     // configurável em Configurações (padrão 28 dias); busca ANTES do
@@ -178,7 +178,7 @@ export async function renderDashboardPage(container) {
       produtividadeRecente,
       janelaDisciplina,
       janelaCaderno,
-      retencaoPorDisciplina,
+      retencaoPorCaderno,
       horasPorDisciplina,
       horasPorTipoEstudo,
       horasSemanais,
@@ -192,7 +192,7 @@ export async function renderDashboardPage(container) {
       getProdutividadeGeral(janelaProdutividadeDias),
       getJanelaTendenciaDisciplina(),
       getJanelaTendenciaCadernoDestaques(),
-      getRetencaoPorDisciplina(),
+      getRetencaoPorCaderno(),
       getHorasPorDisciplina(),
       getHorasPorTipoEstudo(),
       getHorasSemanais(12, ultimaDataAtividade),
@@ -222,7 +222,7 @@ export async function renderDashboardPage(container) {
     ${renderHorasPorTipoEstudo(horasPorTipoEstudo)}
     ${renderJanelaTendenciaDisciplina(janelaDisciplina)}
     ${renderJanelaTendenciaCaderno(janelaCaderno)}
-    ${renderRetencaoPorDisciplina(retencaoPorDisciplina)}
+    ${renderRetencaoPorCaderno(retencaoPorCaderno)}
   `;
 
   // Cards de Situação clicáveis (05/07/2026) — levam pra Prioridade já
@@ -733,29 +733,45 @@ function renderRetencaoGeral(linhas) {
   `;
 }
 
-// Retenção por Disciplina (Fase 6-F, 03/07/2026) — resposta direta a "como vou
-// saber qual disciplina/caderno eu revisei": a curva geral acima soma tudo, aqui
-// quebra a mesma faixa por disciplina. Disciplina é o meio-termo — por caderno
-// individual (613 deles) seria uma tabela ilegível; por disciplina (9) cabe
-// numa tela só. Célula em branco = disciplina sem sessão naquela faixa ainda.
-function renderRetencaoPorDisciplina(dados) {
-  if (!dados || !dados.disciplinas || dados.disciplinas.length === 0) return "";
-  const headerFaixas = dados.faixasOrdenadas.map((f) => `<th>${escapeHtml(f)}</th>`).join("");
-  const rows = dados.disciplinas
-    .map((d) => {
-      const celulas = d.faixas
-        .map((f) => (f.questoes > 0 ? `<td>${formatPct(f.pct)} <span style="color:var(--color-text-muted); font-size:11px;">(${f.questoes}q)</span></td>` : `<td style="color:var(--color-text-muted);">—</td>`))
-        .join("");
-      return `<tr><td>${escapeHtml(d.disciplinaNome)}</td>${celulas}</tr>`;
+// Retenção por Caderno (28/07/2026 — substitui a versão por disciplina, que
+// continua no código como referência). Motivo da troca, decidido com o
+// usuário: agregar por disciplina somava faixas de cadernos diferentes e
+// descartava o nome, então dava pra ver que "AFO tem retenção ruim em 0-3
+// dias" sem saber em QUE caderno agir — e a média diluía extremos (LOA a 20%
+// desaparecia dentro da AFO inteira). Aqui cada linha é um reencontro real:
+// caderno + faixa de intervalo + acerto, do pior pro melhor.
+function renderRetencaoPorCaderno(linhas) {
+  if (!linhas || linhas.length === 0) {
+    return `
+      <div class="card" style="margin-bottom:24px;">
+        <h3 style="margin-top:0;">Retenção por Caderno</h3>
+        <p style="color:var(--color-text-muted);">Nenhum reencontro registrado ainda — a retenção só aparece quando você volta a um caderno que já tinha estudado antes.</p>
+      </div>
+    `;
+  }
+  const rows = linhas
+    .map((l) => {
+      // Vermelho abaixo de 50%: reencontrar e ainda errar metade indica que o
+      // conteúdo não foi aprendido na primeira passada, não que "esqueceu".
+      const cor = l.pct == null ? "var(--color-text-muted)" : l.pct < 50 ? "var(--color-error)" : l.pct < 70 ? "#b45309" : "var(--color-success)";
+      return `
+        <tr>
+          <td>${escapeHtml(l.cadernoNome)}</td>
+          <td style="font-size:12px; color:var(--color-text-muted);">${escapeHtml(l.disciplinaNome)}</td>
+          <td class="cel-centro">${escapeHtml(l.faixa)}</td>
+          <td class="cel-centro">${l.questoes}</td>
+          <td class="cel-centro" style="color:${cor}; font-weight:600;">${formatPct(l.pct)}</td>
+        </tr>
+      `;
     })
     .join("");
   return `
     <div class="card" style="margin-bottom:24px;">
-      <h3 style="margin-top:0;">Retenção por Disciplina</h3>
-      <p style="color:var(--color-text-muted); margin-top:0;">Mesma curva de cima, quebrada por disciplina — pra ver qual disciplina está puxando pra cima ou pra baixo cada faixa de intervalo.</p>
+      <h3 style="margin-top:0;">Retenção por Caderno</h3>
+      <p style="color:var(--color-text-muted); margin-top:0;">Só reencontros: cada linha é um caderno que você voltou a estudar, e quanto acertou nesse retorno. Ordenado do pior pro melhor — a primeira linha é onde agir. "Primeira vez" não entra aqui (é linha de base, não retenção).</p>
       <div style="overflow-x:auto;">
-        <table class="data-table">
-          <tr><th>Disciplina</th>${headerFaixas}</tr>
+        <table class="data-table data-table--fixed" style="min-width:680px;">
+          <tr><th>Caderno</th><th style="width:18%;">Disciplina</th><th class="cel-centro" style="width:110px;">Intervalo</th><th class="cel-centro" style="width:90px;">Questões</th><th class="cel-centro" style="width:90px;">Acerto</th></tr>
           ${rows}
         </table>
       </div>
