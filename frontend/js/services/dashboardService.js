@@ -344,56 +344,66 @@ function classificarTendencia(pctCurta, pctLonga) {
 export async function getJanelaTendenciaDisciplina() {
   const { data, error } = await supabase
     .from("v_janela_tendencia")
-    .select("discipline_id, disciplina_nome, pct_janela_curta, pct_janela_longa, questoes_janela_curta, questoes_janela_longa");
+    .select("discipline_id, disciplina_nome, pct_recente, pct_anterior, questoes_recente, questoes_anterior");
   if (error) throw error;
   const linhas = (data || []).map((r) => {
-    const { delta, tendencia } = classificarTendencia(Number(r.pct_janela_curta), Number(r.pct_janela_longa));
+    const { delta, tendencia } = classificarTendencia(
+      r.pct_recente == null ? null : Number(r.pct_recente),
+      r.pct_anterior == null ? null : Number(r.pct_anterior)
+    );
     return {
       disciplinaNome: r.disciplina_nome,
-      pctCurta: r.pct_janela_curta != null ? Number(r.pct_janela_curta) : null,
-      pctLonga: r.pct_janela_longa != null ? Number(r.pct_janela_longa) : null,
-      questoesCurta: r.questoes_janela_curta,
-      questoesLonga: r.questoes_janela_longa,
+      pctRecente: r.pct_recente != null ? Number(r.pct_recente) : null,
+      pctAnterior: r.pct_anterior != null ? Number(r.pct_anterior) : null,
+      questoesRecente: r.questoes_recente,
+      questoesAnterior: r.questoes_anterior,
       delta,
       tendencia,
     };
   });
-  linhas.sort((a, b) => (a.delta ?? 0) - (b.delta ?? 0));
+  // Sem janela anterior (delta null) vai pro fim: não é "estável", é
+  // "ainda não dá pra comparar" — misturar os dois esconderia quem caiu.
+  linhas.sort((a, b) => {
+    if (a.delta == null && b.delta == null) return a.disciplinaNome.localeCompare(b.disciplinaNome);
+    if (a.delta == null) return 1;
+    if (b.delta == null) return -1;
+    return a.delta - b.delta;
+  });
   return linhas;
 }
 
-// Janela de Tendência por Caderno (view nova, migration
-// janela_tendencia_caderno_e_transferencia_editais) — mesma lógica, granularidade
-// mais fina. Só mostramos os cadernos com volume mínimo na janela longa
-// (>=20 questões) pra não poluir com ruído de amostra muito pequena, e
-// limitamos a quem mais subiu/caiu (não é lista completa de todos os cadernos).
 export async function getJanelaTendenciaCadernoDestaques(nDestaques = 5) {
   const { data, error } = await supabase
     .from("v_janela_tendencia_caderno")
-    .select("question_set_id, caderno_nome, discipline_id, pct_janela_curta, pct_janela_longa, questoes_janela_curta, questoes_janela_longa")
-    .gte("questoes_janela_longa", 20);
+    .select("question_set_id, caderno_nome, discipline_id, pct_recente, pct_anterior, questoes_recente, questoes_anterior")
+    // Só cadernos com base de comparação real (janela anterior preenchida).
+    // Antes o filtro era questoes_janela_longa >= 20, que com janelas
+    // cumulativas passava TODO caderno com 20+ questões — inclusive os que
+    // só tinham um bloco, gerando delta 0 pra 44 cadernos (ruído puro).
+    .not("questoes_anterior", "is", null);
   if (error) throw error;
   const linhas = (data || []).map((r) => {
-    const { delta, tendencia } = classificarTendencia(Number(r.pct_janela_curta), Number(r.pct_janela_longa));
+    const { delta, tendencia } = classificarTendencia(
+      r.pct_recente == null ? null : Number(r.pct_recente),
+      r.pct_anterior == null ? null : Number(r.pct_anterior)
+    );
     return {
       cadernoNome: r.caderno_nome,
-      pctCurta: r.pct_janela_curta != null ? Number(r.pct_janela_curta) : null,
-      pctLonga: r.pct_janela_longa != null ? Number(r.pct_janela_longa) : null,
-      questoesLonga: r.questoes_janela_longa,
+      pctRecente: r.pct_recente != null ? Number(r.pct_recente) : null,
+      pctAnterior: r.pct_anterior != null ? Number(r.pct_anterior) : null,
+      questoesRecente: r.questoes_recente,
+      questoesAnterior: r.questoes_anterior,
       delta,
       tendencia,
     };
   });
   const comDelta = linhas.filter((l) => l.delta != null);
   comDelta.sort((a, b) => b.delta - a.delta);
-  const subindo = comDelta.slice(0, nDestaques);
-  const caindo = comDelta.slice(-nDestaques).reverse();
+  const subindo = comDelta.filter((l) => l.delta > 0).slice(0, nDestaques);
+  const caindo = comDelta.filter((l) => l.delta < 0).slice(-nDestaques).reverse();
   return { subindo, caindo };
 }
 
-// Transferência entre Editais foi movida pra historyService.js (03/07/2026 —
-// decisão do usuário: não é acionável no dia a dia, mais exploratória, mesmo
-// espírito do Comparativo por Concurso que já vive no Histórico).
 
 // Retenção agregada por faixa de intervalo (Fase 6-C) — v_retencao_caderno já
 // existia por caderno individual (proxy, não por questão — question_attempts

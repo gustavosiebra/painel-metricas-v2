@@ -615,24 +615,35 @@ function renderHorasPorTipoEstudo(linhas) {
   `;
 }
 
-// Janela de Tendência por Disciplina (Fase 6-C) — view v_janela_tendencia já
-// existia (Fase 5) mas nunca foi exposta em tela. Curta = últimas ~100
-// questões; Longa = últimas ~300. Responde "em quais disciplinas realmente
-// evoluí" e "tendência subir ou estagnar" olhando desempenho recente vs. mais
-// antigo, não percentual acumulado desde o início.
+// Tendência por Disciplina — janelas DISJUNTAS desde 02/08/2026 (ver
+// migração janela_tendencia_disjunta). Antes a janela longa continha a curta,
+// então a comparação diluía o delta e melhora real virava "Estável" (AFO
+// aparecia +7,6 quando o ganho verdadeiro era +20,3). Agora compara as ~100
+// questões mais recentes contra as ~200 anteriores a essas, sem sobreposição.
 function renderJanelaTendenciaDisciplina(linhas) {
   if (!linhas || linhas.length === 0) return "";
   const TENDENCIA_LABEL = { subindo: "Subindo", caindo: "Caindo", estavel: "Estável" };
   const TENDENCIA_COR = { subindo: "var(--color-success)", caindo: "var(--color-error)", estavel: "var(--color-text-muted)" };
   const rows = linhas
     .map((l) => {
+      // Sem janela anterior não é "estável" — é falta de histórico. Dizer
+      // "Estável" aqui seria afirmar algo que o dado não sustenta.
+      if (l.delta == null) {
+        return `
+          <tr style="opacity:0.7;">
+            <td>${escapeHtml(l.disciplinaNome)}</td>
+            <td>${formatPct(l.pctRecente)} (${l.questoesRecente ?? 0}q)</td>
+            <td colspan="2" style="color:var(--color-text-muted);">Sem base anterior para comparar — ainda não há questões suficientes.</td>
+          </tr>
+        `;
+      }
       const cor = TENDENCIA_COR[l.tendencia] || "var(--color-text-muted)";
       const label = TENDENCIA_LABEL[l.tendencia] || "—";
       return `
         <tr>
           <td>${escapeHtml(l.disciplinaNome)}</td>
-          <td>${formatPct(l.pctCurta)} (${l.questoesCurta ?? 0}q)</td>
-          <td>${formatPct(l.pctLonga)} (${l.questoesLonga ?? 0}q)</td>
+          <td>${formatPct(l.pctRecente)} (${l.questoesRecente ?? 0}q)</td>
+          <td>${formatPct(l.pctAnterior)} (${l.questoesAnterior ?? 0}q)</td>
           <td style="color:${cor};"><strong>${formatDeltaPct(l.delta)} — ${label}</strong></td>
         </tr>
       `;
@@ -640,11 +651,11 @@ function renderJanelaTendenciaDisciplina(linhas) {
     .join("");
   return `
     <div class="card" style="margin-bottom:24px;">
-      <h3 style="margin-top:0;">Tendência por Disciplina (recente vs. mais antigo)</h3>
-      <p style="color:var(--color-text-muted); margin-top:0;">Compara as últimas ~100 questões com as últimas ~300 — diferença até 3 p.p. é tratada como estável.</p>
+      <h3 style="margin-top:0;">Tendência por Disciplina (recente vs. anterior)</h3>
+      <p style="color:var(--color-text-muted); margin-top:0;">Compara as ~100 questões mais recentes com as ~200 anteriores a essas — blocos separados, sem sobreposição. Diferença até 3 p.p. é tratada como estável.</p>
       <div style="overflow-x:auto;">
         <table class="data-table">
-          <tr><th>Disciplina</th><th>Janela curta</th><th>Janela longa</th><th>Delta</th></tr>
+          <tr><th>Disciplina</th><th>Recente</th><th>Anterior</th><th>Delta</th></tr>
           ${rows}
         </table>
       </div>
@@ -652,34 +663,37 @@ function renderJanelaTendenciaDisciplina(linhas) {
   `;
 }
 
-// Cadernos que mais subiram/caíram (Fase 6-C) — mesma lógica, granularidade
-// de caderno, só destaques (não lista completa) pra não poluir o dashboard.
+// Cadernos que mais mudaram — janelas disjuntas de 20/60 questões desde
+// 02/08/2026. Com as janelas de disciplina (100/300) nenhum caderno tinha
+// base de comparação (o maior tem 80 questões), e os 44 apareciam com delta
+// 0,00: a seção inteira era ruído. Agora compara as últimas ~20 questões do
+// caderno com as ~40 anteriores; caderno sem esse histórico não entra.
 function renderJanelaTendenciaCaderno(dados) {
   if (!dados || (dados.subindo.length === 0 && dados.caindo.length === 0)) return "";
   const linha = (l) => `
     <tr>
       <td>${escapeHtml(l.cadernoNome)}</td>
-      <td>${formatPct(l.pctCurta)}</td>
-      <td>${formatPct(l.pctLonga)}</td>
+      <td>${formatPct(l.pctRecente)} (${l.questoesRecente ?? 0}q)</td>
+      <td>${formatPct(l.pctAnterior)} (${l.questoesAnterior ?? 0}q)</td>
       <td>${formatDeltaPct(l.delta)}</td>
     </tr>
   `;
   return `
     <div class="card" style="margin-bottom:24px;">
-      <h3 style="margin-top:0;">Cadernos que mais mudaram (recente vs. mais antigo)</h3>
-      <p style="color:var(--color-text-muted); margin-top:0;">Só cadernos com pelo menos 20 questões na janela longa. Mostra os 5 maiores avanços e as 5 maiores quedas.</p>
+      <h3 style="margin-top:0;">Cadernos que mais mudaram (recente vs. anterior)</h3>
+      <p style="color:var(--color-text-muted); margin-top:0;">Só cadernos que você estudou em mais de uma leva: compara as últimas ~20 questões com as ~40 anteriores. Caderno estudado uma vez só não aparece — não há o que comparar.</p>
       <div style="display:flex; gap:24px; flex-wrap:wrap;">
         <div style="flex:1; min-width:280px; overflow-x:auto;">
           <p style="margin:0 0 4px; color:var(--color-success); font-weight:600;">Maiores avanços</p>
           <table class="data-table">
-            <tr><th>Caderno</th><th>Curta</th><th>Longa</th><th>Delta</th></tr>
+            <tr><th>Caderno</th><th>Recente</th><th>Anterior</th><th>Delta</th></tr>
             ${dados.subindo.map(linha).join("") || '<tr><td colspan="4">—</td></tr>'}
           </table>
         </div>
         <div style="flex:1; min-width:280px; overflow-x:auto;">
           <p style="margin:0 0 4px; color:var(--color-error); font-weight:600;">Maiores quedas</p>
           <table class="data-table">
-            <tr><th>Caderno</th><th>Curta</th><th>Longa</th><th>Delta</th></tr>
+            <tr><th>Caderno</th><th>Recente</th><th>Anterior</th><th>Delta</th></tr>
             ${dados.caindo.map(linha).join("") || '<tr><td colspan="4">—</td></tr>'}
           </table>
         </div>
