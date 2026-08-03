@@ -17,6 +17,7 @@ import {
   getJanelaTendenciaDisciplina,
   getJanelaTendenciaCadernoDestaques,
   getRetencaoPorCaderno,
+  getEstabilidade,
   getHorasPorDisciplina,
   getHorasPorTipoEstudo,
   getHorasSemanais,
@@ -151,7 +152,7 @@ export async function renderDashboardPage(container) {
   const content = container.querySelector("#dashboard-content");
   const { user } = getState();
 
-  let kpis, ranking, mediaMovelDiaria, situacao, produtividadeVitalicia, produtividadeRecente, janelaDisciplina, janelaCaderno, retencaoPorCaderno, horasPorDisciplina, horasPorTipoEstudo, horasSemanais, metaSemanal, janelaProdutividadeDias, tendenciaMinQuestoes, metaHoras, metaQuestoes, ultimaDataAtividade;
+  let kpis, ranking, mediaMovelDiaria, situacao, produtividadeVitalicia, produtividadeRecente, janelaDisciplina, janelaCaderno, retencaoPorCaderno, estabilidade, horasPorDisciplina, horasPorTipoEstudo, horasSemanais, metaSemanal, janelaProdutividadeDias, tendenciaMinQuestoes, metaHoras, metaQuestoes, ultimaDataAtividade;
   try {
     // Janela de Produtividade Recente (07/07/2026, pedido do usuário) —
     // configurável em Configurações (padrão 28 dias); busca ANTES do
@@ -179,6 +180,7 @@ export async function renderDashboardPage(container) {
       janelaDisciplina,
       janelaCaderno,
       retencaoPorCaderno,
+      estabilidade,
       horasPorDisciplina,
       horasPorTipoEstudo,
       horasSemanais,
@@ -193,6 +195,7 @@ export async function renderDashboardPage(container) {
       getJanelaTendenciaDisciplina(),
       getJanelaTendenciaCadernoDestaques(),
       getRetencaoPorCaderno(),
+      getEstabilidade(),
       getHorasPorDisciplina(),
       getHorasPorTipoEstudo(),
       getHorasSemanais(12, ultimaDataAtividade),
@@ -220,6 +223,7 @@ export async function renderDashboardPage(container) {
     ${renderHorasSemanais(horasSemanais)}
     ${renderHorasPorDisciplina(horasPorDisciplina)}
     ${renderHorasPorTipoEstudo(horasPorTipoEstudo)}
+    ${renderEstabilidade(estabilidade)}
     ${renderJanelaTendenciaDisciplina(janelaDisciplina)}
     ${renderJanelaTendenciaCaderno(janelaCaderno)}
     ${renderRetencaoPorCaderno(retencaoPorCaderno)}
@@ -227,6 +231,13 @@ export async function renderDashboardPage(container) {
 
   // Cards de Situação clicáveis (05/07/2026) — levam pra Prioridade já
   // filtrada pela classificação clicada (ver renderVisaoGeral).
+  content.querySelectorAll("[data-estab-row]").forEach((tr) => {
+    tr.addEventListener("click", () => {
+      const det = content.querySelector(`[data-estab-detail="${tr.dataset.estabRow}"]`);
+      if (det) det.style.display = det.style.display === "none" ? "" : "none";
+    });
+  });
+
   content.querySelectorAll("[data-situacao-link]").forEach((el) => {
     el.addEventListener("click", () => navigate("/prioridade", { classificacao: el.dataset.situacaoLink }));
   });
@@ -610,6 +621,82 @@ function renderHorasPorTipoEstudo(linhas) {
             ${totalRow}
           </table>
         </div>
+      </div>
+    </div>
+  `;
+}
+
+// Estabilidade (02/08/2026) — "o que oscilo vs o que domino". Complementa a
+// Tendência, não substitui: tendência mede direção e precisa de histórico
+// longo; estabilidade mede dispersão e já diz algo com poucas sessões.
+// Leitura: desvio alto = imprevisível; desvio baixo = consistente (bom se a
+// média for alta, ruim se for baixa — nesse caso é fraqueza estável).
+// Clicar abre os cadernos que puxam a média da disciplina pra baixo.
+function renderEstabilidade(linhas) {
+  if (!linhas || linhas.length === 0) return "";
+  const rows = linhas
+    .map((l, i) => {
+      if (!l.amostraSuficiente) {
+        return `
+          <tr style="opacity:0.7;">
+            <td>${escapeHtml(l.disciplinaNome)}</td>
+            <td class="cel-centro">${l.nSessoes}</td>
+            <td class="cel-centro">${formatPct(l.pctGeral)}</td>
+            <td colspan="3" style="color:var(--color-text-muted);">Menos de 3 sessões — sem base pra medir oscilação.</td>
+          </tr>
+        `;
+      }
+      // Faixas escolhidas a partir da distribuição real do usuário (desvios de
+      // 6 a 24 p.p.): acima de 18 é oscilação alta, abaixo de 10 é consistente.
+      const cor = l.desvio >= 18 ? "var(--color-error)" : l.desvio >= 10 ? "#b45309" : "var(--color-success)";
+      const rotulo = l.desvio >= 18 ? "Oscila muito" : l.desvio >= 10 ? "Oscila" : "Consistente";
+      return `
+        <tr data-estab-row="${i}" style="cursor:pointer;">
+          <td>${escapeHtml(l.disciplinaNome)}</td>
+          <td class="cel-centro">${l.nSessoes}</td>
+          <td class="cel-centro">${formatPct(l.pctGeral)}</td>
+          <td class="cel-centro">${formatPct(l.pior)} – ${formatPct(l.melhor)}</td>
+          <td class="cel-centro" style="color:${cor}; font-weight:600;">${l.desvio.toFixed(1)}</td>
+          <td class="cel-centro" style="color:${cor};">${rotulo}</td>
+        </tr>
+        <tr data-estab-detail="${i}" style="display:none;">
+          <td colspan="6" style="background:var(--color-bg-subtle, #f5f5f5);">
+            ${l.cadernos.length === 0
+              ? '<p style="margin:4px 0; color:var(--color-text-muted);">Nenhum caderno abaixo da média da disciplina.</p>'
+              : `
+                <p style="margin:4px 0; font-size:12px; color:var(--color-text-muted);">Cadernos abaixo da média da disciplina (${formatPct(l.media)}) — do que mais puxa pra baixo ao que menos:</p>
+                <div style="overflow-x:auto;">
+                  <table class="data-table" style="margin:4px 0;">
+                    <tr><th>Caderno</th><th class="cel-centro" style="width:90px;">Sessões</th><th class="cel-centro" style="width:90px;">Média</th><th class="cel-centro" style="width:110px;">Abaixo em</th></tr>
+                    ${l.cadernos
+                      .map(
+                        (c) => `
+                      <tr>
+                        <td>${escapeHtml(c.cadernoNome)}</td>
+                        <td class="cel-centro">${c.nSessoes}</td>
+                        <td class="cel-centro">${formatPct(c.media)}</td>
+                        <td class="cel-centro" style="color:var(--color-error); font-weight:600;">−${c.gap.toFixed(1)} p.p.</td>
+                      </tr>
+                    `
+                      )
+                      .join("")}
+                  </table>
+                </div>
+              `}
+          </td>
+        </tr>
+      `;
+    })
+    .join("");
+  return `
+    <div class="card" style="margin-bottom:24px;">
+      <h3 style="margin-top:0;">Estabilidade (o que oscila × o que domino)</h3>
+      <p style="color:var(--color-text-muted); margin-top:0;">Quanto seu acerto varia entre sessões da mesma disciplina. Desvio alto com média baixa é onde há mais ponto a ganhar: você já provou o teto numa sessão boa, então falta consistência, não capacidade. Clique numa linha pra ver quais cadernos puxam a média pra baixo.</p>
+      <div style="overflow-x:auto;">
+        <table class="data-table data-table--fixed" style="min-width:720px;">
+          <tr><th>Disciplina</th><th class="cel-centro" style="width:90px;">Sessões</th><th class="cel-centro" style="width:90px;">Acerto</th><th class="cel-centro" style="width:150px;">Pior – Melhor</th><th class="cel-centro" style="width:90px;">Desvio</th><th class="cel-centro" style="width:130px;">Leitura</th></tr>
+          ${rows}
+        </table>
       </div>
     </div>
   `;

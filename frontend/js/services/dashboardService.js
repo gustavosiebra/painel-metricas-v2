@@ -433,6 +433,67 @@ export async function getRetencaoGeral() {
 }
 
 // Retenção por Disciplina (Fase 6-F, 03/07/2026) — a curva geral acima
+// Estabilidade: o que OSCILA vs o que está consistente (02/08/2026).
+// Responde uma pergunta diferente da Tendência: tendência mede DIREÇÃO
+// (subindo/caindo) e precisa de histórico longo pra ter janela anterior
+// decente; estabilidade mede DISPERSÃO e já funciona com poucas sessões.
+// Disciplina com desvio alto e média baixa é onde há mais ponto a ganhar —
+// o teto já foi demonstrado numa sessão boa, então o problema não é
+// capacidade, é algum caderno que despenca.
+//
+// Traz disciplina + os cadernos de cada uma numa consulta só, pra permitir o
+// drill-down (macro -> onde exatamente perco ponto) sem ida extra ao banco.
+export async function getEstabilidade() {
+  const [discResult, cadResult] = await Promise.all([
+    supabase
+      .from("v_estabilidade_disciplina")
+      .select("discipline_id, disciplina_nome, n_sessoes, questoes_total, pct_acerto_geral, media_sessoes, desvio_padrao, pior_sessao, melhor_sessao, amplitude, amostra_suficiente"),
+    supabase
+      .from("v_estabilidade_caderno")
+      .select("question_set_id, caderno_nome, discipline_id, n_sessoes, media_pct_acerto, desvio_padrao"),
+  ]);
+  if (discResult.error) throw discResult.error;
+  if (cadResult.error) throw cadResult.error;
+
+  const cadernosPorDisciplina = new Map();
+  for (const c of cadResult.data || []) {
+    const lista = cadernosPorDisciplina.get(c.discipline_id) || [];
+    lista.push({
+      cadernoNome: c.caderno_nome,
+      nSessoes: c.n_sessoes,
+      media: c.media_pct_acerto == null ? null : Number(c.media_pct_acerto),
+      desvio: c.desvio_padrao == null ? null : Number(c.desvio_padrao),
+    });
+    cadernosPorDisciplina.set(c.discipline_id, lista);
+  }
+
+  return (discResult.data || [])
+    .map((d) => {
+      const mediaDisc = d.media_sessoes == null ? null : Number(d.media_sessoes);
+      // Cadernos ordenados por quanto puxam a média da disciplina PRA BAIXO.
+      // Só os abaixo da média entram: são esses que representam ponto a ganhar.
+      const cadernos = (cadernosPorDisciplina.get(d.discipline_id) || [])
+        .filter((c) => c.media != null && mediaDisc != null && c.media < mediaDisc)
+        .map((c) => ({ ...c, gap: Math.round((mediaDisc - c.media) * 10) / 10 }))
+        .sort((a, b) => b.gap - a.gap);
+      return {
+        disciplinaNome: d.disciplina_nome,
+        nSessoes: d.n_sessoes,
+        questoes: d.questoes_total,
+        pctGeral: d.pct_acerto_geral == null ? null : Number(d.pct_acerto_geral),
+        media: mediaDisc,
+        desvio: d.desvio_padrao == null ? null : Number(d.desvio_padrao),
+        pior: d.pior_sessao == null ? null : Number(d.pior_sessao),
+        melhor: d.melhor_sessao == null ? null : Number(d.melhor_sessao),
+        amplitude: d.amplitude == null ? null : Number(d.amplitude),
+        amostraSuficiente: d.amostra_suficiente,
+        cadernos,
+      };
+    })
+    // Mais instável primeiro; sem desvio (1 sessão só) vai pro fim.
+    .sort((a, b) => (b.desvio ?? -1) - (a.desvio ?? -1));
+}
+
 // Retenção em nível de CADERNO (28/07/2026, decidido com o usuário). A versão
 // por disciplina (getRetencaoPorDisciplina, mantida abaixo) somava tudo e
 // jogava fora o nome do caderno — então dava pra ver que uma disciplina tinha
