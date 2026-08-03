@@ -667,7 +667,7 @@ function renderEstabilidade(linhas) {
                 <p style="margin:4px 0; font-size:12px; color:var(--color-text-muted);">Cadernos abaixo da média da disciplina (${formatPct(l.media)}) — do que mais puxa pra baixo ao que menos:</p>
                 <div style="overflow-x:auto;">
                   <table class="data-table" style="margin:4px 0;">
-                    <tr><th>Caderno</th><th class="cel-centro" style="width:90px;">Sessões</th><th class="cel-centro" style="width:90px;">Média</th><th class="cel-centro" style="width:110px;">Abaixo em</th></tr>
+                    <tr><th>Caderno</th><th class="cel-centro" style="width:90px;">Sessões</th><th class="cel-centro" style="width:90px;">Média</th><th class="cel-centro" style="width:130px;">Distância da média</th></tr>
                     ${l.cadernos
                       .map(
                         (c) => `
