@@ -169,3 +169,67 @@ function sugerirAcao({ classificacao, reencontro, errosAbertos, questoes }) {
   }
   return "Manutenção: bloco curto de questões pra confirmar retenção.";
 }
+
+// ==================== FRENTES ABERTAS (04/08/2026) ====================
+//
+// Contexto: verificado no banco em 04/08/2026 — 62 cadernos tocados, ZERO
+// consolidados, média de 19,7 questões por caderno. O padrão é abrir frente e
+// não fechar, e isso degrada TODAS as métricas do painel de uma vez: com n<30
+// o Wilson devolve "poucos dados", a retenção não tem reencontro, a
+// estabilidade não tem sessões suficientes pra medir dispersão.
+//
+// A tentação de projeto era travar: só liberar caderno novo quando um antigo
+// fechasse. Descartado a pedido explícito do usuário ("gosto de poder
+// escolher") — e ele tem razão, um limite rígido erra sempre que a realidade
+// pede exceção (assunto que caiu na prova, aula assistida, erro descoberto).
+//
+// A alternativa aqui não restringe nada: só põe PREÇO na tela. Quantas frentes
+// estão abertas, quanto custa fechar todas em horas do ritmo real dele, e
+// quais estão mais baratas de fechar. Escolha informada em vez de trava — a
+// decisão continua sendo dele, mas deixa de ser cega.
+export async function getFrentesAbertas({ metaQuestoes = 30 } = {}) {
+  const { data, error } = await supabase
+    .from("study_sessions")
+    .select("question_set_id, occurred_at, question_sets(name, status, discipline_id, disciplines(name)), session_results(questions_total)")
+    .eq("status", "ativo")
+    .not("question_set_id", "is", null);
+  if (error) throw error;
+
+  const porCaderno = new Map();
+  for (const s of data || []) {
+    const id = s.question_set_id;
+    const qs = s.question_sets;
+    if (!qs || qs.status === "inativo") continue;
+    const q = Array.isArray(s.session_results)
+      ? s.session_results.reduce((a, r) => a + Number(r.questions_total || 0), 0)
+      : Number(s.session_results?.questions_total || 0);
+    const g = porCaderno.get(id) || {
+      questionSetId: id,
+      cadernoNome: qs.name,
+      disciplineId: qs.discipline_id,
+      disciplinaNome: qs.disciplines?.name || "—",
+      questoes: 0,
+      ultimo: null,
+    };
+    g.questoes += q;
+    if (!g.ultimo || s.occurred_at > g.ultimo) g.ultimo = s.occurred_at;
+    porCaderno.set(id, g);
+  }
+
+  // "Aberta" = já começou (tem questão lançada) e ainda não chegou à massa
+  // crítica. Caderno com 0 questões fica de fora: pode ter sido só leitura ou
+  // videoaula, e chamar isso de frente aberta inflaria o número sem razão.
+  const abertas = [...porCaderno.values()]
+    .filter((c) => c.questoes > 0 && c.questoes < metaQuestoes)
+    .map((c) => ({ ...c, faltam: metaQuestoes - c.questoes }))
+    .sort((a, b) => a.faltam - b.faltam);
+
+  const fechadas = [...porCaderno.values()].filter((c) => c.questoes >= metaQuestoes).length;
+
+  return {
+    abertas,
+    fechadas,
+    totalTocados: porCaderno.size,
+    questoesParaFechar: abertas.reduce((a, c) => a + c.faltam, 0),
+  };
+}

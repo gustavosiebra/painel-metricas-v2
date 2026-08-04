@@ -11,7 +11,8 @@
 // retenção e erros T1–T7 em aberto. Ver filaRevisaoService.js.
 
 import { renderNavbar, wireNavbar } from "../components/navbar.js";
-import { getFilaRevisao } from "../services/filaRevisaoService.js";
+import { getFilaRevisao, getFrentesAbertas } from "../services/filaRevisaoService.js";
+import { getProdutividade, getRitmo, META_QUESTOES_PADRAO } from "../services/capacidadeService.js";
 import { navigate } from "../router.js";
 import { formatPct } from "../utils/format.js";
 
@@ -37,6 +38,7 @@ export async function renderFilaPage(container) {
           <p style="color:var(--color-text-muted); margin-top:-8px;">
             O que atacar hoje, em ordem. A prioridade vem do diagnóstico — lacuna (Wilson), recorrência da banca, peso no edital, retenção no reencontro e erros em aberto —, não de um calendário fixo de revisão.
           </p>
+          <div id="fila-frentes"></div>
           <div id="fila-content"><p>Carregando…</p></div>
         </main>
       </div>
@@ -51,6 +53,20 @@ export async function renderFilaPage(container) {
   } catch (err) {
     content.innerHTML = `<div class="alert alert--error">Erro ao montar a fila: ${escapeHtml(err.message)}</div>`;
     return;
+  }
+
+  // Frentes abertas — bloco informativo, nunca bloqueante (ver comentário em
+  // getFrentesAbertas). Falha aqui não pode derrubar a fila, que é o conteúdo
+  // principal da tela: por isso try/catch próprio e silencioso.
+  try {
+    const [fr, prod, rit] = await Promise.all([
+      getFrentesAbertas({ metaQuestoes: META_QUESTOES_PADRAO }),
+      getProdutividade(),
+      getRitmo(),
+    ]);
+    renderFrentes(container.querySelector("#fila-frentes"), fr, prod, rit);
+  } catch {
+    /* bloco opcional; silêncio é melhor que um erro vermelho no topo da fila */
   }
 
   if (itens.length === 0) {
@@ -106,6 +122,81 @@ export async function renderFilaPage(container) {
       });
     });
   });
+}
+
+function renderFrentes(box, fr, prod, rit) {
+  if (!box || fr.abertas.length === 0) return;
+
+  const qph = prod?.questoesPorHora || 0;
+  const horas = qph > 0 ? Math.round((fr.questoesParaFechar / qph) * 10) / 10 : null;
+  const semanas = horas != null && rit?.horasPorSemana > 0 ? (horas / rit.horasPorSemana).toFixed(1) : null;
+  const quase = fr.abertas.filter((c) => c.faltam <= 10).length;
+  const topo = fr.abertas.slice(0, 8);
+  const resto = fr.abertas.slice(8);
+
+  box.innerHTML = `
+    <div class="card" style="margin-bottom:16px; border-left:4px solid #b45309;">
+      <h3 style="margin-top:0;">Frentes abertas: ${fr.abertas.length}</h3>
+      <p style="margin:4px 0 0; font-size:14px;">
+        ${fr.fechadas === 0
+          ? `Nenhum caderno seu chegou a ${META_QUESTOES_PADRAO} questões ainda. Abaixo disso o Wilson responde "poucos dados" — ou seja, <strong>o painel inteiro ainda não consegue afirmar nada sobre o seu nível</strong>.`
+          : `${fr.fechadas} caderno(s) já passaram de ${META_QUESTOES_PADRAO} questões; estes ${fr.abertas.length} ainda não.`}
+      </p>
+      <p style="margin:8px 0 0; font-size:14px;">
+        Fechar todas custa <strong>${fr.questoesParaFechar} questões</strong>${horas != null ? ` ≈ <strong>${horas} h</strong>` : ""}${semanas != null ? ` (~${semanas} semana(s) no seu ritmo)` : ""}.
+        ${quase > 0 ? `<br><strong>${quase}</strong> estão a 10 questões ou menos de fechar.` : ""}
+      </p>
+      <p style="margin:8px 0 0; font-size:12px; color:var(--color-text-muted);">
+        Isto é informação, não regra: nada aqui impede você de abrir caderno novo. A lista está ordenada da mais barata de fechar para a mais cara.
+      </p>
+      <div style="overflow-x:auto; margin-top:12px;">
+        <table class="data-table data-table--fixed" style="min-width:620px;">
+          <tr><th>Caderno</th><th style="width:18%;">Disciplina</th><th class="cel-centro" style="width:80px;">Feitas</th><th class="cel-centro" style="width:80px;">Faltam</th><th class="cel-centro" style="width:150px;">Ação</th></tr>
+          ${topo.map((c) => linhaFrente(c)).join("")}
+        </table>
+      </div>
+      ${resto.length > 0 ? `
+        <button type="button" class="btn-link" id="frentes-mais" style="margin-top:8px;">Ver as outras ${resto.length}</button>
+        <div id="frentes-resto" style="display:none; overflow-x:auto; margin-top:8px;">
+          <table class="data-table data-table--fixed" style="min-width:620px;">
+            ${resto.map((c) => linhaFrente(c)).join("")}
+          </table>
+        </div>` : ""}
+    </div>
+  `;
+
+  const btnMais = box.querySelector("#frentes-mais");
+  if (btnMais) {
+    btnMais.addEventListener("click", () => {
+      const d = box.querySelector("#frentes-resto");
+      const abrindo = d.style.display === "none";
+      d.style.display = abrindo ? "block" : "none";
+      btnMais.textContent = abrindo ? "Recolher" : `Ver as outras ${resto.length}`;
+    });
+  }
+
+  box.querySelectorAll("[data-fila-estudar]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      navigate("/sessoes/nova", {
+        disciplineId: btn.dataset.filaDisciplina,
+        questionSetId: btn.dataset.filaEstudar,
+      });
+    });
+  });
+}
+
+function linhaFrente(c) {
+  return `
+    <tr>
+      <td>${escapeHtml(c.cadernoNome)}</td>
+      <td style="font-size:12px; color:var(--color-text-muted);">${escapeHtml(c.disciplinaNome)}</td>
+      <td class="cel-centro">${c.questoes}</td>
+      <td class="cel-centro"><strong>${c.faltam}</strong></td>
+      <td class="cel-centro">
+        <button type="button" class="btn-link" style="font-size:12px;"
+                data-fila-estudar="${c.questionSetId}" data-fila-disciplina="${c.disciplineId}">registrar sessão</button>
+      </td>
+    </tr>`;
 }
 
 function cardItem(it, posicao) {

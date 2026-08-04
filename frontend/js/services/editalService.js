@@ -42,6 +42,20 @@ export async function listTopics(examId) {
   return data;
 }
 
+// Quantos tópicos cada concurso já tem. Serve pra escolher um padrão sensato
+// no seletor da tela (04/08/2026): o comportamento anterior — abrir sempre no
+// primeiro concurso da lista — deixou o usuário cadastrar 6 tópicos e 155
+// vínculos num concurso que não era o que ele acompanha, sem nenhum sinal na
+// interface. Abrir no concurso que já tem conteúdo elimina a classe inteira
+// de erro "escrevi no edital errado".
+export async function countTopicsByExam() {
+  const { data, error } = await supabase.from("exam_topics").select("exam_id");
+  if (error) throw error;
+  const m = new Map();
+  for (const r of data || []) m.set(r.exam_id, (m.get(r.exam_id) || 0) + 1);
+  return m;
+}
+
 export async function listVinculos(examId) {
   // Traz os vínculos dos tópicos deste edital (join implícito via topic).
   const { data, error } = await supabase

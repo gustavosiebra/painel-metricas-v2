@@ -30,6 +30,7 @@ import {
   updateTopic,
   splitTopic,
   sugerirDivisao,
+  countTopicsByExam,
 } from "../services/editalService.js";
 import { listWeights } from "../services/weightService.js";
 import {
@@ -102,15 +103,17 @@ export async function renderEditalPage(container) {
   let cobertura = [];
   let examId = null;
   let pesos = [];
+  let topicosPorExam = new Map();
   let ritmo = null;
   let produtividade = null;
 
   try {
-    [exams, disciplines, cadernos, pesos, ritmo, produtividade] = await Promise.all([
+    [exams, disciplines, cadernos, pesos, topicosPorExam, ritmo, produtividade] = await Promise.all([
       listExams(),
       listDisciplines(),
       listQuestionSets(),
       listWeights(),
+      countTopicsByExam(),
       getRitmo(),
       getProdutividade(),
     ]);
@@ -125,8 +128,21 @@ export async function renderEditalPage(container) {
     return;
   }
 
-  examSelect.innerHTML = exams.map((e) => `<option value="${e.id}">${escapeHtml(e.name)}</option>`).join("");
-  examId = exams[0].id;
+  // Rótulo com data e nº de tópicos: sem isso, dois concursos de nome parecido
+  // (ou um com data já vencida) ficam indistinguíveis no select.
+  const rotuloExam = (e) => {
+    const n = topicosPorExam.get(e.id) || 0;
+    const partes = [];
+    if (e.exam_date) partes.push(new Date(e.exam_date + "T12:00:00").toLocaleDateString("pt-BR"));
+    partes.push(n === 0 ? "sem tópicos" : `${n} tópico(s)`);
+    return `${e.name} — ${partes.join(" · ")}`;
+  };
+  examSelect.innerHTML = exams.map((e) => `<option value="${e.id}">${escapeHtml(rotuloExam(e))}</option>`).join("");
+  // Padrão = concurso que JÁ tem tópicos (o edital em que se está trabalhando).
+  // Empate ou nenhum: cai no primeiro, como antes.
+  const comMaisTopicos = [...exams].sort((a, b) => (topicosPorExam.get(b.id) || 0) - (topicosPorExam.get(a.id) || 0))[0];
+  examId = comMaisTopicos.id;
+  examSelect.value = examId;
   examSelect.addEventListener("change", async () => {
     examId = examSelect.value;
     await carregar();
