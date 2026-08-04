@@ -6,6 +6,11 @@
 //     edital eu cobri" e alimenta o cronograma depois.
 //   Conteúdo — o trabalho de montagem: colar o edital em lote e ligar cada
 //     tópico aos cadernos. Feito uma vez (e ajustado pontualmente depois).
+//   Capacidade (04/08/2026) — "dá tempo?". Confronta o que falta cobrir com o
+//     ritmo REAL do usuário (horas/semana e questões/hora medidas no histórico)
+//     dentro de um horizonte escolhido. Mora aqui, e não numa tela própria,
+//     porque sem o escopo do edital a pergunta não tem denominador: "faltam
+//     quantas horas" só existe depois de "faltam quais assuntos".
 //
 // A ligação tópico↔caderno é o gargalo real da feature — 1120 cadernos no
 // catálogo. Por isso o mapeamento não é digitação: o sistema sugere
@@ -26,6 +31,13 @@ import {
   splitTopic,
   sugerirDivisao,
 } from "../services/editalService.js";
+import { listWeights } from "../services/weightService.js";
+import {
+  getRitmo,
+  getProdutividade,
+  calcularCapacidade,
+  META_QUESTOES_PADRAO,
+} from "../services/capacidadeService.js";
 import { getState } from "../state.js";
 import { formatPct } from "../utils/format.js";
 
@@ -55,9 +67,11 @@ export async function renderEditalPage(container) {
           <div class="subtabs">
             <button type="button" class="subtab-btn subtab-btn--active" data-subtab="cobertura">Cobertura</button>
             <button type="button" class="subtab-btn" data-subtab="conteudo">Conteúdo</button>
+            <button type="button" class="subtab-btn" data-subtab="capacidade">Capacidade</button>
           </div>
           <div id="tab-cobertura"><p>Carregando…</p></div>
           <div id="tab-conteudo" style="display:none;"><p>Carregando…</p></div>
+          <div id="tab-capacidade" style="display:none;"><p>Carregando…</p></div>
         </main>
       </div>
     </div>
@@ -67,6 +81,7 @@ export async function renderEditalPage(container) {
   const { user } = getState();
   const tabCobertura = container.querySelector("#tab-cobertura");
   const tabConteudo = container.querySelector("#tab-conteudo");
+  const tabCapacidade = container.querySelector("#tab-capacidade");
   const examSelect = container.querySelector("#edital-exam");
 
   container.querySelectorAll("[data-subtab]").forEach((btn) => {
@@ -75,6 +90,7 @@ export async function renderEditalPage(container) {
       container.querySelectorAll("[data-subtab]").forEach((b) => b.classList.toggle("subtab-btn--active", b === btn));
       tabCobertura.style.display = alvo === "cobertura" ? "block" : "none";
       tabConteudo.style.display = alvo === "conteudo" ? "block" : "none";
+      tabCapacidade.style.display = alvo === "capacidade" ? "block" : "none";
     });
   });
 
@@ -85,9 +101,19 @@ export async function renderEditalPage(container) {
   let vinculos = [];
   let cobertura = [];
   let examId = null;
+  let pesos = [];
+  let ritmo = null;
+  let produtividade = null;
 
   try {
-    [exams, disciplines, cadernos] = await Promise.all([listExams(), listDisciplines(), listQuestionSets()]);
+    [exams, disciplines, cadernos, pesos, ritmo, produtividade] = await Promise.all([
+      listExams(),
+      listDisciplines(),
+      listQuestionSets(),
+      listWeights(),
+      getRitmo(),
+      getProdutividade(),
+    ]);
   } catch (err) {
     tabCobertura.innerHTML = `<div class="alert alert--error">Erro ao carregar: ${escapeHtml(err.message)}</div>`;
     return;
@@ -120,6 +146,7 @@ export async function renderEditalPage(container) {
     }
     renderCobertura();
     renderConteudo();
+    renderCapacidade();
   }
 
   // ==================== COBERTURA ====================
@@ -483,6 +510,152 @@ export async function renderEditalPage(container) {
             )
             .join("");
       res.querySelectorAll("[data-vincular]").forEach((btn) => wireVincular(btn));
+    });
+  }
+
+  // ==================== CAPACIDADE ====================
+  // Estado dos campos editáveis. Nasce do MEDIDO (ritmo/produtividade vindos do
+  // histórico) e o usuário pode sobrescrever pra simular cenário — mas a tela
+  // sempre mostra o valor medido ao lado, pra ficar claro quando ele está
+  // olhando dado e quando está olhando desejo.
+  const cap = {
+    horizonte: 26,
+    horasPorSemana: null,
+    questoesPorHora: null,
+    metaQuestoes: META_QUESTOES_PADRAO,
+  };
+
+  function renderCapacidade() {
+    if (cap.horasPorSemana == null) cap.horasPorSemana = ritmo?.horasPorSemana ?? 0;
+    if (cap.questoesPorHora == null) cap.questoesPorHora = produtividade?.questoesPorHora ?? 0;
+
+    const disciplinasEscopo = pesos
+      .filter((p) => p.exam_id === examId)
+      .map((p) => ({ id: p.discipline_id, nome: p.disciplines?.name || "—", peso: p.weight }));
+
+    const r = calcularCapacidade({
+      cobertura,
+      disciplinasEscopo,
+      horizonteSemanas: cap.horizonte,
+      horasPorSemana: cap.horasPorSemana,
+      questoesPorHora: cap.questoesPorHora,
+      metaQuestoes: cap.metaQuestoes,
+    });
+
+    if (cobertura.length === 0) {
+      tabCapacidade.innerHTML = `
+        <div class="card">
+          <p style="color:var(--color-text-muted);">Sem tópicos cadastrados, não há como responder "dá tempo?" — a pergunta precisa de um denominador. Monte o conteúdo programático em <strong>Conteúdo</strong> primeiro.</p>
+        </div>`;
+      return;
+    }
+
+    const semanasFalta = r.horasCobertura != null && cap.horasPorSemana > 0
+      ? Math.ceil(r.horasCobertura / cap.horasPorSemana)
+      : null;
+
+    tabCapacidade.innerHTML = `
+      <div class="card card--form-stack" style="margin-bottom:16px;">
+        <h3 style="margin-top:0;">Premissas</h3>
+        <p style="color:var(--color-text-muted); margin-top:0; font-size:13px;">
+          Os dois primeiros valores foram <strong>medidos no seu histórico</strong>, não arbitrados. Altere para simular cenários — o valor medido continua exibido ao lado.
+        </p>
+        <div class="form-grid-row">
+          <div class="form-field">
+            <label>Horizonte (semanas)</label>
+            <input type="number" id="cap-horizonte" min="1" max="200" step="1" value="${cap.horizonte}" />
+            <small style="color:var(--color-text-muted);">${(cap.horizonte / 4.345).toFixed(1)} meses</small>
+          </div>
+          <div class="form-field">
+            <label>Horas por semana</label>
+            <input type="number" id="cap-horas" min="0" step="0.5" value="${cap.horasPorSemana}" />
+            <small style="color:var(--color-text-muted);">medido: ${ritmo?.horasPorSemana ?? 0} h — ${escapeHtml(ritmo?.fonte || "")}</small>
+          </div>
+          <div class="form-field">
+            <label>Questões por hora</label>
+            <input type="number" id="cap-qph" min="0" step="0.5" value="${cap.questoesPorHora}" />
+            <small style="color:var(--color-text-muted);">medido: ${produtividade?.questoesPorHora ?? 0} q/h — ${escapeHtml(produtividade?.fonte || "")}</small>
+          </div>
+          <div class="form-field">
+            <label>Questões por tópico (massa crítica)</label>
+            <input type="number" id="cap-meta" min="5" step="5" value="${cap.metaQuestoes}" />
+            <small style="color:var(--color-text-muted);">mesmo limiar do diagnóstico Wilson</small>
+          </div>
+        </div>
+      </div>
+
+      ${!r.confiavel ? `
+      <div class="alert" style="background:#fff4e5; color:#b45309; border:1px solid #ffe0b2; margin-bottom:16px;">
+        <strong>Este número é um piso, não uma estimativa.</strong>
+        ${r.foraDaConta.length > 0 ? `<br>${r.foraDaConta.length} disciplina(s) do concurso não têm nenhum tópico cadastrado e ficaram inteiramente fora da conta: ${escapeHtml(r.foraDaConta.map((d) => d.nome).join(", "))}.` : ""}
+        ${r.topicosSemCaderno > 0 ? `<br>${r.topicosSemCaderno} tópico(s) não têm caderno vinculado — o custo deles é desconhecido, não zero, então também ficaram de fora.` : ""}
+      </div>` : ""}
+
+      <div class="card" style="margin-bottom:16px;">
+        <h3 style="margin-top:0;">Orçamento</h3>
+        <table class="data-table" style="max-width:640px;">
+          <tr><td>Horas disponíveis no horizonte</td><td class="cel-centro"><strong>${r.horasDisponiveis} h</strong></td></tr>
+          <tr><td>Horas para levar todo tópico mapeado à massa crítica</td><td class="cel-centro"><strong>${r.horasCobertura ?? "—"} h</strong></td></tr>
+          <tr style="border-top:2px solid var(--color-border);">
+            <td><strong>Saldo</strong></td>
+            <td class="cel-centro" style="color:${r.saldo >= 0 ? "var(--color-success)" : "var(--color-error)"}; font-weight:700;">${r.saldo == null ? "—" : (r.saldo >= 0 ? "+" : "") + r.saldo + " h"}</td>
+          </tr>
+        </table>
+        <p style="margin:10px 0 0; font-size:13px;">
+          ${r.saldo == null
+            ? ""
+            : r.saldo >= 0
+              ? `No seu ritmo, cobrir o escopo mapeado leva <strong>~${semanasFalta} semana(s)</strong> — sobra folga dentro do horizonte de ${cap.horizonte}.`
+              : `No seu ritmo, cobrir o escopo mapeado leva <strong>~${semanasFalta} semana(s)</strong>, contra as ${cap.horizonte} do horizonte. <strong>Não fecha.</strong> Ou o escopo encolhe, ou o ritmo sobe, ou o horizonte estica — não há quarta saída.`}
+        </p>
+        ${r.horasReforco > 0 ? `
+        <p style="margin:10px 0 0; font-size:13px; color:var(--color-text-muted); border-top:1px solid var(--color-border); padding-top:10px;">
+          <strong>Fora do total acima:</strong> ${r.linhas.reduce((a, l) => a + l.reforco, 0)} tópico(s) já têm massa crítica mas estão abaixo de 80% no Wilson. Uma rodada extra de ${cap.metaQuestoes} questões em cada custaria ~${r.horasReforco} h. Esse número é uma <em>suposição declarada</em>, não uma medição: seu histórico ainda não tem nenhum caderno que chegou a consolidado, então não existe base pra estimar quanto custa consolidar de verdade.
+        </p>` : ""}
+      </div>
+
+      <div class="card">
+        <h3 style="margin-top:0;">Onde o tempo vai</h3>
+        <div style="overflow-x:auto;">
+          <table class="data-table data-table--fixed" style="min-width:660px;">
+            <tr>
+              <th>Disciplina</th>
+              <th class="cel-centro" style="width:80px;">Tópicos</th>
+              <th class="cel-centro" style="width:110px;">Questões a fazer</th>
+              <th class="cel-centro" style="width:90px;">Horas</th>
+              <th class="cel-centro" style="width:90px;">% do total</th>
+              <th class="cel-centro" style="width:110px;">Sem caderno</th>
+            </tr>
+            ${r.linhas
+              .map(
+                (l) => `
+              <tr>
+                <td>${escapeHtml(l.disciplina)}</td>
+                <td class="cel-centro">${l.topicos}</td>
+                <td class="cel-centro">${l.qFaltantes}</td>
+                <td class="cel-centro">${l.horasCobertura ?? "—"}</td>
+                <td class="cel-centro">${r.horasCobertura > 0 ? formatPct((l.horasCobertura / r.horasCobertura) * 100) : "—"}</td>
+                <td class="cel-centro" style="${l.semCaderno > 0 ? "color:#b45309; font-weight:600;" : "color:var(--color-text-muted);"}">${l.semCaderno}</td>
+              </tr>`
+              )
+              .join("")}
+          </table>
+        </div>
+        <p style="margin:10px 0 0; font-size:12px; color:var(--color-text-muted);">
+          Massa crítica não é domínio. Chegar a ${cap.metaQuestoes} questões num tópico só garante que o Wilson deixa de dizer "poucos dados" — se o resultado vier baixo, o custo real é maior que o mostrado aqui.
+        </p>
+      </div>
+    `;
+
+    const recalcular = () => {
+      cap.horizonte = Math.max(1, Number(tabCapacidade.querySelector("#cap-horizonte").value) || 1);
+      cap.horasPorSemana = Math.max(0, Number(tabCapacidade.querySelector("#cap-horas").value) || 0);
+      cap.questoesPorHora = Math.max(0, Number(tabCapacidade.querySelector("#cap-qph").value) || 0);
+      cap.metaQuestoes = Math.max(5, Number(tabCapacidade.querySelector("#cap-meta").value) || 5);
+      renderCapacidade();
+    };
+    ["#cap-horizonte", "#cap-horas", "#cap-qph", "#cap-meta"].forEach((sel) => {
+      tabCapacidade.querySelector(sel).addEventListener("change", recalcular);
     });
   }
 
