@@ -269,7 +269,7 @@ export async function renderEditalPage(container) {
     tabConteudo.innerHTML = `
       <div class="card card--form" style="margin-bottom:16px;">
         <h3 style="margin-top:0;">Adicionar tópicos em lote</h3>
-        <p style="color:var(--color-text-muted); margin-top:0; font-size:13px;">Cole o conteúdo programático, <strong>uma linha por tópico</strong>. Escolha a disciplina à qual essas linhas pertencem e repita para cada disciplina do edital.</p>
+        <p style="color:var(--color-text-muted); margin-top:0; font-size:13px;">Cole o conteúdo programático — idealmente <strong>uma linha por tópico</strong>. Se vier tudo num parágrafo só (o que acontece ao copiar de PDF ou de texto formatado), o sistema separa sozinho e mostra o resultado para você conferir <strong>antes</strong> de salvar.</p>
         <div id="topico-alert"></div>
         <form id="topico-form">
           <div class="form-field">
@@ -283,8 +283,9 @@ export async function renderEditalPage(container) {
             <label for="topico-texto">Tópicos (um por linha)</label>
             <textarea id="topico-texto" rows="8" style="width:100%; box-sizing:border-box; padding:8px 12px; border:1px solid var(--color-border); border-radius:var(--radius); font-size:14px; font-family:inherit;" placeholder="Orçamento público: conceitos e princípios&#10;Ciclo orçamentário&#10;PPA, LDO e LOA"></textarea>
           </div>
-          <div class="form-actions"><button type="submit" class="btn">Adicionar tópicos</button></div>
+          <div class="form-actions"><button type="submit" class="btn">Conferir e adicionar</button></div>
         </form>
+        <div id="topico-preview"></div>
       </div>
       <div class="card">
         <h3 style="margin-top:0;">Tópicos cadastrados (${topicos.length})</h3>
@@ -294,33 +295,119 @@ export async function renderEditalPage(container) {
     `;
 
     const alert = tabConteudo.querySelector("#topico-alert");
-    tabConteudo.querySelector("#topico-form").addEventListener("submit", async (e) => {
+    const previewBox = tabConteudo.querySelector("#topico-preview");
+
+    tabConteudo.querySelector("#topico-form").addEventListener("submit", (e) => {
       e.preventDefault();
       alert.innerHTML = "";
+      previewBox.innerHTML = "";
       const disciplineId = tabConteudo.querySelector("#topico-disciplina").value;
-      const linhas = tabConteudo
-        .querySelector("#topico-texto")
-        .value.split("\n")
-        .map((l) => l.trim())
-        // Remove numeração comum de edital ("1.", "2.3 ", "- ") pra o nome
-        // ficar limpo e a sugestão por similaridade não ser poluída.
-        .map((l) => l.replace(/^[\d.]+\s*[-–)]?\s*/, "").replace(/^[-–•]\s*/, "").trim())
-        .filter((l) => l.length > 2)
-        .map((name) => ({ name, disciplineId }));
-      if (linhas.length === 0) {
+      if (!disciplineId) {
+        alert.innerHTML = `<div class="alert alert--error">Escolha a disciplina.</div>`;
+        return;
+      }
+      const bruto = tabConteudo.querySelector("#topico-texto").value;
+      const { nomes, colados } = parsearTopicos(bruto);
+      if (nomes.length === 0) {
         alert.innerHTML = `<div class="alert alert--error">Cole pelo menos um tópico.</div>`;
         return;
       }
-      try {
-        await createTopics({ userId: user.id, examId, linhas });
-        tabConteudo.querySelector("#topico-texto").value = "";
-        await carregar();
-      } catch (err) {
-        alert.innerHTML = `<div class="alert alert--error">Erro ao salvar: ${escapeHtml(err.message)}</div>`;
-      }
+      mostrarPreview({ previewBox, alert, nomes, colados, disciplineId });
     });
 
     renderListaTopicos();
+  }
+
+  // Separa o texto colado em nomes de tópico.
+  //
+  // Por que não basta split("\n") (04/08/2026): o usuário copiou uma lista de
+  // 9 assuntos de um documento formatado e o navegador entregou tudo numa
+  // linha só — 346 caracteres viraram 1 tópico. Markdown e PDF juntam linhas
+  // consecutivas num parágrafo, então a quebra de linha simplesmente não
+  // sobrevive ao copiar/colar. Confiar nela era uma armadilha silenciosa: o
+  // formulário "funcionava", só criava a coisa errada.
+  //
+  // Regra: linha muito longa quase certamente é um parágrafo colado, não um
+  // assunto — aí aplicamos a mesma separação por pontuação usada no "dividir".
+  const LIMITE_LINHA = 200;
+
+  function parsearTopicos(bruto) {
+    const nomes = [];
+    let colados = 0;
+    for (const linha of (bruto || "").split("\n")) {
+      const limpa = limparNumeracao(linha);
+      if (limpa.length <= 2) continue;
+      if (limpa.length > LIMITE_LINHA) {
+        const partes = sugerirDivisao(limpa);
+        if (partes.length > 1) {
+          colados += 1;
+          for (const parte of partes) {
+            const p = limparNumeracao(parte);
+            if (p.length > 2) nomes.push(p);
+          }
+          continue;
+        }
+      }
+      nomes.push(limpa);
+    }
+    return { nomes, colados };
+  }
+
+  // Remove numeração de edital ("1.", "2.3 ", "- ") pra o nome ficar limpo e a
+  // sugestão por similaridade não ser poluída pelos dígitos.
+  function limparNumeracao(linha) {
+    return (linha || "")
+      .trim()
+      .replace(/^[\d.]+\s*[-–)]?\s*/, "")
+      .replace(/^[-–•]\s*/, "")
+      .trim();
+  }
+
+  // Conferência antes de gravar. O passo existe porque o modo de falha anterior
+  // era invisível: salvava sem erro e só muito depois se descobria que o edital
+  // inteiro tinha virado um tópico gigante.
+  function mostrarPreview({ previewBox, alert, nomes, colados, disciplineId }) {
+    previewBox.innerHTML = `
+      <div style="background:var(--color-bg-subtle, #f5f5f5); padding:12px; border-radius:var(--radius); margin-top:12px;">
+        <p style="margin:0 0 8px;"><strong>${nomes.length} tópico(s)</strong> serão criados. Confira antes de salvar.</p>
+        ${colados > 0 ? `<div class="alert" style="background:#e3f2fd; color:#1565c0; border:1px solid #bbdefb; font-size:13px;">${colados} bloco(s) vieram grudados num parágrafo só e foram separados automaticamente. Isso é normal ao copiar de PDF ou de texto formatado — revise a lista abaixo e ajuste o que ficou torto.</div>` : ""}
+        <div class="form-field">
+          <textarea id="topico-preview-texto" rows="12" style="width:100%; box-sizing:border-box; padding:8px; border:1px solid var(--color-border); border-radius:var(--radius); font-size:13px; font-family:inherit;">${escapeHtml(nomes.join("\n"))}</textarea>
+        </div>
+        <div class="form-actions">
+          <button type="button" class="btn" id="topico-confirmar">Salvar ${nomes.length} tópico(s)</button>
+          <button type="button" class="btn-link" id="topico-cancelar">Cancelar</button>
+        </div>
+      </div>
+    `;
+
+    previewBox.querySelector("#topico-cancelar").addEventListener("click", () => {
+      previewBox.innerHTML = "";
+    });
+
+    previewBox.querySelector("#topico-confirmar").addEventListener("click", async (ev) => {
+      ev.target.disabled = true;
+      const finais = previewBox
+        .querySelector("#topico-preview-texto")
+        .value.split("\n")
+        .map((l) => l.trim())
+        .filter((l) => l.length > 2)
+        .map((name) => ({ name, disciplineId }));
+      if (finais.length === 0) {
+        alert.innerHTML = `<div class="alert alert--error">Nada para salvar.</div>`;
+        ev.target.disabled = false;
+        return;
+      }
+      try {
+        await createTopics({ userId: user.id, examId, linhas: finais });
+        tabConteudo.querySelector("#topico-texto").value = "";
+        previewBox.innerHTML = "";
+        await carregar();
+      } catch (err) {
+        alert.innerHTML = `<div class="alert alert--error">Erro ao salvar: ${escapeHtml(err.message)}</div>`;
+        ev.target.disabled = false;
+      }
+    });
   }
 
   function renderListaTopicos() {
