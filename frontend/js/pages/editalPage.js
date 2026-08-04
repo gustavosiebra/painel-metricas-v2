@@ -107,6 +107,22 @@ export async function renderEditalPage(container) {
   let ritmo = null;
   let produtividade = null;
 
+  // Estado dos campos editáveis da aba Capacidade. Nasce do MEDIDO (ritmo e
+  // produtividade vindos do histórico); o usuário pode sobrescrever pra simular
+  // cenário, e a tela mostra o valor medido ao lado — assim fica sempre claro
+  // quando ele está olhando dado e quando está olhando desejo.
+  //
+  // Declarado AQUI e não junto de renderCapacidade (04/08/2026, bug): `const`
+  // fica em zona morta temporal até a linha executar, e carregar() roda antes
+  // — renderCapacidade estourava ReferenceError e a aba ficava eternamente em
+  // "Carregando…". Declaração de estado tem que vir antes da primeira carga.
+  const cap = {
+    horizonte: 26,
+    horasPorSemana: null,
+    questoesPorHora: null,
+    metaQuestoes: META_QUESTOES_PADRAO,
+  };
+
   try {
     [exams, disciplines, cadernos, pesos, topicosPorExam, ritmo, produtividade] = await Promise.all([
       listExams(),
@@ -160,9 +176,21 @@ export async function renderEditalPage(container) {
       tabCobertura.innerHTML = `<div class="alert alert--error">Erro ao carregar: ${escapeHtml(err.message)}</div>`;
       return;
     }
-    renderCobertura();
-    renderConteudo();
-    renderCapacidade();
+    // Cada render isolado: um erro numa aba não pode deixar as outras (nem ela
+    // mesma) presas em "Carregando…" para sempre. Tela em branco silenciosa é
+    // o pior modo de falha possível — some sem deixar rastro pro usuário.
+    renderSeguro(tabCobertura, renderCobertura);
+    renderSeguro(tabConteudo, renderConteudo);
+    renderSeguro(tabCapacidade, renderCapacidade);
+  }
+
+  function renderSeguro(alvo, fn) {
+    try {
+      fn();
+    } catch (err) {
+      console.error("[edital] falha ao renderizar", err);
+      alvo.innerHTML = `<div class="alert alert--error">Erro ao montar esta aba: ${escapeHtml(err.message || String(err))}</div>`;
+    }
   }
 
   // ==================== COBERTURA ====================
@@ -530,17 +558,6 @@ export async function renderEditalPage(container) {
   }
 
   // ==================== CAPACIDADE ====================
-  // Estado dos campos editáveis. Nasce do MEDIDO (ritmo/produtividade vindos do
-  // histórico) e o usuário pode sobrescrever pra simular cenário — mas a tela
-  // sempre mostra o valor medido ao lado, pra ficar claro quando ele está
-  // olhando dado e quando está olhando desejo.
-  const cap = {
-    horizonte: 26,
-    horasPorSemana: null,
-    questoesPorHora: null,
-    metaQuestoes: META_QUESTOES_PADRAO,
-  };
-
   function renderCapacidade() {
     if (cap.horasPorSemana == null) cap.horasPorSemana = ritmo?.horasPorSemana ?? 0;
     if (cap.questoesPorHora == null) cap.questoesPorHora = produtividade?.questoesPorHora ?? 0;
@@ -605,6 +622,7 @@ export async function renderEditalPage(container) {
         <strong>Este número é um piso, não uma estimativa.</strong>
         ${r.foraDaConta.length > 0 ? `<br>${r.foraDaConta.length} disciplina(s) do concurso não têm nenhum tópico cadastrado e ficaram inteiramente fora da conta: ${escapeHtml(r.foraDaConta.map((d) => d.nome).join(", "))}.` : ""}
         ${r.topicosSemCaderno > 0 ? `<br>${r.topicosSemCaderno} tópico(s) não têm caderno vinculado — o custo deles é desconhecido, não zero, então também ficaram de fora.` : ""}
+        ${r.topicosBloco > 0 ? `<br><br><strong>Granularidade insuficiente:</strong> ${r.topicosBloco} tópico(s) têm ${r.limiarBloco}+ cadernos vinculados — são blocos de disciplina, não assuntos. A conta trata cada um como uma única unidade de ${cap.metaQuestoes} questões, o que subestima grosseiramente o esforço. Use <strong>dividir</strong> na aba Conteúdo antes de levar este número a sério.` : ""}
       </div>` : ""}
 
       <div class="card" style="margin-bottom:16px;">

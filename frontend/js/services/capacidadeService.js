@@ -187,6 +187,16 @@ export function calcularCapacidade({
   const comTopico = new Set(cobertura.map((c) => c.disciplinaNome).filter(Boolean));
   const foraDaConta = disciplinasEscopo.filter((d) => !comTopico.has(d.nome));
 
+  // Detecção de granularidade falsa (04/08/2026). O modelo trata cada tópico
+  // como uma unidade de `metaQuestoes`. Se o "tópico" é na verdade um bloco de
+  // disciplina inteiro colado numa linha só (sintoma: dezenas de cadernos
+  // vinculados a um único tópico), a conta vira absurdo — 6 blocos × 30 = 180
+  // questões pra "cobrir o edital todo". O número continua correto pela
+  // fórmula e completamente inútil na prática, que é o pior tipo de erro:
+  // aquele que não parece erro. Então a tela precisa denunciar, não só exibir.
+  const LIMIAR_BLOCO = 10;
+  const topicosBloco = cobertura.filter((c) => c.cadernosVinculados >= LIMIAR_BLOCO).length;
+
   const saldo = horasCobertura == null ? null : horasDisponiveis - horasCobertura;
 
   return {
@@ -200,10 +210,15 @@ export function calcularCapacidade({
     topicosSemCaderno: cobertura.filter((c) => c.cadernosVinculados === 0).length,
     linhas,
     foraDaConta,
+    topicosBloco,
+    limiarBloco: LIMIAR_BLOCO,
     // Só é possível responder "dá tempo" quando não há buraco no escopo. Com
     // disciplina fora da conta ou tópico sem caderno, a resposta honesta é
     // "ainda não dá pra saber" — e a tela usa esta flag pra dizer exatamente isso.
-    confiavel: foraDaConta.length === 0 && cobertura.every((c) => c.cadernosVinculados > 0),
+    confiavel:
+      foraDaConta.length === 0 &&
+      topicosBloco === 0 &&
+      cobertura.every((c) => c.cadernosVinculados > 0),
   };
 }
 
