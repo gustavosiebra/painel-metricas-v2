@@ -774,6 +774,7 @@ export async function renderEditalPage(container) {
     box.innerHTML = `
       <p style="margin:4px 0; font-size:12px; color:var(--color-text-muted);">
         Sugestões por semelhança de nome — marque as que servem e vincule todas de uma vez.
+        Itens marcados em laranja estão catalogados em <strong>outra disciplina</strong>; aparecem porque o nome bate, e às vezes o assunto cai mesmo em duas (SICRO, BDI, normas da ABNT).
       </p>
       ${sugestoes.length === 0
         ? '<p style="font-size:13px; color:var(--color-text-muted);">Nenhuma sugestão automática. Use a busca abaixo.</p>'
@@ -782,14 +783,14 @@ export async function renderEditalPage(container) {
           <button type="button" class="btn-link" style="font-size:12px;" data-marcar-todas="${topicId}">marcar todas</button>
           <button type="button" class="btn-link" style="font-size:12px;" data-desmarcar-todas="${topicId}">desmarcar</button>
         </div>
-        <div style="max-height:260px; overflow-y:auto; border:1px solid var(--color-border); border-radius:var(--radius); padding:8px;">
-          ${sugestoes.map((sg) => itemCheck(sg.caderno, sg.score)).join("")}
+        <div class="checkbox-list" style="max-height:260px; overflow-y:auto; border:1px solid var(--color-border); border-radius:var(--radius); padding:8px;">
+          ${sugestoes.map((sg) => itemCheck(sg.caderno, sg.score, sg.foraDaDisciplina)).join("")}
         </div>`}
-      <div class="form-field" style="margin-top:10px; max-width:460px;">
+      <div class="form-field" style="margin-top:10px; max-width:460px; margin-bottom:6px;">
         <label style="font-size:12px;">Buscar caderno manualmente</label>
         <input type="text" data-busca-caderno="${topicId}" placeholder="Digite parte do nome..." />
-        <div data-busca-resultado="${topicId}" style="margin-top:6px;"></div>
       </div>
+      <div data-busca-resultado="${topicId}" style="max-width:460px;"></div>
       <div class="form-actions">
         <button type="button" class="btn" data-vincular-lote="${topicId}" disabled>Vincular selecionados</button>
       </div>
@@ -854,18 +855,26 @@ export async function renderEditalPage(container) {
       const achados = ativos.filter((c) => normalizar(c.name).includes(termo)).slice(0, 20);
       res.innerHTML = achados.length === 0
         ? '<p style="font-size:12px; color:var(--color-text-muted);">Nada encontrado.</p>'
-        : `<div style="max-height:200px; overflow-y:auto; border:1px solid var(--color-border); border-radius:var(--radius); padding:8px;">
+        : `<div class="checkbox-list" style="max-height:200px; overflow-y:auto; border:1px solid var(--color-border); border-radius:var(--radius); padding:8px;">
              ${achados.map((c) => itemCheck(c, null)).join("")}
            </div>`;
       atualizarContador();
     });
   }
 
-  function itemCheck(caderno, score) {
+  // width:auto explícito no input (04/08/2026, bug reportado com print): o
+  // bloco de resultados vive dentro de um .form-field, e a regra global
+  // `.form-field input { width: 100% }` estica o checkbox pra linha inteira,
+  // empurrando o nome do caderno pra fora da área visível — a tela ficava com
+  // uma caixa solta e barra de rolagem horizontal, sem texto nenhum. A classe
+  // .checkbox-list já resolve (foi criada pro mesmo problema no Multibancas),
+  // mas o style inline aqui garante o comportamento mesmo se este HTML for
+  // reaproveitado fora dela.
+  function itemCheck(caderno, score, foraDaDisciplina) {
     return `
-      <label style="display:flex; gap:8px; align-items:flex-start; margin-bottom:5px; cursor:pointer; font-size:13px;">
-        <input type="checkbox" data-check-caderno="${caderno.id}" style="margin-top:3px; flex:none;" />
-        <span>${escapeHtml(caderno.name)}${score != null ? ` <span style="color:var(--color-text-muted); font-size:11px;">${Math.round(score * 100)}%</span>` : ""}</span>
+      <label style="display:flex; gap:8px; align-items:flex-start; margin-bottom:5px; cursor:pointer; font-size:13px; font-weight:normal;">
+        <input type="checkbox" data-check-caderno="${caderno.id}" style="width:auto; flex:none; margin:3px 0 0; padding:0;" />
+        <span style="min-width:0; overflow-wrap:anywhere;">${escapeHtml(caderno.name)}${score != null ? ` <span style="color:var(--color-text-muted); font-size:11px;">${Math.round(score * 100)}%</span>` : ""}${foraDaDisciplina ? ` <span style="color:#b45309; font-size:11px;">· ${escapeHtml(disciplinasById.get(caderno.discipline_id) || "outra disciplina")}</span>` : ""}</span>
       </label>`;
   }
 

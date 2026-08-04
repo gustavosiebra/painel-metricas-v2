@@ -199,22 +199,42 @@ export function sugerirCadernos(topico, cadernos, { limite = 12 } = {}) {
   if (alvo.length === 0) return [];
   const alvoSet = new Set(alvo);
 
-  return cadernos
-    .filter((c) => !topico.disciplineId || c.discipline_id === topico.disciplineId)
+  const pontuados = cadernos
     .map((c) => {
       const t = tokens(c.name);
-      if (t.length === 0) return { caderno: c, score: 0 };
+      if (t.length === 0) return { caderno: c, score: 0, comuns: 0 };
       let comuns = 0;
       for (const tok of new Set(t)) if (alvoSet.has(tok)) comuns += 1;
       // Normaliza pelo tamanho do MENOR conjunto: um tópico curto ("Modalidades")
       // não deve ser penalizado por bater com um caderno de nome longo.
       const score = comuns / Math.min(alvoSet.size, new Set(t).size);
-      return { caderno: c, score, comuns };
+      return {
+        caderno: c,
+        score,
+        comuns,
+        // Marcado, não excluído (04/08/2026). Filtrar por disciplina era rígido
+        // demais: o caderno "SICRO - Sistema de Custos Rodoviários do DNIT" está
+        // catalogado em PNFL, enquanto o tópico "Sistema de Custos Rodoviários do
+        // DNIT (SICRO)" é de Obras Rodoviárias — nome praticamente idêntico e
+        // ZERO sugestões na tela. A divisão por disciplina do catálogo não
+        // coincide com a do edital, e alguns assuntos (SICRO, BDI, ABNT) caem
+        // legitimamente em mais de uma. Então mostramos os de fora também, no
+        // fim da lista e sinalizados, em vez de esconder acerto óbvio.
+        foraDaDisciplina: Boolean(topico.disciplineId) && c.discipline_id !== topico.disciplineId,
+      };
     })
-    .filter((x) => x.comuns > 0)
-    .sort((a, b) => b.score - a.score || b.comuns - a.comuns)
-    .slice(0, limite);
+    .filter((x) => x.comuns > 0);
+
+  // Ordena: mesma disciplina primeiro, depois por semelhança.
+  pontuados.sort(
+    (a, b) =>
+      Number(a.foraDaDisciplina) - Number(b.foraDaDisciplina) ||
+      b.score - a.score ||
+      b.comuns - a.comuns
+  );
+  return pontuados.slice(0, limite);
 }
+
 
 // ==================== PARSER DE EDITAL COMPLETO (04/08/2026) ====================
 //
