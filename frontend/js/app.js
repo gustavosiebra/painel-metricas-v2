@@ -13,6 +13,7 @@ import { renderPriorityPage } from "./pages/priorityPage.js";
 import { renderPlanningPage } from "./pages/planningPage.js";
 import { renderErrorsPage } from "./pages/errorsPage.js";
 import { renderSimuladosPage } from "./pages/simuladosPage.js";
+import { renderFilaPage } from "./pages/filaPage.js";
 
 // "/pesos" removido em 05/07/2026 — Peso virou sub-aba dentro de Catálogo
 // (catalogPage.js). weightPage.js fica no repo sem uso, sem risco.
@@ -24,6 +25,7 @@ registerRoute("/sessoes/nova", renderStudyFormPage);
 registerRoute("/sessoes", renderSessionsPage);
 registerRoute("/erros", renderErrorsPage);
 registerRoute("/simulados", renderSimuladosPage);
+registerRoute("/revisar", renderFilaPage);
 registerRoute("/historico", renderHistoryPage);
 registerRoute("/parametros", renderParametersPage);
 registerRoute("/prioridade", renderPriorityPage);

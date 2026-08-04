@@ -85,6 +85,12 @@ const STUDY_TYPES_WITH_CONFIDENCE = ["leitura", "videoaula", "revisao", "discurs
 
 export async function renderStudyFormPage(container, params) {
   const editingId = params?.get ? params.get("id") : null;
+  // Pré-preenchimento vindo da Fila de Revisão (03/08/2026): a fila decide o
+  // que estudar; o formulário abre já apontando pro caderno escolhido. Tirar
+  // esse atrito entre decidir e registrar é o que faz a fila ser usada de
+  // fato. Só vale pra sessão NOVA — em edição, quem manda é a sessão salva.
+  const preDisciplineId = !editingId && params?.get ? params.get("disciplineId") : null;
+  const preQuestionSetId = !editingId && params?.get ? params.get("questionSetId") : null;
 
   container.innerHTML = `
     <div class="app-shell">
@@ -230,7 +236,7 @@ export async function renderStudyFormPage(container, params) {
           <select id="discipline_id" required>
             <option value="" disabled ${!existingSession ? "selected" : ""}>— Selecione —</option>
             <option value="__nenhuma__" id="discipline_none_option" ${existingSession && existingSession.discipline_id == null ? "selected" : ""}>Nenhuma disciplina específica</option>
-            ${disciplines.map((d) => `<option value="${d.id}" ${existingSession?.discipline_id === d.id ? "selected" : ""}>${escapeHtml(d.name)}</option>`).join("")}
+            ${disciplines.map((d) => `<option value="${d.id}" ${(existingSession?.discipline_id || preDisciplineId) === d.id ? "selected" : ""}>${escapeHtml(d.name)}</option>`).join("")}
             <option value="__new__">+ Cadastrar nova disciplina…</option>
           </select>
           <div id="new-discipline-box" style="display:none; margin-top:8px;">
@@ -252,9 +258,9 @@ export async function renderStudyFormPage(container, params) {
             <input type="number" id="shortcut_expected_questions" min="0" step="1" />
           </div>
         </div>
-        <div class="form-field" id="question-set-field" style="display:${existingSession?.discipline_id ? "block" : "none"};">
+        <div class="form-field" id="question-set-field" style="display:${existingSession?.discipline_id || preDisciplineId ? "block" : "none"};">
           <label for="question_set_id">Caderno</label>
-          <select id="question_set_id" ${existingSession?.discipline_id ? "required" : ""}>
+          <select id="question_set_id" ${existingSession?.discipline_id || preDisciplineId ? "required" : ""}>
             <option value="" disabled selected>Selecione a disciplina primeiro…</option>
           </select>
           <div id="new-caderno-box" style="display:none; margin-top:8px;">
@@ -413,6 +419,10 @@ export async function renderStudyFormPage(container, params) {
     // Pré-popular caderno em modo edição, já com a disciplina existente.
     if (existingSession?.discipline_id) {
       populateQuestionSets(existingSession.discipline_id, existingSession.question_set_id ?? null);
+    } else if (preDisciplineId) {
+      // Veio da Fila de Revisão: disciplina e caderno já escolhidos.
+      populateQuestionSets(preDisciplineId, preQuestionSetId || undefined);
+      checkWeightShortcut();
     }
 
     // Peso obrigatório na 1ª vez que o par Concurso×Disciplina é usado

@@ -15,6 +15,7 @@ export function renderNavbar(activeRoute) {
   // aqui (ação mais frequente do app, não vale o risco de esconder atrás de
   // um clique a mais) — ganhou também um atalho direto no Dashboard.
   const links = [
+    { path: "/revisar", label: "Revisar" },
     { path: "/sessoes/nova", label: "Nova Sessão" },
     { path: "/sessoes", label: "Sessões" },
     { path: "/erros", label: "Erros" },
