@@ -22,6 +22,9 @@ import {
   vincularCaderno,
   desvincularCaderno,
   sugerirCadernos,
+  updateTopic,
+  splitTopic,
+  sugerirDivisao,
 } from "../services/editalService.js";
 import { getState } from "../state.js";
 import { formatPct } from "../utils/format.js";
@@ -270,8 +273,12 @@ export async function renderEditalPage(container) {
           <div style="display:flex; gap:10px; align-items:baseline; flex-wrap:wrap;">
             <strong style="cursor:pointer;" data-topico-toggle="${t.id}">${escapeHtml(t.name)}</strong>
             <span style="font-size:12px; color:var(--color-text-muted);">${escapeHtml(disciplinasById.get(t.discipline_id) || "—")} · ${vs.length} caderno(s)</span>
+            <button class="btn-link" style="font-size:12px;" data-topico-edit="${t.id}">editar</button>
+            <button class="btn-link" style="font-size:12px;" data-topico-split="${t.id}">dividir</button>
             <button class="btn-link" style="color:var(--color-error); font-size:12px;" data-topico-del="${t.id}">remover</button>
           </div>
+          <div data-topico-edit-painel="${t.id}" style="display:none; margin-top:8px;"></div>
+          <div data-topico-split-painel="${t.id}" style="display:none; margin-top:8px;"></div>
           <div data-topico-painel="${t.id}" style="display:none; margin-top:8px;">
             ${vs.length > 0 ? `
               <p style="margin:4px 0; font-size:12px; color:var(--color-text-muted);">Vinculados:</p>
@@ -295,6 +302,14 @@ export async function renderEditalPage(container) {
       });
     });
 
+    box.querySelectorAll("[data-topico-edit]").forEach((btn) => {
+      btn.addEventListener("click", () => abrirEdicao(btn.dataset.topicoEdit));
+    });
+
+    box.querySelectorAll("[data-topico-split]").forEach((btn) => {
+      btn.addEventListener("click", () => abrirDivisao(btn.dataset.topicoSplit));
+    });
+
     box.querySelectorAll("[data-topico-del]").forEach((btn) => {
       btn.addEventListener("click", async () => {
         if (!window.confirm("Remover este tópico e seus vínculos?")) return;
@@ -316,6 +331,102 @@ export async function renderEditalPage(container) {
           window.alert("Erro: " + (err.message || "desconhecido"));
         }
       });
+    });
+  }
+
+  function abrirEdicao(topicId) {
+    const t = topicos.find((x) => x.id === topicId);
+    const painel = tabConteudo.querySelector(`[data-topico-edit-painel="${topicId}"]`);
+    if (painel.style.display === "block") {
+      painel.style.display = "none";
+      return;
+    }
+    painel.style.display = "block";
+    painel.innerHTML = `
+      <div style="background:var(--color-bg-subtle, #f5f5f5); padding:10px; border-radius:var(--radius);">
+        <div class="form-field">
+          <label>Nome do tópico</label>
+          <textarea data-edit-nome rows="3" style="width:100%; box-sizing:border-box; padding:8px; border:1px solid var(--color-border); border-radius:var(--radius); font-size:13px; font-family:inherit;">${escapeHtml(t.name)}</textarea>
+        </div>
+        <div style="display:flex; gap:12px; flex-wrap:wrap;">
+          <div class="form-field" style="flex:1; min-width:200px;">
+            <label>Disciplina</label>
+            <select data-edit-disciplina>
+              ${disciplines.map((d) => `<option value="${d.id}" ${t.discipline_id === d.id ? "selected" : ""}>${escapeHtml(d.name)}</option>`).join("")}
+            </select>
+          </div>
+          <div class="form-field" style="width:180px;">
+            <label>Questões esperadas</label>
+            <input type="number" data-edit-questoes min="0" step="1" value="${t.expected_questions ?? ""}" />
+          </div>
+        </div>
+        <div class="form-actions">
+          <button type="button" class="btn" data-edit-salvar="${topicId}">Salvar</button>
+          <button type="button" class="btn-link" data-edit-cancelar="${topicId}">Cancelar</button>
+        </div>
+      </div>
+    `;
+    painel.querySelector(`[data-edit-cancelar="${topicId}"]`).addEventListener("click", () => {
+      painel.style.display = "none";
+    });
+    painel.querySelector(`[data-edit-salvar="${topicId}"]`).addEventListener("click", async (e) => {
+      e.target.disabled = true;
+      const q = painel.querySelector("[data-edit-questoes]").value;
+      try {
+        await updateTopic(topicId, {
+          name: painel.querySelector("[data-edit-nome]").value.trim(),
+          disciplineId: painel.querySelector("[data-edit-disciplina]").value,
+          expectedQuestions: q === "" ? null : Number(q),
+        });
+        await carregar();
+      } catch (err) {
+        window.alert("Erro ao salvar: " + (err.message || "desconhecido"));
+        e.target.disabled = false;
+      }
+    });
+  }
+
+  function abrirDivisao(topicId) {
+    const t = topicos.find((x) => x.id === topicId);
+    const painel = tabConteudo.querySelector(`[data-topico-split-painel="${topicId}"]`);
+    if (painel.style.display === "block") {
+      painel.style.display = "none";
+      return;
+    }
+    painel.style.display = "block";
+    const partes = sugerirDivisao(t.name);
+    const nVinculos = vinculos.filter((v) => v.topicId === topicId).length;
+    painel.innerHTML = `
+      <div style="background:var(--color-bg-subtle, #f5f5f5); padding:10px; border-radius:var(--radius);">
+        <p style="margin:0 0 6px; font-size:13px;"><strong>Dividir em ${partes.length} tópicos.</strong> Revise e ajuste — uma linha por tópico.</p>
+        ${nVinculos > 0 ? `<div class="alert" style="background:#fff4e5; color:#b45309; border:1px solid #ffe0b2; font-size:13px;">Este tópico tem ${nVinculos} caderno(s) vinculado(s). Ao dividir, os vínculos são descartados: cada parte precisa do próprio mapeamento, senão a cobertura ficaria falsa (todo caderno contando pra todo assunto).</div>` : ""}
+        <div class="form-field">
+          <textarea data-split-texto rows="10" style="width:100%; box-sizing:border-box; padding:8px; border:1px solid var(--color-border); border-radius:var(--radius); font-size:13px; font-family:inherit;">${escapeHtml(partes.join("\n"))}</textarea>
+        </div>
+        <div class="form-actions">
+          <button type="button" class="btn" data-split-confirmar="${topicId}">Dividir</button>
+          <button type="button" class="btn-link" data-split-cancelar="${topicId}">Cancelar</button>
+        </div>
+      </div>
+    `;
+    painel.querySelector(`[data-split-cancelar="${topicId}"]`).addEventListener("click", () => {
+      painel.style.display = "none";
+    });
+    painel.querySelector(`[data-split-confirmar="${topicId}"]`).addEventListener("click", async (e) => {
+      const linhas = painel.querySelector("[data-split-texto]").value.split("\n").map((l) => l.trim()).filter((l) => l.length > 2);
+      if (linhas.length < 2) {
+        window.alert("Precisa de pelo menos 2 linhas pra dividir.");
+        return;
+      }
+      if (!window.confirm(`Dividir em ${linhas.length} tópicos? O tópico original será removido.`)) return;
+      e.target.disabled = true;
+      try {
+        await splitTopic({ userId: user.id, examId, topicId, partes: linhas, disciplineId: t.discipline_id });
+        await carregar();
+      } catch (err) {
+        window.alert("Erro ao dividir: " + (err.message || "desconhecido"));
+        e.target.disabled = false;
+      }
     });
   }
 

@@ -113,6 +113,37 @@ export async function updateTopic(id, { name, disciplineId, expectedQuestions })
   if (error) throw error;
 }
 
+// Divide um tópico grande em vários (03/08/2026). Necessário porque conteúdo
+// programático de edital vem em blocos corridos — uma disciplina inteira num
+// parágrafo, separada por ponto e ponto-e-vírgula. Cadastrar assim mede
+// cobertura por disciplina, que o painel já fazia; o ganho do edital
+// estruturado só aparece no nível do assunto.
+// Os vínculos do tópico original são descartados junto (cascata): as partes
+// novas precisam de mapeamento próprio, e herdar todos os cadernos do bloco
+// em cada parte produziria cobertura falsa.
+export async function splitTopic({ userId, examId, topicId, partes, disciplineId }) {
+  const criados = await createTopics({
+    userId,
+    examId,
+    linhas: partes.map((name) => ({ name, disciplineId })),
+  });
+  const { error } = await supabase.from("exam_topics").delete().eq("id", topicId);
+  if (error) throw error;
+  return criados;
+}
+
+// Quebra o texto em candidatos a subtópico. Separadores típicos de edital:
+// ponto final, ponto-e-vírgula e travessão. Não divide em vírgula de
+// propósito — "substantivo, adjetivo, numeral" é uma enumeração dentro do
+// mesmo assunto, não três assuntos.
+export function sugerirDivisao(texto) {
+  return (texto || "")
+    .split(/[.;]\s+|\s+[–—]\s+/)
+    .map((t) => t.replace(/^[\d.]+\s*[-–)]?\s*/, "").trim())
+    .map((t) => t.replace(/[.;,\s]+$/, "").trim())
+    .filter((t) => t.length > 3);
+}
+
 export async function vincularCaderno({ userId, topicId, questionSetId }) {
   const { error } = await supabase
     .from("exam_topic_question_sets")
