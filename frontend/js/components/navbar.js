@@ -21,6 +21,7 @@ export function renderNavbar(activeRoute) {
     { path: "/erros", label: "Erros" },
     { path: "/simulados", label: "Simulados" },
     { path: "/catalogo", label: "Catálogo" },
+    { path: "/edital", label: "Edital" },
     { path: "/planejamento", label: "Planejamento" },
     { path: "/prioridade", label: "Prioridade" },
     { path: "/historico", label: "Histórico" },
