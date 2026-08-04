@@ -196,3 +196,102 @@ export function sugerirCadernos(topico, cadernos, { limite = 12 } = {}) {
     .sort((a, b) => b.score - a.score || b.comuns - a.comuns)
     .slice(0, limite);
 }
+
+// ==================== PARSER DE EDITAL COMPLETO (04/08/2026) ====================
+//
+// Objetivo: colar o Anexo I inteiro de uma vez, em vez de fazer 11 colagens
+// separadas escolhendo a disciplina na mão a cada uma.
+//
+// Como editais de fato se parecem (verificado no Anexo I do TCE-SP 2026):
+// cada disciplina aparece como "Nome da Disciplina: conteúdo conteúdo...", e
+// dentro de Conhecimentos Específicos as sub-áreas usam exatamente o mesmo
+// padrão, só que no meio do parágrafo ("... Lei nº 13.303/2016. Obras de
+// Edificações: Organização do canteiro de obras, ...").
+//
+// A armadilha: "Nome:" também é como o edital escreve enumerações comuns
+// ("Pontuação. Classes de palavras: substantivo, adjetivo, ..."), que NÃO são
+// disciplinas. O discriminador que funciona na prática é a caixa da primeira
+// palavra depois dos dois-pontos — conteúdo de disciplina começa maiúsculo
+// ("Legislação: Lei Complementar..."), enumeração continua minúsculo
+// ("Classes de palavras: substantivo..."). Não é perfeito: "Especificações de
+// materiais: Características físicas" passa como falso positivo.
+//
+// Por isso o parser NÃO tenta ser exato. Ele erra pra mais (blocos demais) e a
+// tela oferece "juntar ao anterior" — corrigir dois falsos positivos com um
+// clique é muito mais barato que caçar uma disciplina que o parser engoliu em
+// silêncio. Errar pra menos seria o erro perigoso.
+
+// Linhas que são cabeçalho de seção do edital, não disciplina.
+const SECOES_IGNORADAS =
+  /^(conhecimentos\s+gerais|conhecimentos\s+específicos|conhecimentos\s+especificos|anexo\b|conteúdo\s+programático|conteudo\s+programatico|ensino\s+superior|ensino\s+médio|ensino\s+medio)/i;
+
+export function parsearEditalCompleto(texto) {
+  // Junta as quebras de linha do PDF: pdftotext quebra parágrafo em várias
+  // linhas, e essas quebras são de diagramação, não de conteúdo. Trabalhar com
+  // o texto corrido evita depender de uma formatação que não sobrevive à cópia.
+  const corrido = (texto || "")
+    .split("\n")
+    .map((l) => l.trim())
+    // Descarta a linha só quando ela é APENAS o cabeçalho de seção. Descartar
+    // a linha inteira era um bug (04/08/2026): no PDF do TCE-SP a linha é
+    // "Conhecimentos Específicos: Obras – Definições, Planejamento, Normas,
+    // Fiscalização e Legislação: Manual de obras e" — jogá-la fora apagava
+    // junto o cabeçalho da primeira disciplina de Específicos, e o bloco
+    // anterior (Legislação, de Gerais) absorvia 51 tópicos que não eram dele.
+    .filter((l) => l && !/^(conhecimentos\s+(gerais|específicos|especificos)|anexo\b.*|conteúdo\s+programático|conteudo\s+programatico|ensino\s+(superior|médio|medio)).{0,20}$/i.test(l))
+    .map((l) => l.replace(/^conhecimentos\s+(gerais|específicos|especificos)\s*:\s*/i, ""))
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .replace(/-\s+/g, "-");
+
+  // Candidato a cabeçalho: "Título:" com 1 a 8 palavras, seguido de MAIÚSCULA.
+  // O lookahead exige letra maiúscula (ou dígito/"Lei") logo depois — é o que
+  // separa disciplina de enumeração (ver comentário acima).
+  // O título não pode conter ponto: permitir ponto fazia o título engolir a
+  // frase anterior inteira ("Regência verbal e nominal. Colocação pronominal.
+  // Crase. Raciocínio Lógico e Analítico:"). Títulos reais de edital usam
+  // vírgula e travessão, nunca ponto final.
+  const re = /(^|(?<=[.;]\s))([A-ZÀ-ÜÁÉÍÓÚÂÊÔÃÕÇ][^.;:]{2,90}):\s+(?=[A-ZÀ-ÜÁÉÍÓÚÂÊÔÃÕÇ0-9])/g;
+
+  const marcas = [];
+  let m;
+  while ((m = re.exec(corrido)) !== null) {
+    const titulo = m[2].trim();
+    // Até 12 palavras: cabeçalhos reais de edital são longos ("Obras
+    // Rodoviárias e Obras e Serviços de Pavimentação Urbana:" tem 9). Com o
+    // limite em 8, esse título não era detectado e o bloco anterior engolia a
+    // disciplina inteira — erro pra menos, o tipo que passa despercebido.
+    if (titulo.split(/\s+/).length > 12) continue;
+    if (SECOES_IGNORADAS.test(titulo)) continue;
+    marcas.push({ titulo, inicio: m.index + m[0].length });
+  }
+
+  if (marcas.length === 0) {
+    return [{ titulo: "", corpo: corrido, topicos: sugerirDivisao(corrido) }];
+  }
+
+  return marcas.map((marca, i) => {
+    const fim = i + 1 < marcas.length ? corrido.lastIndexOf(marcas[i + 1].titulo, marcas[i + 1].inicio) : corrido.length;
+    const corpo = corrido.slice(marca.inicio, fim).trim();
+    return { titulo: marca.titulo, corpo, topicos: sugerirDivisao(corpo) };
+  });
+}
+
+// Casa o título detectado com uma disciplina já cadastrada, ignorando acento,
+// caixa e palavras de ligação. Devolve null quando não há candidato bom — e
+// null aqui significa "pergunte ao usuário", nunca "crie sozinho": criar
+// disciplina por adivinhação polui o catálogo, que é justamente o problema que
+// a constraint de unicidade foi criada pra resolver.
+export function casarDisciplina(titulo, disciplinas) {
+  const alvo = tokens(titulo);
+  if (alvo.length === 0) return null;
+  let melhor = null;
+  for (const d of disciplinas) {
+    const cand = tokens(d.name);
+    if (cand.length === 0) continue;
+    const inter = cand.filter((t) => alvo.includes(t)).length;
+    const score = inter / Math.min(cand.length, alvo.length);
+    if (score >= 0.6 && (!melhor || score > melhor.score)) melhor = { discipline: d, score };
+  }
+  return melhor ? melhor.discipline : null;
+}

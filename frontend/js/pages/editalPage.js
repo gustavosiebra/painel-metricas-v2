@@ -17,7 +17,7 @@
 // candidatos por similaridade de nome e o usuário confirma com um clique.
 
 import { renderNavbar, wireNavbar } from "../components/navbar.js";
-import { listExams, listDisciplines, listQuestionSets } from "../services/catalogService.js";
+import { listExams, listDisciplines, listQuestionSets, createDiscipline } from "../services/catalogService.js";
 import {
   listTopics,
   listVinculos,
@@ -31,6 +31,8 @@ import {
   splitTopic,
   sugerirDivisao,
   countTopicsByExam,
+  parsearEditalCompleto,
+  casarDisciplina,
 } from "../services/editalService.js";
 import { listWeights } from "../services/weightService.js";
 import {
@@ -268,7 +270,20 @@ export async function renderEditalPage(container) {
   function renderConteudo() {
     tabConteudo.innerHTML = `
       <div class="card card--form" style="margin-bottom:16px;">
-        <h3 style="margin-top:0;">Adicionar tópicos em lote</h3>
+        <h3 style="margin-top:0;">Colar o edital inteiro</h3>
+        <p style="color:var(--color-text-muted); margin-top:0; font-size:13px;">
+          Cole o Anexo I completo (todas as disciplinas de uma vez). O sistema identifica os cabeçalhos de disciplina, separa os tópicos e mostra tudo agrupado para você conferir. Ele erra <strong>para mais</strong> de propósito — é comum aparecerem blocos a mais, e você junta ao anterior com um clique. Errar para menos seria pior: a disciplina sumiria sem aviso.
+        </p>
+        <div id="edital-alert"></div>
+        <div class="form-field">
+          <label for="edital-texto">Conteúdo programático completo</label>
+          <textarea id="edital-texto" rows="8" style="width:100%; box-sizing:border-box; padding:8px 12px; border:1px solid var(--color-border); border-radius:var(--radius); font-size:14px; font-family:inherit;" placeholder="Língua Portuguesa: Leitura e interpretação de diversos tipos de textos..."></textarea>
+        </div>
+        <div class="form-actions"><button type="button" class="btn" id="edital-analisar">Analisar edital</button></div>
+        <div id="edital-blocos"></div>
+      </div>
+      <div class="card card--form" style="margin-bottom:16px;">
+        <h3 style="margin-top:0;">Adicionar tópicos de uma disciplina</h3>
         <p style="color:var(--color-text-muted); margin-top:0; font-size:13px;">Cole o conteúdo programático — idealmente <strong>uma linha por tópico</strong>. Se vier tudo num parágrafo só (o que acontece ao copiar de PDF ou de texto formatado), o sistema separa sozinho e mostra o resultado para você conferir <strong>antes</strong> de salvar.</p>
         <div id="topico-alert"></div>
         <form id="topico-form">
@@ -294,6 +309,8 @@ export async function renderEditalPage(container) {
       </div>
     `;
 
+    wireEditalCompleto();
+
     const alert = tabConteudo.querySelector("#topico-alert");
     const previewBox = tabConteudo.querySelector("#topico-preview");
 
@@ -316,6 +333,159 @@ export async function renderEditalPage(container) {
     });
 
     renderListaTopicos();
+  }
+
+  // ---------- Colar edital inteiro ----------
+  // blocos: [{ titulo, topicos:[], disciplineId, novaNome, ignorar }]
+  let blocosEdital = [];
+
+  function wireEditalCompleto() {
+    const alertBox = tabConteudo.querySelector("#edital-alert");
+    tabConteudo.querySelector("#edital-analisar").addEventListener("click", () => {
+      alertBox.innerHTML = "";
+      const texto = tabConteudo.querySelector("#edital-texto").value;
+      if (texto.trim().length < 50) {
+        alertBox.innerHTML = `<div class="alert alert--error">Cole o conteúdo programático primeiro.</div>`;
+        return;
+      }
+      blocosEdital = parsearEditalCompleto(texto).map((b) => {
+        const casou = casarDisciplina(b.titulo, disciplines);
+        return {
+          titulo: b.titulo || "(sem título)",
+          topicos: b.topicos,
+          disciplineId: casou ? casou.id : "",
+          novaNome: casou ? "" : b.titulo,
+          ignorar: false,
+        };
+      });
+      renderBlocosEdital();
+    });
+  }
+
+  function renderBlocosEdital() {
+    const box = tabConteudo.querySelector("#edital-blocos");
+    if (blocosEdital.length === 0) {
+      box.innerHTML = "";
+      return;
+    }
+    const totalTopicos = blocosEdital.filter((b) => !b.ignorar).reduce((a, b) => a + b.topicos.length, 0);
+    const semDestino = blocosEdital.filter((b) => !b.ignorar && !b.disciplineId && !b.novaNome.trim()).length;
+
+    box.innerHTML = `
+      <div style="margin-top:14px; border-top:1px solid var(--color-border); padding-top:14px;">
+        <p style="margin:0 0 10px;"><strong>${blocosEdital.filter((b) => !b.ignorar).length} bloco(s)</strong> e <strong>${totalTopicos} tópico(s)</strong> serão criados.</p>
+        ${blocosEdital.map((b, i) => blocoHtml(b, i)).join("")}
+        ${semDestino > 0 ? `<div class="alert" style="background:#fff4e5; color:#b45309; border:1px solid #ffe0b2;">${semDestino} bloco(s) sem disciplina definida. Escolha uma existente, digite o nome de uma nova, ou marque para ignorar.</div>` : ""}
+        <div class="form-actions">
+          <button type="button" class="btn" id="edital-salvar" ${semDestino > 0 ? "disabled" : ""}>Salvar ${totalTopicos} tópico(s)</button>
+          <button type="button" class="btn-link" id="edital-descartar">Descartar análise</button>
+        </div>
+      </div>
+    `;
+
+    box.querySelectorAll("[data-bloco-disc]").forEach((sel) => {
+      sel.addEventListener("change", () => {
+        const b = blocosEdital[Number(sel.dataset.blocoDisc)];
+        b.disciplineId = sel.value;
+        if (sel.value) b.novaNome = "";
+        renderBlocosEdital();
+      });
+    });
+    box.querySelectorAll("[data-bloco-nova]").forEach((inp) => {
+      inp.addEventListener("input", () => {
+        blocosEdital[Number(inp.dataset.blocoNova)].novaNome = inp.value;
+      });
+    });
+    box.querySelectorAll("[data-bloco-topicos]").forEach((ta) => {
+      ta.addEventListener("input", () => {
+        blocosEdital[Number(ta.dataset.blocoTopicos)].topicos = ta.value.split("\n").map((l) => l.trim()).filter((l) => l.length > 2);
+      });
+    });
+    box.querySelectorAll("[data-bloco-juntar]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const i = Number(btn.dataset.blocoJuntar);
+        // Falso positivo do parser: o "cabeçalho" era só uma frase do meio do
+        // texto. Devolve o título à lista de tópicos do bloco anterior, pra
+        // nada do edital se perder na correção.
+        const anterior = blocosEdital[i - 1];
+        const atual = blocosEdital[i];
+        anterior.topicos = [...anterior.topicos, atual.titulo, ...atual.topicos];
+        blocosEdital.splice(i, 1);
+        renderBlocosEdital();
+      });
+    });
+    box.querySelectorAll("[data-bloco-ignorar]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const b = blocosEdital[Number(btn.dataset.blocoIgnorar)];
+        b.ignorar = !b.ignorar;
+        renderBlocosEdital();
+      });
+    });
+    box.querySelector("#edital-descartar").addEventListener("click", () => {
+      blocosEdital = [];
+      renderBlocosEdital();
+    });
+    const btnSalvar = box.querySelector("#edital-salvar");
+    if (btnSalvar) btnSalvar.addEventListener("click", () => salvarBlocosEdital(btnSalvar));
+  }
+
+  function blocoHtml(b, i) {
+    return `
+      <div style="border:1px solid var(--color-border); border-radius:var(--radius); padding:10px; margin-bottom:10px; ${b.ignorar ? "opacity:0.45;" : ""}">
+        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:8px;">
+          <strong style="font-size:14px;">${escapeHtml(b.titulo)}</strong>
+          <span style="font-size:12px; color:var(--color-text-muted);">${b.topicos.length} tópico(s)</span>
+          ${i > 0 ? `<button type="button" class="btn-link" style="font-size:12px;" data-bloco-juntar="${i}">juntar ao anterior</button>` : ""}
+          <button type="button" class="btn-link" style="font-size:12px; color:var(--color-error);" data-bloco-ignorar="${i}">${b.ignorar ? "voltar a incluir" : "ignorar"}</button>
+        </div>
+        ${b.ignorar ? "" : `
+        <div style="display:flex; gap:12px; flex-wrap:wrap; margin-bottom:8px;">
+          <div class="form-field" style="flex:1; min-width:220px; margin:0;">
+            <label style="font-size:12px;">Disciplina existente</label>
+            <select data-bloco-disc="${i}">
+              <option value="">— criar nova —</option>
+              ${disciplines.map((d) => `<option value="${d.id}" ${b.disciplineId === d.id ? "selected" : ""}>${escapeHtml(d.name)}</option>`).join("")}
+            </select>
+          </div>
+          ${!b.disciplineId ? `
+          <div class="form-field" style="flex:1; min-width:220px; margin:0;">
+            <label style="font-size:12px;">Nome da nova disciplina</label>
+            <input type="text" data-bloco-nova="${i}" value="${escapeHtml(b.novaNome)}" />
+          </div>` : ""}
+        </div>
+        <textarea data-bloco-topicos="${i}" rows="${Math.min(10, Math.max(3, b.topicos.length))}" style="width:100%; box-sizing:border-box; padding:8px; border:1px solid var(--color-border); border-radius:var(--radius); font-size:12px; font-family:inherit;">${escapeHtml(b.topicos.join("\n"))}</textarea>`}
+      </div>
+    `;
+  }
+
+  async function salvarBlocosEdital(btn) {
+    const alertBox = tabConteudo.querySelector("#edital-alert");
+    btn.disabled = true;
+    btn.textContent = "Salvando…";
+    try {
+      for (const b of blocosEdital) {
+        if (b.ignorar || b.topicos.length === 0) continue;
+        let disciplineId = b.disciplineId;
+        if (!disciplineId) {
+          const nova = await createDiscipline({ name: b.novaNome.trim(), userId: user.id });
+          disciplineId = nova.id;
+          disciplines.push(nova);
+          disciplinasById.set(nova.id, nova.name);
+        }
+        await createTopics({
+          userId: user.id,
+          examId,
+          linhas: b.topicos.map((name) => ({ name, disciplineId })),
+        });
+      }
+      blocosEdital = [];
+      tabConteudo.querySelector("#edital-texto").value = "";
+      await carregar();
+    } catch (err) {
+      alertBox.innerHTML = `<div class="alert alert--error">Erro ao salvar: ${escapeHtml(err.message || String(err))}</div>`;
+      btn.disabled = false;
+      btn.textContent = "Tentar de novo";
+    }
   }
 
   // Separa o texto colado em nomes de tópico.
