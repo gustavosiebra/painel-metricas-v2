@@ -25,6 +25,7 @@ import {
   createTopics,
   deleteTopic,
   vincularCaderno,
+  vincularCadernos,
   desvincularCaderno,
   sugerirCadernos,
   updateTopic,
@@ -758,60 +759,118 @@ export async function renderEditalPage(container) {
     });
   }
 
+  // Seleção por caixa em vez de clique item a item (04/08/2026, pedido do
+  // usuário). O modo anterior — um botão "vincular" por sugestão — recarregava
+  // a página inteira a cada vínculo, então mapear um tópico com 20 cadernos
+  // custava 20 recargas. Com caixas, a escolha é toda feita antes e vai numa
+  // gravação só.
   function renderSugestoes(topicId) {
     const t = topicos.find((x) => x.id === topicId);
     const box = tabConteudo.querySelector(`[data-sugestoes="${topicId}"]`);
     const jaVinculados = new Set(vinculos.filter((v) => v.topicId === topicId).map((v) => v.questionSetId));
     const ativos = cadernos.filter((c) => c.status !== "inativo" && !jaVinculados.has(c.id));
-    const sugestoes = sugerirCadernos({ name: t.name, disciplineId: t.discipline_id }, ativos);
+    const sugestoes = sugerirCadernos({ name: t.name, disciplineId: t.discipline_id }, ativos, { limite: 30 });
 
     box.innerHTML = `
-      <p style="margin:4px 0; font-size:12px; color:var(--color-text-muted);">Sugestões (por semelhança de nome):</p>
+      <p style="margin:4px 0; font-size:12px; color:var(--color-text-muted);">
+        Sugestões por semelhança de nome — marque as que servem e vincule todas de uma vez.
+      </p>
       ${sugestoes.length === 0
         ? '<p style="font-size:13px; color:var(--color-text-muted);">Nenhuma sugestão automática. Use a busca abaixo.</p>'
-        : sugestoes
-            .map(
-              (s) => `
-        <div style="display:flex; gap:8px; align-items:center; margin-bottom:4px;">
-          <button class="btn-link" data-vincular="${s.caderno.id}" data-topico="${topicId}">+ vincular</button>
-          <span style="font-size:13px;">${escapeHtml(s.caderno.name)}</span>
+        : `
+        <div style="margin-bottom:6px;">
+          <button type="button" class="btn-link" style="font-size:12px;" data-marcar-todas="${topicId}">marcar todas</button>
+          <button type="button" class="btn-link" style="font-size:12px;" data-desmarcar-todas="${topicId}">desmarcar</button>
         </div>
-      `
-            )
-            .join("")}
-      <div class="form-field" style="margin-top:8px; max-width:420px;">
-        <label>Buscar caderno manualmente</label>
+        <div style="max-height:260px; overflow-y:auto; border:1px solid var(--color-border); border-radius:var(--radius); padding:8px;">
+          ${sugestoes.map((sg) => itemCheck(sg.caderno, sg.score)).join("")}
+        </div>`}
+      <div class="form-field" style="margin-top:10px; max-width:460px;">
+        <label style="font-size:12px;">Buscar caderno manualmente</label>
         <input type="text" data-busca-caderno="${topicId}" placeholder="Digite parte do nome..." />
         <div data-busca-resultado="${topicId}" style="margin-top:6px;"></div>
       </div>
+      <div class="form-actions">
+        <button type="button" class="btn" data-vincular-lote="${topicId}" disabled>Vincular selecionados</button>
+      </div>
     `;
 
-    box.querySelectorAll("[data-vincular]").forEach((btn) => wireVincular(btn));
+    const btnLote = box.querySelector(`[data-vincular-lote="${topicId}"]`);
+
+    // Conta as marcadas nas DUAS listas (sugestões e busca): elas compartilham
+    // a mesma seleção, senão o usuário perderia o que marcou ao pesquisar.
+    function atualizarContador() {
+      const n = box.querySelectorAll("input[data-check-caderno]:checked").length;
+      btnLote.disabled = n === 0;
+      btnLote.textContent = n === 0 ? "Vincular selecionados" : `Vincular ${n} caderno(s)`;
+    }
+    box.addEventListener("change", (e) => {
+      if (e.target.matches("input[data-check-caderno]")) atualizarContador();
+    });
+
+    const marcarTodas = box.querySelector(`[data-marcar-todas="${topicId}"]`);
+    if (marcarTodas) {
+      marcarTodas.addEventListener("click", () => {
+        box.querySelectorAll("input[data-check-caderno]").forEach((c) => (c.checked = true));
+        atualizarContador();
+      });
+      box.querySelector(`[data-desmarcar-todas="${topicId}"]`).addEventListener("click", () => {
+        box.querySelectorAll("input[data-check-caderno]").forEach((c) => (c.checked = false));
+        atualizarContador();
+      });
+    }
+
+    btnLote.addEventListener("click", async () => {
+      const ids = [...box.querySelectorAll("input[data-check-caderno]:checked")].map((c) => c.dataset.checkCaderno);
+      if (ids.length === 0) return;
+      btnLote.disabled = true;
+      btnLote.textContent = "Vinculando…";
+      try {
+        await vincularCadernos({ userId: user.id, topicId, questionSetIds: ids });
+        await carregar();
+        // Reabre o painel do tópico em que se estava trabalhando: o mapeamento
+        // é feito em série e perder o contexto a cada gravação seria péssimo.
+        const painel = tabConteudo.querySelector(`[data-topico-painel="${topicId}"]`);
+        if (painel) {
+          painel.style.display = "block";
+          renderSugestoes(topicId);
+        }
+      } catch (err) {
+        window.alert("Erro ao vincular: " + (err.message || "desconhecido"));
+        btnLote.disabled = false;
+        atualizarContador();
+      }
+    });
 
     const busca = box.querySelector(`[data-busca-caderno="${topicId}"]`);
     busca.addEventListener("input", () => {
-      const termo = busca.value.trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+      const termo = normalizar(busca.value.trim());
       const res = box.querySelector(`[data-busca-resultado="${topicId}"]`);
       if (termo.length < 3) {
         res.innerHTML = "";
+        atualizarContador();
         return;
       }
-      const achados = ativos
-        .filter((c) => c.name.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").includes(termo))
-        .slice(0, 10);
+      const achados = ativos.filter((c) => normalizar(c.name).includes(termo)).slice(0, 20);
       res.innerHTML = achados.length === 0
         ? '<p style="font-size:12px; color:var(--color-text-muted);">Nada encontrado.</p>'
-        : achados
-            .map(
-              (c) => `
-        <div style="display:flex; gap:8px; align-items:center; margin-bottom:4px;">
-          <button class="btn-link" data-vincular="${c.id}" data-topico="${topicId}">+ vincular</button>
-          <span style="font-size:13px;">${escapeHtml(c.name)}</span>
-        </div>`
-            )
-            .join("");
-      res.querySelectorAll("[data-vincular]").forEach((btn) => wireVincular(btn));
+        : `<div style="max-height:200px; overflow-y:auto; border:1px solid var(--color-border); border-radius:var(--radius); padding:8px;">
+             ${achados.map((c) => itemCheck(c, null)).join("")}
+           </div>`;
+      atualizarContador();
     });
+  }
+
+  function itemCheck(caderno, score) {
+    return `
+      <label style="display:flex; gap:8px; align-items:flex-start; margin-bottom:5px; cursor:pointer; font-size:13px;">
+        <input type="checkbox" data-check-caderno="${caderno.id}" style="margin-top:3px; flex:none;" />
+        <span>${escapeHtml(caderno.name)}${score != null ? ` <span style="color:var(--color-text-muted); font-size:11px;">${Math.round(score * 100)}%</span>` : ""}</span>
+      </label>`;
+  }
+
+  function normalizar(txt) {
+    return (txt || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
   }
 
   // ==================== CAPACIDADE ====================
@@ -821,7 +880,7 @@ export async function renderEditalPage(container) {
 
     const disciplinasEscopo = pesos
       .filter((p) => p.exam_id === examId)
-      .map((p) => ({ id: p.discipline_id, nome: p.disciplines?.name || "—", peso: p.weight }));
+      .map((p) => ({ id: p.discipline_id, nome: p.disciplines?.name || "\u2014", peso: p.weight }));
 
     const r = calcularCapacidade({
       cobertura,
@@ -886,10 +945,10 @@ export async function renderEditalPage(container) {
         <h3 style="margin-top:0;">Orçamento</h3>
         <table class="data-table" style="max-width:640px;">
           <tr><td>Horas disponíveis no horizonte</td><td class="cel-centro"><strong>${r.horasDisponiveis} h</strong></td></tr>
-          <tr><td>Horas para levar todo tópico mapeado à massa crítica</td><td class="cel-centro"><strong>${r.horasCobertura ?? "—"} h</strong></td></tr>
+          <tr><td>Horas para levar todo tópico mapeado à massa crítica</td><td class="cel-centro"><strong>${r.horasCobertura ?? "\u2014"} h</strong></td></tr>
           <tr style="border-top:2px solid var(--color-border);">
             <td><strong>Saldo</strong></td>
-            <td class="cel-centro" style="color:${r.saldo >= 0 ? "var(--color-success)" : "var(--color-error)"}; font-weight:700;">${r.saldo == null ? "—" : (r.saldo >= 0 ? "+" : "") + r.saldo + " h"}</td>
+            <td class="cel-centro" style="color:${r.saldo >= 0 ? "var(--color-success)" : "var(--color-error)"}; font-weight:700;">${r.saldo == null ? "\u2014" : (r.saldo >= 0 ? "+" : "") + r.saldo + " h"}</td>
           </tr>
         </table>
         <p style="margin:10px 0 0; font-size:13px;">
@@ -924,8 +983,8 @@ export async function renderEditalPage(container) {
                 <td>${escapeHtml(l.disciplina)}</td>
                 <td class="cel-centro">${l.topicos}</td>
                 <td class="cel-centro">${l.qFaltantes}</td>
-                <td class="cel-centro">${l.horasCobertura ?? "—"}</td>
-                <td class="cel-centro">${r.horasCobertura > 0 ? formatPct((l.horasCobertura / r.horasCobertura) * 100) : "—"}</td>
+                <td class="cel-centro">${l.horasCobertura ?? "\u2014"}</td>
+                <td class="cel-centro">${r.horasCobertura > 0 ? formatPct((l.horasCobertura / r.horasCobertura) * 100) : "\u2014"}</td>
                 <td class="cel-centro" style="${l.semCaderno > 0 ? "color:#b45309; font-weight:600;" : "color:var(--color-text-muted);"}">${l.semCaderno}</td>
               </tr>`
               )
@@ -950,25 +1009,6 @@ export async function renderEditalPage(container) {
     });
   }
 
-  function wireVincular(btn) {
-    btn.addEventListener("click", async () => {
-      btn.disabled = true;
-      try {
-        await vincularCaderno({ userId: user.id, topicId: btn.dataset.topico, questionSetId: btn.dataset.vincular });
-        await carregar();
-        // Reabre o painel do tópico que estava sendo trabalhado, pra não
-        // perder o contexto a cada vínculo (o mapeamento é feito em série).
-        const painel = tabConteudo.querySelector(`[data-topico-painel="${btn.dataset.topico}"]`);
-        if (painel) {
-          painel.style.display = "block";
-          renderSugestoes(btn.dataset.topico);
-        }
-      } catch (err) {
-        window.alert("Erro ao vincular: " + (err.message || "desconhecido"));
-        btn.disabled = false;
-      }
-    });
-  }
 }
 
 function escapeHtml(str) {

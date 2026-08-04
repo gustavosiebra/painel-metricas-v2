@@ -166,6 +166,25 @@ export async function vincularCaderno({ userId, topicId, questionSetId }) {
   if (error && error.code !== "23505") throw error;
 }
 
+// Vínculo em lote (04/08/2026). O modo um-a-um era o gargalo real da feature:
+// o usuário confirmou 155 vínculos manualmente na primeira montagem. Um único
+// insert também evita 30 idas ao servidor e o estado intermediário feio de
+// metade dos vínculos criados se a conexão cair no meio.
+// ignoreDuplicates: marcar de novo algo já vinculado é normal (o usuário não
+// decora o que já ligou) e não deve virar erro.
+export async function vincularCadernos({ userId, topicId, questionSetIds }) {
+  const ids = [...new Set((questionSetIds || []).filter(Boolean))];
+  if (ids.length === 0) return 0;
+  const { error } = await supabase
+    .from("exam_topic_question_sets")
+    .upsert(
+      ids.map((questionSetId) => ({ user_id: userId, topic_id: topicId, question_set_id: questionSetId })),
+      { onConflict: "topic_id,question_set_id", ignoreDuplicates: true }
+    );
+  if (error) throw error;
+  return ids.length;
+}
+
 export async function desvincularCaderno(id) {
   const { error } = await supabase.from("exam_topic_question_sets").delete().eq("id", id);
   if (error) throw error;
