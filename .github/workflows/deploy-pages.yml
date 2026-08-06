@@ -67,6 +67,20 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      # timeout aumentado de 10 para 30 minutos (06/08/2026). O padrão do
+      # deploy-pages@v4 é 600000 ms; três tentativas seguidas (#88, #89 e a
+      # reexecução) morreram com "Timeout reached, aborting!" depois de ficar
+      # o tempo todo em "Current status: deployment_queued" — ou seja, o Pages
+      # aceitava o pedido e a fila dele não andava. Não é problema do nosso
+      # build (12s, artefato gerado) nem de configuração do ambiente
+      # (verificado: sem required reviewer, sem wait timer, main liberada).
+      #
+      # Isto NÃO conserta a fila — é do lado do GitHub. Só evita abortar no
+      # meio dela e ter que recomeçar do zero. Um deploy normal deste repo
+      # leva ~30 segundos, então 30 minutos não atrasa nada no caso feliz:
+      # a espera só existe quando já estaria perdida de qualquer forma.
       - name: Deploy
         id: deployment
         uses: actions/deploy-pages@v4
+        with:
+          timeout: 1800000
