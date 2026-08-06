@@ -30,15 +30,28 @@ concurrency:
 # quebrando o deploy-pages (que espera exatamente 1 artefato "github-pages"
 # por execução). Com build/deploy em jobs distintos, dá pra reexecutar só o
 # job "deploy" (que não empacota nada de novo) sem gerar essa colisão.
+
+# Versões das actions atualizadas em 06/08/2026 (checkout v4→v6,
+# configure-pages v5→v6, setup-node v4→v6, upload-pages-artifact v3→v5,
+# deploy-pages v4→v5). Motivo: desde 16/06/2026 os runners do GitHub usam
+# Node 24 por padrão, e todas as versões antigas declaravam Node 20 — os logs
+# vinham com "Node.js 20 is deprecated... being forced to run on Node.js 24".
+# Rodar uma action fora do runtime que ela declara é comportamento não
+# suportado, e o deploy passou a travar em deployment_queued até estourar o
+# timeout. NÃO está provado que essa é a causa (o deploy #87 passou em 32 s
+# dois dias antes, já depois de 16/06), mas é a única variável sob nosso
+# controle e o v5 do deploy-pages traz exatamente "Update Node.js version to
+# 24.x" no changelog. Se o problema persistir com estas versões, a causa é
+# fila do Pages e o caminho é abrir ticket no suporte.
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Configurar Pages
-        uses: actions/configure-pages@v5
+        uses: actions/configure-pages@v6
 
       # Cache-busting (19/07/2026) — site estático sem bundler, então JS/CSS
       # ficavam em cache no navegador/CDN mesmo depois de um deploy novo
@@ -47,16 +60,20 @@ jobs:
       # local do index.html e em todo import (estático e dinâmico) dos
       # módulos JS, só nesta cópia publicada — o repositório em si nunca é
       # alterado. Ver scripts/inject-cache-version.mjs.
+      # node-version 20→24 (06/08/2026): este Node é o que EXECUTA o script de
+      # cache-busting (não é o runtime das actions). Node 20 chegou ao fim da
+      # vida em abril/2026; o script é ESM simples, sem dependência, e roda
+      # igual no 24.
       - name: Configurar Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
-          node-version: "20"
+          node-version: "24"
 
       - name: Cache-busting dos assets
         run: node scripts/inject-cache-version.mjs "${{ github.sha }}"
 
       - name: Empacotar frontend/
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v5
         with:
           path: frontend
 
@@ -67,20 +84,15 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      # timeout aumentado de 10 para 30 minutos (06/08/2026). O padrão do
-      # deploy-pages@v4 é 600000 ms; três tentativas seguidas (#88, #89 e a
-      # reexecução) morreram com "Timeout reached, aborting!" depois de ficar
-      # o tempo todo em "Current status: deployment_queued" — ou seja, o Pages
-      # aceitava o pedido e a fila dele não andava. Não é problema do nosso
-      # build (12s, artefato gerado) nem de configuração do ambiente
-      # (verificado: sem required reviewer, sem wait timer, main liberada).
-      #
-      # Isto NÃO conserta a fila — é do lado do GitHub. Só evita abortar no
-      # meio dela e ter que recomeçar do zero. Um deploy normal deste repo
-      # leva ~30 segundos, então 30 minutos não atrasa nada no caso feliz:
-      # a espera só existe quando já estaria perdida de qualquer forma.
+      # timeout de 30 min (06/08/2026), contra os 10 min padrão. Três
+      # tentativas seguidas (#88, #89 e uma reexecução) morreram com
+      # "Timeout reached, aborting!" depois de ficar o tempo todo em
+      # "Current status: deployment_queued". Não conserta a fila do Pages —
+      # essa é do lado do GitHub — só evita abortar no meio dela. Um deploy
+      # normal deste repo leva ~30 s, então isso não atrasa nada no caso
+      # feliz: a espera só existe quando já estaria perdida de qualquer jeito.
       - name: Deploy
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
         with:
           timeout: 1800000
