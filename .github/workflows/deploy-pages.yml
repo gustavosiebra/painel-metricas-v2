@@ -39,13 +39,12 @@ concurrency:
 # deploy-pages v4→v5). Motivo: desde 16/06/2026 os runners do GitHub usam
 # Node 24 por padrão, e todas as versões antigas declaravam Node 20 — os logs
 # vinham com "Node.js 20 is deprecated... being forced to run on Node.js 24".
-# Rodar uma action fora do runtime que ela declara é comportamento não
-# suportado, e o deploy passou a travar em deployment_queued até estourar o
-# timeout. NÃO está provado que essa é a causa (o deploy #87 passou em 32 s
-# dois dias antes, já depois de 16/06), mas é a única variável sob nosso
-# controle e o v5 do deploy-pages traz exatamente "Update Node.js version to
-# 24.x" no changelog. Se o problema persistir com estas versões, a causa é
-# fila do Pages e o caminho é abrir ticket no suporte.
+#
+# Registro honesto: a atualização foi feita achando que era a causa dos deploys
+# travados daquele dia. NÃO ERA — o run seguinte, já todo em Node 24, falhou
+# igual. A causa real era publicação presa na fila do Pages (ver o comentário
+# do passo Deploy e docs/runbook-deploy-pages.md). As versões novas ficam
+# porque estar em dia é bom de qualquer forma, mas não foi isso que resolveu.
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -91,9 +90,9 @@ jobs:
       # Diagnóstico (06/08/2026) — roda em segundos e imprime o estado do Pages
       # ANTES de tentar publicar. Existe por causa da série de deploys presos
       # em deployment_queued: sem isso, o log só mostra a espera, e o suporte
-      # do GitHub pede exatamente esta informação. A hipótese que ele testa é
-      # se sobrou uma publicação em "in_progress"/"queued" segurando a fila —
-      # o que explicaria a série começar logo após o cancelamento do run #88.
+      # do GitHub pede exatamente esta informação. O que ele testa: se há
+      # publicação em "in_progress"/"queued" segurando a fila — que foi o
+      # estado encontrado em 06/08/2026, com quatro presas ao mesmo tempo.
       #
       # continue-on-error: diagnóstico NUNCA pode derrubar o deploy. Se a API
       # mudar ou negar permissão, queremos o deploy tentando mesmo assim.
@@ -124,15 +123,15 @@ jobs:
       # allowed maximum - timeout set to the maximum of 600000 milliseconds".
       # O input existe, mas só serve pra DIMINUIR.
       #
-      # Contexto de 06/08/2026: quatro deploys seguidos morreram com "Timeout
-      # reached, aborting!" presos em "Current status: deployment_queued",
-      # sempre com o build verde em ~12 s e o artefato gerado. Foram
-      # descartados, um a um: Source do Pages (estava em GitHub Actions),
-      # regras do ambiente (sem reviewer, sem wait timer, main liberada),
-      # versões das actions (todas atualizadas pras que rodam em Node 24) e o
-      # próprio timeout. Sobrou a fila do Pages, que é do lado do GitHub.
-      # Se voltar a acontecer: não refaça essa investigação, vá direto ao
-      # suporte com o número do run e a mensagem deployment_queued.
+      # SE O DEPLOY TRAVAR EM "deployment_queued" ATÉ O TIMEOUT:
+      # rode `bash scripts/destravar-pages.sh --cancelar` e dispare de novo.
+      # Mecanismo (06/08/2026): o Pages processa uma publicação por vez, e uma
+      # publicação travada fica em `deployment_in_progress` para sempre, com
+      # todas as seguintes na fila atrás dela. O que faz a primeira travar
+      # continua desconhecido — provavelmente instabilidade do lado do GitHub.
+      # Não cancele o run: não acelera e ainda suja a fila. Rode o script já na
+      # PRIMEIRA falha por timeout, antes de tentar de novo.
+      # Explicação completa e o que já foi descartado: docs/runbook-deploy-pages.md
       - name: Deploy
         id: deployment
         uses: actions/deploy-pages@v5
