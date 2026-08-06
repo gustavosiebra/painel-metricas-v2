@@ -757,14 +757,25 @@ function renderJanelaTendenciaDisciplina(linhas) {
 // caderno com as ~40 anteriores; caderno sem esse histórico não entra.
 function renderJanelaTendenciaCaderno(dados) {
   if (!dados || (dados.subindo.length === 0 && dados.caindo.length === 0)) return "";
-  const linha = (l) => `
+  // Delta colorido com seta (04/08/2026, pedido do usuário). Mesma convenção
+  // já usada na Tendência por Disciplina e no widget de Metas: verde sobe,
+  // vermelho cai, cinza neutro. A seta acompanha a cor de propósito — cor
+  // sozinha não é acessível pra quem tem daltonismo, que é justamente o tipo
+  // mais comum (vermelho/verde).
+  const linha = (l) => {
+    const d = Number(l.delta);
+    const temDelta = l.delta != null && !Number.isNaN(d);
+    const cor = !temDelta || d === 0 ? "var(--color-text-muted)" : d > 0 ? "var(--color-success)" : "var(--color-error)";
+    const seta = !temDelta || d === 0 ? "" : d > 0 ? "▲ " : "▼ ";
+    return `
     <tr>
       <td>${escapeHtml(l.cadernoNome)}</td>
       <td>${formatPct(l.pctRecente)} (${l.questoesRecente ?? 0}q)</td>
       <td>${formatPct(l.pctAnterior)} (${l.questoesAnterior ?? 0}q)</td>
-      <td>${formatDeltaPct(l.delta)}</td>
+      <td style="color:${cor}; white-space:nowrap;"><strong>${seta}${formatDeltaPct(l.delta)}</strong></td>
     </tr>
   `;
+  };
   return `
     <div class="card" style="margin-bottom:24px;">
       <h3 style="margin-top:0;">Cadernos que mais mudaram (recente vs. anterior)</h3>
