@@ -18,6 +18,9 @@ permissions:
   contents: read
   pages: write
   id-token: write
+  # deployments: read (06/08/2026) — só pro passo de diagnóstico abaixo
+  # conseguir listar publicações presas no ambiente github-pages.
+  deployments: read
 
 concurrency:
   group: "pages"
@@ -60,6 +63,7 @@ jobs:
       # local do index.html e em todo import (estático e dinâmico) dos
       # módulos JS, só nesta cópia publicada — o repositório em si nunca é
       # alterado. Ver scripts/inject-cache-version.mjs.
+      #
       # node-version 20→24 (06/08/2026): este Node é o que EXECUTA o script de
       # cache-busting (não é o runtime das actions). Node 20 chegou ao fim da
       # vida em abril/2026; o script é ESM simples, sem dependência, e roda
@@ -84,15 +88,51 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      # timeout de 30 min (06/08/2026), contra os 10 min padrão. Três
-      # tentativas seguidas (#88, #89 e uma reexecução) morreram com
-      # "Timeout reached, aborting!" depois de ficar o tempo todo em
-      # "Current status: deployment_queued". Não conserta a fila do Pages —
-      # essa é do lado do GitHub — só evita abortar no meio dela. Um deploy
-      # normal deste repo leva ~30 s, então isso não atrasa nada no caso
-      # feliz: a espera só existe quando já estaria perdida de qualquer jeito.
+      # Diagnóstico (06/08/2026) — roda em segundos e imprime o estado do Pages
+      # ANTES de tentar publicar. Existe por causa da série de deploys presos
+      # em deployment_queued: sem isso, o log só mostra a espera, e o suporte
+      # do GitHub pede exatamente esta informação. A hipótese que ele testa é
+      # se sobrou uma publicação em "in_progress"/"queued" segurando a fila —
+      # o que explicaria a série começar logo após o cancelamento do run #88.
+      #
+      # continue-on-error: diagnóstico NUNCA pode derrubar o deploy. Se a API
+      # mudar ou negar permissão, queremos o deploy tentando mesmo assim.
+      - name: Diagnóstico do Pages
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "=== Configuração do Pages ==="
+          gh api "repos/$GITHUB_REPOSITORY/pages" \
+            --jq '{status, build_type, html_url, source}' || echo "(sem acesso)"
+
+          echo
+          echo "=== Últimos deployments do ambiente github-pages ==="
+          gh api "repos/$GITHUB_REPOSITORY/deployments?environment=github-pages&per_page=5" \
+            --jq '.[] | {id, sha: .sha[0:7], created_at}' || echo "(sem acesso)"
+
+          echo
+          echo "=== Status de cada um (procurar in_progress/queued presos) ==="
+          for id in $(gh api "repos/$GITHUB_REPOSITORY/deployments?environment=github-pages&per_page=5" --jq '.[].id'); do
+            estado=$(gh api "repos/$GITHUB_REPOSITORY/deployments/$id/statuses?per_page=1" --jq '.[0].state // "sem status"')
+            echo "  deployment $id -> $estado"
+          done
+
+      # NÃO adianta passar `timeout` aqui: o deploy-pages tem TETO RÍGIDO de
+      # 600000 ms (10 min). Verificado em 06/08/2026 — tentamos 1800000 e o
+      # próprio log respondeu "Warning: timeout value is greater than the
+      # allowed maximum - timeout set to the maximum of 600000 milliseconds".
+      # O input existe, mas só serve pra DIMINUIR.
+      #
+      # Contexto de 06/08/2026: quatro deploys seguidos morreram com "Timeout
+      # reached, aborting!" presos em "Current status: deployment_queued",
+      # sempre com o build verde em ~12 s e o artefato gerado. Foram
+      # descartados, um a um: Source do Pages (estava em GitHub Actions),
+      # regras do ambiente (sem reviewer, sem wait timer, main liberada),
+      # versões das actions (todas atualizadas pras que rodam em Node 24) e o
+      # próprio timeout. Sobrou a fila do Pages, que é do lado do GitHub.
+      # Se voltar a acontecer: não refaça essa investigação, vá direto ao
+      # suporte com o número do run e a mensagem deployment_queued.
       - name: Deploy
         id: deployment
         uses: actions/deploy-pages@v5
-        with:
-          timeout: 1800000
