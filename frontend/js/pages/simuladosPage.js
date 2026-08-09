@@ -607,7 +607,7 @@ export async function renderSimuladosPage(container) {
               <input type="number" id="tpl-corte" min="0" step="0.01" placeholder="Editável depois" value="${editing?.cutoff_score ?? ""}" />
             </div>
           </div>
-          <p style="font-weight:600; margin:12px 0 4px;">Blocos <span style="color:var(--color-text-muted); font-weight:normal; font-size:12px;">(uma linha por disciplina do edital, agrupada por módulo)</span></p>
+          <p style="font-weight:600; margin:12px 0 4px;">Blocos <span style="color:var(--color-text-muted); font-weight:normal; font-size:12px;">(uma linha por bloco do edital — a disciplina é opcional; sem ela o bloco vale pelo módulo inteiro)</span></p>
           <div id="tpl-blocos"></div>
           <button type="button" id="tpl-add-bloco" class="btn-link">+ Adicionar bloco</button>
           <p style="font-weight:600; margin:16px 0 4px;">Critérios de habilitação <span style="color:var(--color-text-muted); font-weight:normal; font-size:12px;">(todos precisam ser atingidos; ex.: TCE-SP = Gerais ≥ 12 questões E Específicas ≥ 36 questões)</span></p>
@@ -654,9 +654,9 @@ export async function renderSimuladosPage(container) {
           <input type="text" data-b-modulo-outro placeholder="Nome do módulo" style="${bloco && !moduloConhecido ? "" : "display:none;"} margin-top:6px;" value="${bloco && !moduloConhecido ? escapeHtml(bloco.module || "") : ""}" />
         </div>
         <div class="form-field">
-          <label>Disciplina</label>
-          <select data-b-disciplina required>
-            <option value="" disabled ${bloco ? "" : "selected"}>— Selecione —</option>
+          <label>Disciplina <span style="font-weight:normal; color:var(--color-text-muted);">(opcional)</span></label>
+          <select data-b-disciplina>
+            <option value="" ${bloco && !bloco.discipline_id ? "selected" : bloco ? "" : "selected"}>— Não especificar —</option>
             ${disciplines.map((d) => `<option value="${d.id}" ${bloco?.discipline_id === d.id ? "selected" : ""}>${escapeHtml(d.name)}</option>`).join("")}
             <option value="__new__">+ Cadastrar nova disciplina…</option>
           </select>
@@ -792,9 +792,25 @@ export async function renderSimuladosPage(container) {
                 disciplineName = criada.name;
               }
             }
+          } else if (!disciplineId) {
+            // Disciplina opcional (06/08/2026, pedido do usuário): destrinchar
+            // Conhecimentos Específicos em 8 disciplinas é trabalhoso e muitos
+            // editais nem fazem essa quebra ("Específicos: 40 questões"). Sem
+            // disciplina o bloco vira o próprio módulo — que é o nível em que
+            // os critérios de habilitação já operam, então não se perde nada
+            // do que a tela precisa. `name` é NOT NULL no banco, daí o
+            // fallback; discipline_id fica null, que a coluna já aceitava.
+            disciplineId = null;
+            disciplineName = modulo;
           } else {
             const d = disciplines.find((x) => x.id === disciplineId);
             disciplineName = d?.name || "";
+          }
+          // Dois blocos sem disciplina no mesmo módulo teriam nome idêntico e
+          // ficariam indistinguíveis na hora de lançar os acertos. Numera.
+          if (blocks.some((b) => b.name === disciplineName)) {
+            const n = blocks.filter((b) => b.name === disciplineName || b.name.startsWith(disciplineName + " (")).length + 1;
+            disciplineName = `${disciplineName} (${n})`;
           }
           blocks.push({
             id: row.dataset.bId || null,
