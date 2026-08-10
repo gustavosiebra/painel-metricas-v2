@@ -235,11 +235,73 @@ export async function createAttempt({ userId, templateId, occurredAt, origem, du
   return attempt;
 }
 
-// Apaga a tentativa; a study_session vinculada NÃO é apagada junto de
-// propósito (as horas foram estudadas de verdade — apagar o registro do
-// simulado não desfaz o tempo investido). Quem quiser remove a sessão
-// manualmente em Sessões.
-export async function deleteAttempt(id) {
+// Apaga a tentativa. `apagarSessao` decide o destino da study_session que foi
+// criada junto (ver createAttempt).
+//
+// Até 06/08/2026 a sessão NUNCA era apagada, com o argumento de que "as horas
+// foram estudadas de verdade". O argumento tem mérito, mas o comportamento
+// falhou na prática (caso real do usuário): a sessão órfã ficou somando 4h,
+// 60 questões e ZERO acertos — porque carrega também o RESULTADO agregado,
+// não só o tempo. Resultado sem tentativa de origem é dado inconsistente, e
+// pior, afundava o percentual de acerto da semana. E não havia como o usuário
+// descobrir qual das sessões pertencia à tentativa apagada.
+//
+// Agora quem decide é a tela, perguntando na hora. A sessão é ARQUIVADA
+// (status inativo), não apagada fisicamente: sai de todas as métricas, que
+// filtram status='ativo', e continua recuperável — respeita RN-009 e não
+// destrói histórico por um clique.
+export async function deleteAttempt(id, { apagarSessao = false } = {}) {
+  let sessionId = null;
+  if (apagarSessao) {
+    const { data } = await supabase.from("exam_attempts").select("session_id").eq("id", id).maybeSingle();
+    sessionId = data?.session_id || null;
+  }
+
   const { error } = await supabase.from("exam_attempts").delete().eq("id", id);
+  if (error) throw error;
+
+  if (sessionId) {
+    const { error: erroSessao } = await supabase
+      .from("study_sessions")
+      .update({ status: "inativo" })
+      .eq("id", sessionId);
+    if (erroSessao) throw erroSessao;
+  }
+  return { sessaoArquivada: Boolean(sessionId) };
+}
+
+// Sessões de simulado cujo exam_attempt não existe mais — resultado do
+// comportamento antigo, em que apagar a tentativa deixava a sessão para trás.
+// Serve pra tela oferecer a limpeza em vez de o usuário caçar na mão.
+export async function listSessoesSimuladoOrfas(userId) {
+  const [sessoesRes, attemptsRes] = await Promise.all([
+    supabase
+      .from("study_sessions")
+      .select("id, occurred_at, duration_minutes, session_results(questions_total, correct_total)")
+      .eq("user_id", userId)
+      .eq("status", "ativo")
+      .eq("study_type", "simulado"),
+    supabase.from("exam_attempts").select("session_id").eq("user_id", userId).not("session_id", "is", null),
+  ]);
+  if (sessoesRes.error) throw sessoesRes.error;
+  if (attemptsRes.error) throw attemptsRes.error;
+
+  const vinculadas = new Set((attemptsRes.data || []).map((a) => a.session_id));
+  return (sessoesRes.data || [])
+    .filter((s) => !vinculadas.has(s.id))
+    .map((s) => {
+      const r = Array.isArray(s.session_results) ? s.session_results[0] : s.session_results;
+      return {
+        id: s.id,
+        occurredAt: s.occurred_at,
+        minutos: Number(s.duration_minutes || 0),
+        questoes: Number(r?.questions_total || 0),
+        acertos: Number(r?.correct_total || 0),
+      };
+    });
+}
+
+export async function arquivarSessao(sessionId) {
+  const { error } = await supabase.from("study_sessions").update({ status: "inativo" }).eq("id", sessionId);
   if (error) throw error;
 }

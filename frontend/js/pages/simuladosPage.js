@@ -30,6 +30,8 @@ import {
   updateTemplate,
   createAttempt,
   deleteAttempt,
+  listSessoesSimuladoOrfas,
+  arquivarSessao,
 } from "../services/simuladoService.js";
 import { getState } from "../state.js";
 import { formatPct } from "../utils/format.js";
@@ -81,6 +83,11 @@ export async function renderSimuladosPage(container) {
   let templateRules = [];
   let attempts = [];
   let attemptBlocks = [];
+  // Sessões de simulado sem tentativa correspondente — resíduo do
+  // comportamento anterior (ver deleteAttempt). Carregadas junto pra tela
+  // poder oferecer a limpeza; falha aqui não pode derrubar a página, então
+  // vem com catch próprio.
+  let orfas = [];
 
   async function carregarDados() {
     [disciplines, boards, templates, templateBlocks, templateRules, attempts, attemptBlocks] = await Promise.all([
@@ -92,6 +99,11 @@ export async function renderSimuladosPage(container) {
       listAttempts(),
       listAttemptBlocks(),
     ]);
+    try {
+      orfas = await listSessoesSimuladoOrfas(user.id);
+    } catch {
+      orfas = [];
+    }
   }
 
   try {
@@ -191,6 +203,34 @@ export async function renderSimuladosPage(container) {
   // ======================= ABA TENTATIVAS =======================
   function renderTentativas() {
     const ativos = templates.filter((t) => t.status === "ativo");
+
+    const totalMin = orfas.reduce((a, o) => a + o.minutos, 0);
+    const totalQ = orfas.reduce((a, o) => a + o.questoes, 0);
+    const avisoOrfas = orfas.length === 0 ? "" : `
+      <div class="card" style="margin-bottom:16px; border-left:4px solid #b45309;">
+        <h3 style="margin-top:0;">Sessões de simulado sem tentativa</h3>
+        <p style="margin:4px 0; font-size:14px;">
+          ${orfas.length} sessão(ões) sobraram de tentativas apagadas e continuam somando
+          <strong>${(totalMin / 60).toFixed(1)} h</strong> e <strong>${totalQ} questões</strong> nas suas métricas —
+          inclusive no percentual de acerto.
+        </p>
+        <div style="overflow-x:auto; margin-top:10px;">
+          <table class="data-table" style="max-width:620px;">
+            <tr><th>Data</th><th class="cel-centro">Duração</th><th class="cel-centro">Questões</th><th class="cel-centro">Acertos</th><th class="cel-centro">Ação</th></tr>
+            ${orfas.map((o) => `
+              <tr>
+                <td>${new Date(o.occurredAt).toLocaleDateString("pt-BR")}</td>
+                <td class="cel-centro">${(o.minutos / 60).toFixed(1)} h</td>
+                <td class="cel-centro">${o.questoes}</td>
+                <td class="cel-centro">${o.acertos}</td>
+                <td class="cel-centro"><button type="button" class="btn-link" data-orfa-arquivar="${o.id}">arquivar</button></td>
+              </tr>`).join("")}
+          </table>
+        </div>
+        <p style="margin:10px 0 0; font-size:12px; color:var(--color-text-muted);">
+          Arquivar é reversível: a sessão sai de todas as métricas e continua listada em Sessões com status inativo.
+        </p>
+      </div>`;
     const formHtml = ativos.length === 0
       ? `<div class="card" style="margin-bottom:16px;"><p style="color:var(--color-text-muted);">Nenhum modelo cadastrado ainda — crie um na aba Modelos primeiro.</p></div>`
       : `
@@ -232,6 +272,7 @@ export async function renderSimuladosPage(container) {
       `;
 
     tabTentativas.innerHTML = `
+      ${avisoOrfas}
       ${formHtml}
       <div class="card" style="margin-bottom:16px;">
         <h3 style="margin-top:0;">Histórico</h3>
@@ -456,12 +497,35 @@ export async function renderSimuladosPage(container) {
         });
       });
 
+      tabTentativas.querySelectorAll("[data-orfa-arquivar]").forEach((b) => {
+        b.addEventListener("click", async () => {
+          if (!window.confirm("Arquivar esta sessão? Ela sai das métricas e continua listada em Sessões como inativa.")) return;
+          b.disabled = true;
+          try {
+            await arquivarSessao(b.dataset.orfaArquivar);
+            await carregarDados();
+            renderTentativas();
+          } catch (err) {
+            window.alert("Erro ao arquivar: " + (err.message || "desconhecido"));
+            b.disabled = false;
+          }
+        });
+      });
+
       listBox.querySelectorAll("[data-att-delete]").forEach((btn) => {
         btn.addEventListener("click", async () => {
-          if (!window.confirm("Apagar esta tentativa? (A sessão de estudo vinculada NÃO é apagada — as horas foram estudadas de verdade.)")) return;
+          if (!window.confirm("Apagar esta tentativa?")) return;
+          // Pergunta separada e explícita (06/08/2026): antes a sessão ficava
+          // sempre, virava órfã e seguia contando horas E acertos sem nenhuma
+          // pista de origem. "OK" arquiva (reversível); "Cancelar" mantém.
+          const arquivar = window.confirm(
+            "Arquivar também a sessão de estudo criada por esta tentativa?\n\n" +
+              "OK = arquiva: sai das horas, questões e do % de acerto (dá pra reativar em Sessões).\n" +
+              "Cancelar = mantém: as horas continuam contando como estudo."
+          );
           btn.disabled = true;
           try {
-            await deleteAttempt(btn.dataset.attDelete);
+            await deleteAttempt(btn.dataset.attDelete, { apagarSessao: arquivar });
             await carregarDados();
             renderTentativas();
           } catch (err) {
