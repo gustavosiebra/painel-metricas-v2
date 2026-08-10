@@ -252,9 +252,20 @@ export function getTendenciaSemanal(diario, nSemanas = 12, minQuestoes = null, u
 // madrugada de domingo em UTC, e o rótulo mostrava "19/07–26/07" (8 dias) em
 // vez de "19/07–25/07" (7 dias, domingo a sábado). Trocado por
 // toLocalISODate, que usa os componentes locais da data em vez de UTC.
-export async function getMetaSemanalAtual() {
+// offsetSemanas (06/08/2026, pedido do usuário): 0 = semana atual, -1 = semana
+// passada, e assim por diante. Existe pro ritual de fechamento — o usuário
+// revisa a semana encerrada antes de começar a nova, e precisa do DESENHO dos
+// dias, não só do total. O "Semana passada: Xh" que já existia dá o número,
+// mas não mostra como a semana foi distribuída.
+//
+// Só este widget navega no tempo. O resto do Dashboard fica no estado atual de
+// propósito: Wilson, retenção e prioridade são acumulados ou medidos por
+// intervalo de reencontro — não existe "o Wilson daquela semana", e fingir que
+// existe produziria número enganoso.
+export async function getMetaSemanalAtual(offsetSemanas = 0) {
   const hoje = new Date();
   const inicio = getSegundaDaSemana(hoje); // segunda desta semana
+  inicio.setDate(inicio.getDate() + offsetSemanas * 7);
   inicio.setHours(0, 0, 0, 0);
   const fim = new Date(inicio);
   fim.setDate(inicio.getDate() + 6); // domingo
@@ -315,6 +326,10 @@ export async function getMetaSemanalAtual() {
   return {
     inicio: toLocalISODate(inicio),
     fim: toLocalISODate(fim),
+    offsetSemanas,
+    // Semana corrente ainda não fechou: quem lê precisa saber que o total é
+    // parcial antes de comparar com a meta ou com semanas fechadas.
+    emAndamento: offsetSemanas === 0,
     horasTotais: Math.round(horasTotais * 10) / 10,
     questoesTotais,
     porDia: porDia.map((d) => ({ ...d, horas: Math.round(d.horas * 10) / 10 })),

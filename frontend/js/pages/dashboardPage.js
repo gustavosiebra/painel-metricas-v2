@@ -215,7 +215,7 @@ export async function renderDashboardPage(container) {
   // 4) aprofundamento (Janela, Transferência, Retenção) pra quem quer investigar mais.
   content.innerHTML = `
     ${renderVisaoGeral(kpis, produtividadeVitalicia, produtividadeRecente, janelaProdutividadeDias, situacao)}
-    ${renderMetaSemanal(metaSemanal, metaHoras, metaQuestoes)}
+    <div id="meta-semanal-container">${renderMetaSemanal(metaSemanal, metaHoras, metaQuestoes)}</div>
     ${renderProximaAcao(proximaAcao)}
     ${renderRanking(ranking)}
     ${renderMediaMovelSemanal(tendenciaSemanal)}
@@ -250,27 +250,59 @@ export async function renderDashboardPage(container) {
   // nada. Isso preserva o formato em toggle que o usuário preferiu manter,
   // e ainda garante que a Exportar Imagem tenha os dois prontos pra revelar
   // (ver onclone no botão de exportar).
-  tentarDesenhar(content, "meta-semanal-chart-horas", () => renderChartMetaSemanal(content.querySelector("#meta-semanal-chart-horas"), metaSemanal.porDia, "horas"));
-  tentarDesenhar(content, "meta-semanal-chart-questoes", () => renderChartMetaSemanal(content.querySelector("#meta-semanal-chart-questoes"), metaSemanal.porDia, "questoes"));
+  // Fiação do card de Metas isolada numa função porque ele agora se
+  // re-renderiza sozinho ao navegar entre semanas (06/08/2026): trocar de
+  // semana reescreve o HTML do card, o que destrói os listeners e os canvas
+  // antigos — tudo precisa ser refeito. `metricaAtual` preserva a escolha
+  // Horas/Questões entre navegações, senão voltaria pra "Horas" a cada clique.
+  let metaOffset = 0;
+  let metaMetrica = "horas";
 
-  const metaBtnHoras = content.querySelector("#meta-toggle-horas");
-  const metaBtnQuestoes = content.querySelector("#meta-toggle-questoes");
-  const metaBlocoHoras = content.querySelector("#meta-semanal-bloco-horas");
-  const metaBlocoQuestoes = content.querySelector("#meta-semanal-bloco-questoes");
-  function estilizarToggle(btn, ativo) {
-    btn.style.background = ativo ? "var(--color-primary)" : "var(--color-surface)";
-    btn.style.color = ativo ? "#fff" : "var(--color-primary)";
-    btn.style.border = ativo ? "1px solid var(--color-primary)" : "1px solid var(--color-border)";
+  function montarMetaSemanal(meta) {
+    const box = content.querySelector("#meta-semanal-container");
+    box.innerHTML = renderMetaSemanal(meta, metaHoras, metaQuestoes);
+
+    tentarDesenhar(box, "meta-semanal-chart-horas", () => renderChartMetaSemanal(box.querySelector("#meta-semanal-chart-horas"), meta.porDia, "horas"));
+    tentarDesenhar(box, "meta-semanal-chart-questoes", () => renderChartMetaSemanal(box.querySelector("#meta-semanal-chart-questoes"), meta.porDia, "questoes"));
+
+    const metaBtnHoras = box.querySelector("#meta-toggle-horas");
+    const metaBtnQuestoes = box.querySelector("#meta-toggle-questoes");
+    const metaBlocoHoras = box.querySelector("#meta-semanal-bloco-horas");
+    const metaBlocoQuestoes = box.querySelector("#meta-semanal-bloco-questoes");
+    function estilizarToggle(btn, ativo) {
+      btn.style.background = ativo ? "var(--color-primary)" : "var(--color-surface)";
+      btn.style.color = ativo ? "#fff" : "var(--color-primary)";
+      btn.style.border = ativo ? "1px solid var(--color-primary)" : "1px solid var(--color-border)";
+    }
+    function selecionarMetaMetrica(metrica) {
+      metaMetrica = metrica;
+      estilizarToggle(metaBtnHoras, metrica === "horas");
+      estilizarToggle(metaBtnQuestoes, metrica === "questoes");
+      metaBlocoHoras.style.display = metrica === "horas" ? "block" : "none";
+      metaBlocoQuestoes.style.display = metrica === "questoes" ? "block" : "none";
+    }
+    selecionarMetaMetrica(metaMetrica);
+    metaBtnHoras.addEventListener("click", () => selecionarMetaMetrica("horas"));
+    metaBtnQuestoes.addEventListener("click", () => selecionarMetaMetrica("questoes"));
+
+    const navegar = async (delta, botao) => {
+      botao.disabled = true;
+      try {
+        const nova = await getMetaSemanalAtual(metaOffset + delta);
+        metaOffset += delta;
+        montarMetaSemanal(nova);
+      } catch (err) {
+        console.error("[dashboard] falha ao trocar de semana", err);
+        botao.disabled = false;
+      }
+    };
+    const btnAnt = box.querySelector("#meta-semana-anterior");
+    const btnProx = box.querySelector("#meta-semana-proxima");
+    if (btnAnt) btnAnt.addEventListener("click", () => navegar(-1, btnAnt));
+    if (btnProx) btnProx.addEventListener("click", () => navegar(1, btnProx));
   }
-  function selecionarMetaMetrica(metrica) {
-    estilizarToggle(metaBtnHoras, metrica === "horas");
-    estilizarToggle(metaBtnQuestoes, metrica === "questoes");
-    metaBlocoHoras.style.display = metrica === "horas" ? "block" : "none";
-    metaBlocoQuestoes.style.display = metrica === "questoes" ? "block" : "none";
-  }
-  selecionarMetaMetrica("horas");
-  metaBtnHoras.addEventListener("click", () => selecionarMetaMetrica("horas"));
-  metaBtnQuestoes.addEventListener("click", () => selecionarMetaMetrica("questoes"));
+
+  montarMetaSemanal(metaSemanal);
 
   if (tendenciaSemanal.semanas.length > 0) {
     tentarDesenhar(content, "media-movel-chart", () => renderChartMediaMovel(content.querySelector("#media-movel-chart"), tendenciaSemanal.semanas, tendenciaMinQuestoes));
@@ -393,6 +425,16 @@ function renderMetaSemanal(meta, metaHoras, metaQuestoes) {
     const [, m, d] = iso.split("-");
     return `${d}/${m}`;
   };
+  // Rótulo relativo: "Semana Atual"/"Semana Passada" são os dois casos que o
+  // usuário nomeia em voz alta; além disso o número de semanas atrás comunica
+  // melhor que uma data solta.
+  const off = meta.offsetSemanas ?? 0;
+  const rotuloSemana =
+    off === 0 ? "Semana Atual" : off === -1 ? "Semana Passada" : `${Math.abs(off)} semanas atrás`;
+  // A linha "Semana passada: X" é referência de contexto pra semana corrente.
+  // Numa semana já fechada ela viraria "a semana anterior àquela", que confunde
+  // mais do que ajuda no fechamento — some.
+  const mostrarAnterior = off === 0;
   // Barra trava em 100% (não estoura visualmente), mas o texto ao lado
   // sempre mostra o valor real, mesmo passando da meta — a contagem em si
   // nunca para. Quando atinge/ultrapassa (13/07/2026, pedido do usuário), a
@@ -414,17 +456,26 @@ function renderMetaSemanal(meta, metaHoras, metaQuestoes) {
   };
   return `
     <div class="card" style="margin-bottom:24px;">
-      <h3 style="margin-top:0;">Metas de Estudo — Semana Atual (${fmtData(meta.inicio)}–${fmtData(meta.fim)})</h3>
+      <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:12px;">
+        <button type="button" id="meta-semana-anterior" class="btn-link" style="font-size:18px; line-height:1; text-decoration:none;" title="Semana anterior" aria-label="Semana anterior">◀</button>
+        <h3 style="margin:0;">Metas de Estudo — ${rotuloSemana} <span style="font-weight:normal; color:var(--color-text-muted);">(${fmtData(meta.inicio)}–${fmtData(meta.fim)})</span></h3>
+        ${meta.offsetSemanas < 0
+          ? `<button type="button" id="meta-semana-proxima" class="btn-link" style="font-size:18px; line-height:1; text-decoration:none;" title="Semana seguinte" aria-label="Semana seguinte">▶</button>`
+          : ""}
+      </div>
+      ${meta.emAndamento
+        ? ""
+        : `<p style="margin:-4px 0 12px; font-size:12px; color:var(--color-text-muted);">Semana fechada — os totais abaixo são finais.</p>`}
       <div style="display:flex; gap:32px; flex-wrap:wrap; margin-bottom:16px;">
         <div style="flex:1; min-width:220px;">
           <p style="margin:0;">Horas estudadas: <strong>${meta.horasTotais}h</strong> / ${metaHoras}h${badgeMeta(meta.horasTotais, metaHoras, "h", (v) => Math.round(v * 10) / 10)}</p>
           ${barra(meta.horasTotais, metaHoras)}
-          <p style="margin:4px 0 0; font-size:12px; color:var(--color-text-muted);">Semana passada: ${meta.anteriorHoras}h</p>
+          ${mostrarAnterior ? `<p style="margin:4px 0 0; font-size:12px; color:var(--color-text-muted);">Semana passada: ${meta.anteriorHoras}h</p>` : ""}
         </div>
         <div style="flex:1; min-width:220px;">
           <p style="margin:0;">Questões resolvidas: <strong>${meta.questoesTotais}</strong> / ${metaQuestoes}${badgeMeta(meta.questoesTotais, metaQuestoes, " questões", (v) => v)}</p>
           ${barra(meta.questoesTotais, metaQuestoes)}
-          <p style="margin:4px 0 0; font-size:12px; color:var(--color-text-muted);">Semana passada: ${meta.anteriorQuestoes} questões</p>
+          ${mostrarAnterior ? `<p style="margin:4px 0 0; font-size:12px; color:var(--color-text-muted);">Semana passada: ${meta.anteriorQuestoes} questões</p>` : ""}
         </div>
       </div>
       <div style="display:flex; gap:8px; margin-bottom:8px;">
