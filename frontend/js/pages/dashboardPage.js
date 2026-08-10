@@ -239,7 +239,10 @@ export async function renderDashboardPage(container) {
   });
 
   content.querySelectorAll("[data-situacao-link]").forEach((el) => {
-    el.addEventListener("click", () => navigate("/prioridade", { classificacao: el.dataset.situacaoLink }));
+    // Antes ia pra /prioridade (06/08/2026): a tela foi aposentada por ranquear
+    // o catálogo global inteiro, com 94,7% de cadernos nunca estudados no topo.
+    // Revisar responde a mesma pergunta olhando só o que você de fato estudou.
+    el.addEventListener("click", () => navigate("/revisar", { classificacao: el.dataset.situacaoLink }));
   });
 
   // Cada gráfico é isolado no próprio try/catch: um erro de desenho (ex.:
@@ -404,7 +407,7 @@ function renderVisaoGeral(kpis, produtividadeVitalicia, produtividadeRecente, ja
             // leva pra Prioridade já filtrada por essa classificação, em vez
             // de duplicar uma lista de cadernos aqui dentro do Dashboard.
             return `
-              <div class="kpi-card kpi-card--clickable" data-situacao-link="${key}" title="Ver cadernos ${escapeHtml(meta.label.toLowerCase())} em Prioridade">
+              <div class="kpi-card kpi-card--clickable" data-situacao-link="${key}" title="Ver cadernos ${escapeHtml(meta.label.toLowerCase())} em Revisar">
                 <p class="kpi-card__label">${escapeHtml(meta.label)}</p>
                 <p class="kpi-card__value" style="color:${meta.color};">${count}</p>
               </div>

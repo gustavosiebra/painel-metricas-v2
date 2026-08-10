@@ -4,51 +4,91 @@ import { navigate } from "../router.js";
 import { signOut, updateDisplayName } from "../services/authService.js";
 import { getState, setState } from "../state.js";
 
+// Navegação agrupada por MOMENTO DE USO (06/08/2026, discutido e aprovado pelo
+// usuário). Antes eram 10 links soltos, todos com o mesmo peso visual — e o
+// Catálogo, que se mexe uma vez por mês, ocupava o mesmo espaço que Nova
+// Sessão, usada todo dia. Frequência medida no banco antes de decidir:
+// 175 sessões, 15 erros, 2 simulados, 3 concursos, 1 catálogo global.
+//
+// Critério do agrupamento: não é por tipo de dado, é por quando se usa.
+//   Nova Sessão / Revisar — todo dia, ficam diretos
+//   Registros — o que já aconteceu (consulta e correção)
+//   Escopo   — a montagem do que se vai estudar (raro, mas estruturante)
+//   Histórico — leitura semanal, direto por ser um só
+//
+// Ordem escolhida pelo usuário em 06/08/2026: primeiro o que se FAZ (Nova
+// Sessão), depois o que se DECIDE (Revisar), por último o que se OLHA
+// (Registros, Escopo, Histórico).
+//
+// Prioridade saiu da navegação (06/08/2026). Não foi só reorganização: a tela
+// listava os 1125 cadernos do catálogo global e 1065 deles (94,7%) nunca
+// tinham sido estudados, então o ranking era dominado por linhas sem dado —
+// "Access 2010" aparecia em 7º lugar pra um candidato a Engenheiro Civil. A
+// pergunta que ela tentava responder ("o que ainda não toquei") tem lugar
+// melhor na aba Cobertura do Edital, que conhece o escopo real. A rota segue
+// registrada em app.js: links antigos continuam funcionando, só não é mais
+// oferecida. Ver priorityPage.js.
+const LINKS_DIRETOS_ANTES = [
+  { path: "/sessoes/nova", label: "Nova Sessão" },
+  { path: "/revisar", label: "Revisar" },
+];
+const LINKS_DIRETOS_DEPOIS = [{ path: "/historico", label: "Histórico" }];
+
+const GRUPOS = [
+  {
+    label: "Registros",
+    itens: [
+      { path: "/sessoes", label: "Sessões" },
+      { path: "/erros", label: "Erros" },
+      { path: "/simulados", label: "Simulados" },
+    ],
+  },
+  {
+    label: "Escopo",
+    itens: [
+      { path: "/edital", label: "Edital" },
+      { path: "/catalogo", label: "Catálogo" },
+      { path: "/planejamento", label: "Planejamento" },
+    ],
+  },
+];
+
 export function renderNavbar(activeRoute) {
   const { user, isAdmin, displayName } = getState();
   const shownName = displayName || user?.email || "";
-  // Navegação reorganizada em 05/07/2026 (discutida e aprovada pelo
-  // usuário): "Dashboard" virou o título/logo; "Peso" foi incorporado como
-  // sub-aba dentro de Catálogo (mesma preocupação de fundo: estrutura por
-  // trás dos números); "Configurações" saiu da barra principal (uso raro) e
-  // virou um ícone de engrenagem perto do nome/Sair. Nova Sessão continua
-  // aqui (ação mais frequente do app, não vale o risco de esconder atrás de
-  // um clique a mais) — ganhou também um atalho direto no Dashboard.
-  const links = [
-    { path: "/revisar", label: "Revisar" },
-    { path: "/sessoes/nova", label: "Nova Sessão" },
-    { path: "/sessoes", label: "Sessões" },
-    { path: "/erros", label: "Erros" },
-    { path: "/simulados", label: "Simulados" },
-    { path: "/catalogo", label: "Catálogo" },
-    { path: "/edital", label: "Edital" },
-    { path: "/planejamento", label: "Planejamento" },
-    { path: "/prioridade", label: "Prioridade" },
-    { path: "/historico", label: "Histórico" },
-  ];
-  // Dicionário (Admin) removido em 05/07/2026 — o Catálogo voltou a existir
-  // pra todo mundo (com editar/apagar local), então a tela exclusiva de admin
-  // perdeu a razão de ser. Rota/arquivo ficaram no repo sem uso, sem risco.
-  // "/pesos" (weightPage.js) também ficou sem uso — mesma lógica agora vive
-  // na sub-aba Peso de catalogPage.js.
 
-  const linksHtml = links
-    .map(
-      (l) => `<a href="#${l.path}" class="nav-link${activeRoute === l.path ? " nav-link--active" : ""}" data-path="${l.path}">${l.label}</a>`
-    )
-    .join("");
+  const link = (l, extraClasse = "") =>
+    `<a href="#${l.path}" class="nav-link${extraClasse}${activeRoute === l.path ? " nav-link--active" : ""}" data-path="${l.path}">${l.label}</a>`;
 
-  // Grupos viraram classes (07/07/2026, validação mobile) em vez de inline
-  // style — precisava de flex-wrap responsivo em telas estreitas, e um
-  // style="" inline com gap fixo (24px) tem prioridade sobre qualquer regra
-  // de media query no CSS, então não dava pra sobrescrever sem !important.
-  // Com classes, .navbar-left/.navbar-right controlam isso de verdade.
+  const grupoHtml = (g) => {
+    const temAtivo = g.itens.some((i) => i.path === activeRoute);
+    return `
+      <div class="nav-group">
+        <button type="button" class="nav-link nav-group__btn${temAtivo ? " nav-link--active" : ""}" aria-expanded="false" aria-haspopup="true">
+          ${g.label}<span class="nav-group__seta" aria-hidden="true">▾</span>
+        </button>
+        <div class="nav-dropdown">
+          <span class="nav-dropdown__titulo">${g.label}</span>
+          ${g.itens.map((i) => link(i, " nav-dropdown__item")).join("")}
+        </div>
+      </div>`;
+  };
+
+  // Nova Sessão é a ação mais frequente do app, mas fica como link comum
+  // (06/08/2026, pedido do usuário): a versão em botão destacado poluía uma
+  // barra que é toda de links limpos.
+  const navHtml = [
+    ...LINKS_DIRETOS_ANTES.map((l) => link(l)),
+    ...GRUPOS.map(grupoHtml),
+    ...LINKS_DIRETOS_DEPOIS.map((l) => link(l)),
+  ].join("");
+
   return `
     <header class="app-topbar">
       <div class="navbar-left">
         <button type="button" id="nav-toggle" class="nav-toggle" aria-label="Abrir menu" aria-expanded="false" aria-controls="app-nav">☰</button>
         <a href="#/dashboard" class="nav-link nav-link--brand${activeRoute === "/dashboard" ? " nav-link--active" : ""}" data-path="/dashboard"><strong>Painel de Métricas</strong></a>
-        <nav class="app-nav" id="app-nav">${linksHtml}</nav>
+        <nav class="app-nav" id="app-nav">${navHtml}</nav>
       </div>
       <div class="navbar-right">
         <a href="#/parametros" class="settings-link${activeRoute === "/parametros" ? " nav-link--active" : ""}" data-path="/parametros" title="Configurações">⚙</a>
@@ -70,19 +110,50 @@ export function wireNavbar(container) {
     });
   }
 
-  container.querySelectorAll(".nav-link").forEach((el) => {
+  // Dropdowns por clique, não por hover: hover não existe em toque, e um menu
+  // que abre sozinho ao passar o mouse atrapalha quem só está indo pro link
+  // seguinte. No mobile o CSS ignora isso e mostra os grupos já abertos, como
+  // seções — menu dentro de menu em tela pequena é armadilha.
+  const grupos = [...container.querySelectorAll(".nav-group")];
+  const fecharGrupos = (exceto) => {
+    for (const g of grupos) {
+      if (g === exceto) continue;
+      g.classList.remove("nav-group--aberto");
+      g.querySelector(".nav-group__btn")?.setAttribute("aria-expanded", "false");
+    }
+  };
+  for (const g of grupos) {
+    const btn = g.querySelector(".nav-group__btn");
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const abrindo = !g.classList.contains("nav-group--aberto");
+      fecharGrupos(g);
+      g.classList.toggle("nav-group--aberto", abrindo);
+      btn.setAttribute("aria-expanded", String(abrindo));
+    });
+  }
+  // Clique fora fecha. Sem isso o dropdown fica aberto atravessando a tela
+  // seguinte — mesmo bug que o menu mobile já teve em 13/07/2026.
+  document.addEventListener("click", () => fecharGrupos(null));
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") fecharGrupos(null);
+  });
+
+  container.querySelectorAll(".nav-link[data-path]").forEach((el) => {
     el.addEventListener("click", (e) => {
       e.preventDefault();
-      // Fecha o menu mobile ao navegar (13/07/2026) — sem isso, o menu
-      // aberto atravessava pra tela seguinte, sobrando visível por cima
+      // Fecha o menu mobile e os dropdowns ao navegar (13/07/2026) — sem isso,
+      // o menu aberto atravessava pra tela seguinte, sobrando visível por cima
       // do conteúdo novo até o usuário fechar manualmente.
       if (appNav) {
         appNav.classList.remove("app-nav--open");
         if (navToggle) navToggle.setAttribute("aria-expanded", "false");
       }
+      fecharGrupos(null);
       navigate(el.dataset.path);
     });
   });
+
   const logoutBtn = container.querySelector("#logout-btn");
   if (logoutBtn) logoutBtn.addEventListener("click", () => signOut());
 

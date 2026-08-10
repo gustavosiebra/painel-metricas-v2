@@ -548,6 +548,122 @@
   }
 }
 
+
+/* Navegação agrupada (06/08/2026) — ver navbar.js pro critério do agrupamento.
+   Em telas largas cada grupo vira um dropdown flutuante; abaixo de 640px, onde
+   o menu já é um dropdown do hamburguer, os grupos viram SEÇÕES sempre
+   abertas: menu dentro de menu em tela de toque é armadilha, e o objetivo era
+   justamente encurtar o caminho. */
+.nav-group {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+/* border:none é obrigatório: <button> traz borda padrão do navegador, e sem
+   zerar ela o item de grupo vira uma caixa no meio de links sem caixa
+   (06/08/2026, reportado com print). O grupo tem que parecer exatamente um
+   link — a única diferença visível é a setinha. */
+.nav-group__btn {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: inherit;
+  font-size: 14px;
+  padding: var(--spacing-1) 0;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.nav-group__btn:hover {
+  color: #fff;
+}
+
+.nav-group__btn.nav-link--active {
+  color: #fff;
+  border-bottom-color: #fff;
+  font-weight: 600;
+}
+
+.nav-group__seta {
+  font-size: 10px;
+  opacity: 0.8;
+}
+
+.nav-dropdown {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  min-width: 190px;
+  background: var(--color-primary);
+  border-radius: var(--radius);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.25);
+  padding: var(--spacing-2) 0;
+  z-index: 30;
+}
+
+.nav-group--aberto .nav-dropdown {
+  display: block;
+}
+
+/* O título do grupo já está no botão em telas largas — repetir dentro do
+   dropdown seria redundante. Ele só aparece no mobile, onde o botão some. */
+.nav-dropdown__titulo {
+  display: none;
+}
+
+.nav-dropdown__item {
+  display: block;
+  padding: var(--spacing-2) var(--spacing-3);
+  border-bottom: none;
+  white-space: nowrap;
+}
+
+.nav-dropdown__item:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+@media (max-width: 640px) {
+  .nav-group {
+    display: block;
+  }
+
+  /* No hamburguer o botão do grupo não serve: viraria um segundo nível de
+     menu. Some, e o dropdown passa a ser uma seção sempre visível com o nome
+     do grupo como rótulo. */
+  .nav-group__btn {
+    display: none;
+  }
+
+  .nav-dropdown {
+    display: block;
+    position: static;
+    box-shadow: none;
+    border-radius: 0;
+    padding: 0;
+    min-width: 0;
+  }
+
+  .nav-dropdown__titulo {
+    display: block;
+    padding: var(--spacing-3) 0 4px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: rgba(255, 255, 255, 0.55);
+  }
+
+  .nav-dropdown__item {
+    padding: var(--spacing-2) 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+  }
+
+}
+
 /* Sub-abas dentro de uma página (05/07/2026) — usado no Catálogo pra separar
    Cadastro (Concurso/Banca/Disciplina/Caderno) de Peso, sem virar duas
    entradas na navbar principal. */

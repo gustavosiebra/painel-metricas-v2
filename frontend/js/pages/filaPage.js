@@ -16,6 +16,13 @@ import { getProdutividade, getRitmo, META_QUESTOES_PADRAO } from "../services/ca
 import { navigate } from "../router.js";
 import { formatPct } from "../utils/format.js";
 
+const SITUACAO_LABEL = {
+  critico: "Crítico",
+  atencao: "Atenção",
+  consolidado: "Consolidado",
+  preliminar: "Poucos dados",
+};
+
 const MOTIVO_COR = {
   critico: "var(--color-error)",
   atencao: "#b45309",
@@ -28,7 +35,11 @@ const MOTIVO_COR = {
   tempo: "var(--color-text-muted)",
 };
 
-export async function renderFilaPage(container) {
+// params.classificacao (06/08/2026): os cards de Situação do Dashboard
+// (Crítico/Atenção/Consolidado/Poucos dados) passaram a apontar pra cá quando
+// a tela Prioridade foi aposentada. O filtro é opcional e sempre visível na
+// tela — filtro escondido é a receita pra alguém achar que a fila esvaziou.
+export async function renderFilaPage(container, params) {
   container.innerHTML = `
     <div class="app-shell">
       <div style="flex:1; display:flex; flex-direction:column;">
@@ -47,6 +58,7 @@ export async function renderFilaPage(container) {
   wireNavbar(container);
 
   const content = container.querySelector("#fila-content");
+  const classificacaoFiltro = params?.get ? params.get("classificacao") : null;
   let itens = [];
   try {
     itens = await getFilaRevisao();
@@ -69,12 +81,33 @@ export async function renderFilaPage(container) {
     /* bloco opcional; silêncio é melhor que um erro vermelho no topo da fila */
   }
 
+  const totalSemFiltro = itens.length;
+  if (classificacaoFiltro) {
+    itens = itens.filter((it) => it.classificacao === classificacaoFiltro);
+  }
+
+  const chipFiltro = classificacaoFiltro
+    ? `<div class="alert" style="background:#e3f2fd; color:#1565c0; border:1px solid #bbdefb; display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+         Filtrando por <strong>${escapeHtml(SITUACAO_LABEL[classificacaoFiltro] || classificacaoFiltro)}</strong> — ${itens.length} de ${totalSemFiltro} cadernos.
+         <button type="button" class="btn-link" id="fila-limpar-filtro">ver todos</button>
+       </div>`
+    : "";
+
+  const wireLimparFiltro = () => {
+    const btn = content.querySelector("#fila-limpar-filtro");
+    if (btn) btn.addEventListener("click", () => navigate("/revisar"));
+  };
+
   if (itens.length === 0) {
     content.innerHTML = `
+      ${chipFiltro}
       <div class="card">
-        <p style="color:var(--color-text-muted);">Nada pendente por enquanto — nenhum caderno estudado está com lacuna, erro em aberto ou tempo demais sem revisão. Se quiser abrir frente nova, veja a aba Prioridade.</p>
+        <p style="color:var(--color-text-muted);">${classificacaoFiltro
+          ? "Nenhum caderno nesta classificação está pendente agora."
+          : "Nada pendente por enquanto — nenhum caderno estudado está com lacuna, erro em aberto ou tempo demais sem revisão. Para abrir frente nova, veja a cobertura do edital."}</p>
       </div>
     `;
+    wireLimparFiltro();
     return;
   }
 
@@ -84,6 +117,7 @@ export async function renderFilaPage(container) {
   const resto = itens.slice(5);
 
   content.innerHTML = `
+    ${chipFiltro}
     <div class="card" style="margin-bottom:16px;">
       <h3 style="margin-top:0;">Prioridade de hoje</h3>
       ${topo.map((it, i) => cardItem(it, i + 1)).join("")}
@@ -111,6 +145,8 @@ export async function renderFilaPage(container) {
       </div>
     </div>` : ""}
   `;
+
+  wireLimparFiltro();
 
   content.querySelectorAll("[data-fila-estudar]").forEach((btn) => {
     btn.addEventListener("click", () => {
