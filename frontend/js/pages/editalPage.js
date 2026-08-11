@@ -41,6 +41,7 @@ import {
   getProdutividade,
   calcularCapacidade,
   META_QUESTOES_PADRAO,
+  getMetaQuestoes,
 } from "../services/capacidadeService.js";
 import { getState } from "../state.js";
 import { formatPct } from "../utils/format.js";
@@ -123,6 +124,8 @@ export async function renderEditalPage(container) {
     horizonte: 26,
     horasPorSemana: null,
     questoesPorHora: null,
+    // Preenchido pelo parâmetro diagnostico_min_n logo após a carga inicial —
+    // o padrão fica só como valor de partida até a resposta chegar.
     metaQuestoes: META_QUESTOES_PADRAO,
   };
 
@@ -169,6 +172,12 @@ export async function renderEditalPage(container) {
 
   const cadernosById = new Map(cadernos.map((c) => [c.id, c]));
   const disciplinasById = new Map(disciplines.map((d) => [d.id, d.name]));
+
+  try {
+    cap.metaQuestoes = await getMetaQuestoes(user.id);
+  } catch {
+    /* mantém o padrão */
+  }
 
   await carregar();
 

@@ -12,8 +12,9 @@
 
 import { renderNavbar, wireNavbar } from "../components/navbar.js";
 import { getFilaRevisao, getFrentesAbertas } from "../services/filaRevisaoService.js";
-import { getProdutividade, getRitmo, META_QUESTOES_PADRAO } from "../services/capacidadeService.js";
+import { getProdutividade, getRitmo, getMetaQuestoes } from "../services/capacidadeService.js";
 import { navigate } from "../router.js";
+import { getState } from "../state.js";
 import { formatPct } from "../utils/format.js";
 
 const SITUACAO_LABEL = {
@@ -71,12 +72,13 @@ export async function renderFilaPage(container, params) {
   // getFrentesAbertas). Falha aqui não pode derrubar a fila, que é o conteúdo
   // principal da tela: por isso try/catch próprio e silencioso.
   try {
+    const meta = await getMetaQuestoes(getState().user?.id);
     const [fr, prod, rit] = await Promise.all([
-      getFrentesAbertas({ metaQuestoes: META_QUESTOES_PADRAO }),
+      getFrentesAbertas({ metaQuestoes: meta }),
       getProdutividade(),
       getRitmo(),
     ]);
-    renderFrentes(container.querySelector("#fila-frentes"), fr, prod, rit);
+    renderFrentes(container.querySelector("#fila-frentes"), fr, prod, rit, meta);
   } catch {
     /* bloco opcional; silêncio é melhor que um erro vermelho no topo da fila */
   }
@@ -160,7 +162,7 @@ export async function renderFilaPage(container, params) {
   });
 }
 
-function renderFrentes(box, fr, prod, rit) {
+function renderFrentes(box, fr, prod, rit, metaQuestoes) {
   if (!box || fr.abertas.length === 0) return;
 
   const qph = prod?.questoesPorHora || 0;
@@ -175,8 +177,8 @@ function renderFrentes(box, fr, prod, rit) {
       <h3 style="margin-top:0;">Frentes abertas: ${fr.abertas.length}</h3>
       <p style="margin:4px 0 0; font-size:14px;">
         ${fr.fechadas === 0
-          ? `Nenhum caderno seu chegou a ${META_QUESTOES_PADRAO} questões ainda. Abaixo disso o Wilson responde "poucos dados" — ou seja, <strong>o painel inteiro ainda não consegue afirmar nada sobre o seu nível</strong>.`
-          : `${fr.fechadas} caderno(s) já passaram de ${META_QUESTOES_PADRAO} questões; estes ${fr.abertas.length} ainda não.`}
+          ? `Nenhum caderno seu chegou a ${metaQuestoes} questões ainda. Abaixo disso o Wilson responde "poucos dados" — ou seja, <strong>o painel inteiro ainda não consegue afirmar nada sobre o seu nível</strong>.`
+          : `${fr.fechadas} caderno(s) já passaram de ${metaQuestoes} questões; estes ${fr.abertas.length} ainda não.`}
       </p>
       <p style="margin:8px 0 0; font-size:14px;">
         Fechar todas custa <strong>${fr.questoesParaFechar} questões</strong>${horas != null ? ` ≈ <strong>${horas} h</strong>` : ""}${semanas != null ? ` (~${semanas} semana(s) no seu ritmo)` : ""}.

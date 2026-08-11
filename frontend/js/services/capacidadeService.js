@@ -23,12 +23,31 @@
 // N semanas no meu ritmo real?".
 
 import { supabase } from "../supabaseClient.js";
+import { getParam } from "./parameterService.js";
 
-// Massa crítica padrão = 30 questões. Não é número novo: é exatamente o mesmo
-// limiar que o painel já usa pra sair de "preliminar" no diagnóstico Wilson
-// (ver v_diagnostico_caderno). Reaproveitado aqui de propósito, pra tela de
-// capacidade e tela de diagnóstico não discordarem sobre o que é "medido".
+// Massa crítica: o MESMO limiar que o painel usa pra sair de "preliminar" no
+// diagnóstico Wilson. Reaproveitado de propósito — tela de capacidade e tela
+// de diagnóstico discordarem sobre o que é "medido" seria pior que o número
+// estar errado.
+//
+// É o parâmetro `diagnostico_min_n` (editável em Configurações), não uma
+// constante: depende de quantas questões os cadernos do usuário têm. Em
+// 06/08/2026 o usuário baixou de 30 pra 20 — os cadernos dele têm 20 questões,
+// e exigir 30 obrigava a refazer questões já vistas, o que INFLA o acerto em
+// vez de aumentar a evidência. O padrão 30 continua valendo pra quem não mexer.
+//
+// O valor exportado abaixo é só o fallback usado antes do parâmetro carregar.
 export const META_QUESTOES_PADRAO = 30;
+
+export async function getMetaQuestoes(userId) {
+  try {
+    const valor = await getParam(userId, "diagnostico_min_n");
+    const n = Number(valor);
+    return Number.isFinite(n) && n > 0 ? n : META_QUESTOES_PADRAO;
+  } catch {
+    return META_QUESTOES_PADRAO;
+  }
+}
 
 // Ritmo real de estudo, em horas por semana.
 //
