@@ -100,7 +100,12 @@ export async function createTemplate({ userId, name, boardId, scoringMode, durat
         user_id: userId,
         template_id: tpl.id,
         scope: r.scope,
-        module_name: r.scope === "modulo" ? r.moduleName : null,
+        // module_name deixou de ser exclusivo de scope=modulo (13/09/2026):
+        // em scope=cada_bloco ele é opcional e restringe a regra aos blocos
+        // daquele módulo. É o que o item 11.3.b da ALECE exige — "no mínimo
+        // 1,00 ponto em CADA DISCIPLINA integrante da área de Conhecimentos
+        // Gerais" — e que antes obrigava a aplicar a regra à prova inteira.
+        module_name: r.scope === "total" ? null : r.moduleName || null,
         kind: r.kind,
         value: r.value,
       }))
@@ -170,7 +175,7 @@ export async function updateTemplate({ id, userId, name, boardId, scoringMode, d
         user_id: userId,
         template_id: id,
         scope: r.scope,
-        module_name: r.scope === "modulo" ? r.moduleName : null,
+        module_name: r.scope === "total" ? null : r.moduleName || null,
         kind: r.kind,
         value: r.value,
       }))

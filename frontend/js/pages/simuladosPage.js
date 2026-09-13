@@ -119,7 +119,14 @@ export async function renderSimuladosPage(container) {
   const resultadosDaTentativa = (attemptId) => attemptBlocks.filter((r) => r.attempt_id === attemptId);
 
   function descreverRegra(r) {
-    const alvo = r.scope === "total" ? "Total" : r.scope === "cada_bloco" ? "Cada bloco" : r.module_name || "?";
+    const alvo =
+      r.scope === "total"
+        ? "Total"
+        : r.scope === "cada_bloco"
+          ? r.module_name
+            ? `Cada bloco de ${r.module_name}`
+            : "Cada bloco"
+          : r.module_name || "?";
     const un = r.kind === "questoes" ? "questões" : r.kind === "pct" ? "%" : "pontos";
     return `${alvo} ≥ ${fmtNota(r.value)} ${un}`;
   }
@@ -139,26 +146,76 @@ export async function renderSimuladosPage(container) {
   // Legado v1 (min_pct por bloco / min_total_pct do modelo) continua sendo
   // avaliado se existir em modelos antigos.
   function calcularTentativa(template, blocos, regras, resultados) {
+    // ponderado_normalizado (13/09/2026, lido no edital do TJ-CE 2026 da FCC,
+    // itens 11.1 e 11.2): cada MÓDULO é avaliado na escala 0–10 isoladamente e
+    // só então entra na média ponderada. Não é acertos × peso — dá número
+    // diferente. Caso real: 7/20 em Gerais e 27/40 em Específicas (peso 1 e 3)
+    // rendia 62,86% no modo bruto e 5,9375 (59,38%) pela regra do edital.
+    // A unidade de normalização é o módulo, não o bloco, porque é o que o
+    // edital chama de "prova" — a quebra em blocos abaixo disso é diagnóstica.
+    const normalizado = template.scoring_mode === "ponderado_normalizado";
+
     const porBloco = blocos.map((b) => {
       const r = resultados.find((x) => x.block_id === b.id) || { correct: 0, wrong: 0 };
-      const nota = template.scoring_mode === "liquido" ? (r.correct - r.wrong) * Number(b.weight) : r.correct * Number(b.weight);
-      const max = b.questions * Number(b.weight);
+      const liquidos = template.scoring_mode === "liquido" ? r.correct - r.wrong : r.correct;
+      const nota = normalizado ? (b.questions > 0 ? (liquidos / b.questions) * 10 : 0) : liquidos * Number(b.weight);
+      const max = normalizado ? 10 : b.questions * Number(b.weight);
       const pct = max > 0 ? (nota / max) * 100 : 0;
-      return { bloco: b, correct: r.correct, wrong: r.wrong, nota, max, pct, recuperavel: max - nota };
+      return { bloco: b, correct: r.correct, wrong: r.wrong, liquidos, nota, max, pct, recuperavel: max - nota };
     });
-    const nota = porBloco.reduce((acc, x) => acc + x.nota, 0);
-    const max = porBloco.reduce((acc, x) => acc + x.max, 0);
     const correct = porBloco.reduce((acc, x) => acc + x.correct, 0);
-    const pct = max > 0 ? (nota / max) * 100 : 0;
 
     const porModulo = {};
     porBloco.forEach((x) => {
       const m = x.bloco.module || "(sem módulo)";
-      if (!porModulo[m]) porModulo[m] = { correct: 0, nota: 0, max: 0 };
-      porModulo[m].correct += x.correct;
-      porModulo[m].nota += x.nota;
-      porModulo[m].max += x.max;
+      if (!porModulo[m]) porModulo[m] = { correct: 0, liquidos: 0, questoes: 0, pesos: new Set(), nota: 0, max: 0 };
+      const g = porModulo[m];
+      g.correct += x.correct;
+      g.liquidos += x.liquidos;
+      g.questoes += x.bloco.questions;
+      g.pesos.add(Number(x.bloco.weight));
+      if (!normalizado) {
+        g.nota += x.nota;
+        g.max += x.max;
+      }
     });
+
+    // Peso de um módulo normalizado só faz sentido se for uniforme entre seus
+    // blocos — o edital dá um peso por prova, não por disciplina. Se não for,
+    // avisa em vez de escolher um em silêncio.
+    const avisosNormalizacao = [];
+    let nota;
+    let max;
+    if (normalizado) {
+      let somaNotas = 0;
+      let somaPesos = 0;
+      Object.entries(porModulo).forEach(([m, g]) => {
+        if (g.pesos.size > 1) avisosNormalizacao.push(`O módulo "${m}" tem blocos com pesos diferentes (${[...g.pesos].join(", ")}). O edital atribui um peso por prova; corrija o modelo.`);
+        const peso = Math.max(...g.pesos);
+        g.nota = g.questoes > 0 ? (g.liquidos / g.questoes) * 10 : 0;
+        g.max = 10;
+        g.peso = peso;
+        somaNotas += g.nota * peso;
+        somaPesos += peso;
+      });
+      nota = somaPesos > 0 ? somaNotas / somaPesos : 0;
+      max = 10;
+      // "Recuperável" só serve se estiver na mesma moeda da nota final, senão a
+      // ordenação de "onde investir" mente. No modo normalizado o impacto de um
+      // bloco depende do peso do módulo dele: no TJ-CE, zerar a distância em
+      // Gerais vale 1,625 da nota final e em Específicas vale 2,4375, embora
+      // faltem 13 questões nos dois. Sem esta correção a tela mandaria estudar
+      // o bloco errado.
+      porBloco.forEach((x) => {
+        const g = porModulo[x.bloco.module || "(sem módulo)"];
+        const faltando = Math.max(x.bloco.questions - x.liquidos, 0);
+        x.recuperavel = g.questoes > 0 && somaPesos > 0 ? (faltando / g.questoes) * 10 * (g.peso / somaPesos) : 0;
+      });
+    } else {
+      nota = porBloco.reduce((acc, x) => acc + x.nota, 0);
+      max = porBloco.reduce((acc, x) => acc + x.max, 0);
+    }
+    const pct = max > 0 ? (nota / max) * 100 : 0;
 
     const medir = (agg, kind) =>
       kind === "questoes" ? agg.correct : kind === "pontos" ? agg.nota : agg.max > 0 ? (agg.nota / agg.max) * 100 : 0;
@@ -176,9 +233,17 @@ export async function renderSimuladosPage(container) {
           ok = medida >= Number(r.value);
         }
       } else {
-        const medidas = porBloco.map((x) => medir({ correct: x.correct, nota: x.nota, max: x.max }, r.kind));
-        medida = medidas.length ? Math.min(...medidas) : 0;
-        ok = medidas.every((m) => m >= Number(r.value));
+        // cada_bloco. Com module_name preenchido, a regra vale só para os
+        // blocos daquele módulo — é a forma do item 11.3.b/c da ALECE ("no
+        // mínimo 1,00 ponto em cada disciplina integrante da área de
+        // Conhecimentos Gerais"). Sem module_name, vale para todos, que era o
+        // único comportamento até 13/09/2026.
+        const alvos = r.module_name ? porBloco.filter((x) => (x.bloco.module || "(sem módulo)") === r.module_name) : porBloco;
+        if (alvos.length > 0) {
+          const medidas = alvos.map((x) => medir({ correct: x.correct, nota: x.nota, max: x.max }, r.kind));
+          medida = Math.min(...medidas);
+          ok = medidas.every((m) => m >= Number(r.value));
+        }
       }
       return { regra: r, ok, medida };
     });
@@ -194,7 +259,7 @@ export async function renderSimuladosPage(container) {
     const habilitado = avaliacoes.every((a) => a.ok !== false) && legadoFalhas.length === 0;
     const cutoffOk = template.cutoff_score == null ? null : nota >= Number(template.cutoff_score);
 
-    return { porBloco, porModulo, nota, max, correct, pct, avaliacoes, legadoFalhas, temCriterios, habilitado, cutoffOk };
+    return { porBloco, porModulo, nota, max, correct, pct, avaliacoes, legadoFalhas, temCriterios, habilitado, cutoffOk, normalizado, avisosNormalizacao };
   }
 
   renderTentativas();
@@ -372,7 +437,7 @@ export async function renderSimuladosPage(container) {
           : "";
         resumoBox.style.display = "block";
         resumoBox.innerHTML = `
-          <p style="font-weight:600; margin:8px 0 4px;">Nota: ${fmtNota(calc.nota)} / ${fmtNota(calc.max)} (${formatPct(calc.pct)})${template.cutoff_score != null ? ` · corte estimado ${fmtNota(template.cutoff_score)}: ${calc.cutoffOk ? '<span style="color:var(--color-success);">acima ✓</span>' : '<span style="color:var(--color-error);">abaixo ✗</span>'}` : ""}</p>
+          <p style="font-weight:600; margin:8px 0 4px;">Nota: ${fmtNota(calc.nota)} / ${fmtNota(calc.max)} (${formatPct(calc.pct)})${template.cutoff_score != null ? ` · corte de referência ${fmtNota(template.cutoff_score)}: ${calc.cutoffOk ? '<span style="color:var(--color-success);">acima ✓</span>' : '<span style="color:var(--color-error);">abaixo ✗</span>'}` : ""}</p>
           ${ritmoHtml}
           ${calc.avaliacoes.length ? `<p style="margin:0 0 8px; font-size:13px;">${calc.avaliacoes.map((a) => `${a.ok === false ? "✗" : a.ok === true ? "✓" : "?"} ${escapeHtml(descreverRegra(a.regra))} <span style="color:var(--color-text-muted);">(${fmtMedida(a.medida, a.regra.kind)})</span>`).join(" · ")}</p>` : ""}
           ${calc.temCriterios ? `<p style="margin:0 0 8px; font-weight:600; color:${calc.habilitado ? "var(--color-success)" : "var(--color-error)"};">${calc.habilitado ? "Habilitado nos critérios do edital" : "ELIMINADO pelos critérios do edital"}</p>` : ""}
@@ -550,13 +615,26 @@ export async function renderSimuladosPage(container) {
       const legadoHtml = calc.legadoFalhas.length
         ? `<p style="margin:4px 0; color:var(--color-error);">Abaixo do mínimo: ${calc.legadoFalhas.map(escapeHtml).join("; ")}</p>`
         : "";
+      // Em modo normalizado a nota do módulo é o que o edital chama de "nota
+      // da prova". Mostrar isso explícito evita a leitura errada de somar
+      // acertos × peso, que dá outro número.
+      const modulosHtml = calc.normalizado
+        ? `<p style="margin:8px 0 4px;"><strong>Notas por prova (escala 0–10):</strong> ${Object.entries(calc.porModulo)
+            .map(([m, g]) => `${escapeHtml(m)} ${fmtNota(g.nota)} (${g.correct}/${g.questoes}, peso ${g.peso})`)
+            .join(" · ")} → média ponderada <strong>${fmtNota(calc.nota)}</strong></p>`
+        : "";
+      const avisosHtml = calc.avisosNormalizacao?.length
+        ? `<div class="alert alert--error" style="margin:8px 0;">${calc.avisosNormalizacao.map(escapeHtml).join("<br>")}</div>`
+        : "";
       return `
         ${ritmoHtml}
+        ${modulosHtml}
+        ${avisosHtml}
         ${criteriosHtml}
         ${legadoHtml}
         <div style="overflow-x:auto;">
           <table class="data-table" style="margin:8px 0;">
-            <tr><th>Módulo</th><th>Bloco</th><th>Acertos</th><th>Nota</th><th>%</th><th>Pontos recuperáveis</th></tr>
+            <tr><th>Módulo</th><th>Bloco</th><th>Acertos</th><th>Nota</th><th>%</th><th>${calc.normalizado ? "Impacto na nota final" : "Pontos recuperáveis"}</th></tr>
             ${ordenado
               .map(
                 (x) => `
@@ -657,9 +735,11 @@ export async function renderSimuladosPage(container) {
           <div class="form-field">
             <label for="tpl-modo">Correção</label>
             <select id="tpl-modo">
-              <option value="bruto" ${editing?.scoring_mode !== "liquido" ? "selected" : ""}>Bruta (nota = acertos × peso)</option>
+              <option value="bruto" ${!["liquido", "ponderado_normalizado"].includes(editing?.scoring_mode) ? "selected" : ""}>Bruta (nota = acertos × peso)</option>
               <option value="liquido" ${editing?.scoring_mode === "liquido" ? "selected" : ""}>Líquida / Cebraspe (nota = (acertos − erros) × peso; branco neutro)</option>
+              <option value="ponderado_normalizado" ${editing?.scoring_mode === "ponderado_normalizado" ? "selected" : ""}>Média ponderada 0–10 / FCC (cada módulo vai para 0–10 antes de entrar na média)</option>
             </select>
+            <p style="color:var(--color-text-muted); font-size:12px; margin:4px 0 0;">O modo vem do edital, não é preferência. Veja como o edital manda somar antes de escolher — TCE-SP e ALECE são bruta, TJ-CE (FCC) é média ponderada 0–10.</p>
           </div>
           <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:var(--spacing-2);">
             <div class="form-field">
@@ -667,8 +747,9 @@ export async function renderSimuladosPage(container) {
               <input type="number" id="tpl-duracao" min="1" step="1" placeholder="Ex.: 240" value="${editing?.duration_minutes ?? ""}" />
             </div>
             <div class="form-field">
-              <label for="tpl-corte">Corte estimado (opcional)</label>
-              <input type="number" id="tpl-corte" min="0" step="0.01" placeholder="Editável depois" value="${editing?.cutoff_score ?? ""}" />
+              <label for="tpl-corte">Nota de corte de referência (opcional)</label>
+              <input type="number" id="tpl-corte" min="0" step="0.01" placeholder="Ex.: 6,00 (ampla do TJ-CE)" value="${editing?.cutoff_score ?? ""}" />
+              <p style="color:var(--color-text-muted); font-size:12px; margin:4px 0 0;">Só comparação, não elimina. Útil para guardar o corte da ampla concorrência quando o seu corte de habilitação é outro.</p>
             </div>
           </div>
           <p style="font-weight:600; margin:12px 0 4px;">Blocos <span style="color:var(--color-text-muted); font-weight:normal; font-size:12px;">(uma linha por bloco do edital — a disciplina é opcional; sem ela o bloco vale pelo módulo inteiro)</span></p>
@@ -759,7 +840,9 @@ export async function renderSimuladosPage(container) {
         : regra.scope === "total"
           ? "total"
           : regra.scope === "cada_bloco"
-            ? "cada_bloco"
+            ? regra.module_name
+              ? `cada_bloco:${regra.module_name}`
+              : "cada_bloco"
             : MODULOS_PADRAO.includes(regra.module_name)
               ? `modulo:${regra.module_name}`
               : "modulo:__outro__";
@@ -773,7 +856,8 @@ export async function renderSimuladosPage(container) {
             <option value="total" ${escopoAtual === "total" ? "selected" : ""}>Total da prova</option>
             ${MODULOS_PADRAO.map((m) => `<option value="modulo:${escapeHtml(m)}" ${escopoAtual === `modulo:${m}` ? "selected" : ""}>Módulo: ${escapeHtml(m)}</option>`).join("")}
             <option value="modulo:__outro__" ${escopoAtual === "modulo:__outro__" ? "selected" : ""}>Módulo: outro…</option>
-            <option value="cada_bloco" ${escopoAtual === "cada_bloco" ? "selected" : ""}>Cada bloco (ex.: não zerar nenhum)</option>
+            <option value="cada_bloco" ${escopoAtual === "cada_bloco" ? "selected" : ""}>Cada bloco da prova (ex.: não zerar nenhum)</option>
+            ${MODULOS_PADRAO.map((m) => `<option value="cada_bloco:${escapeHtml(m)}" ${escopoAtual === `cada_bloco:${m}` ? "selected" : ""}>Cada bloco de: ${escapeHtml(m)}</option>`).join("")}
           </select>
           <input type="text" data-c-modulo-outro placeholder="Nome do módulo" style="${escopoAtual === "modulo:__outro__" ? "" : "display:none;"} margin-top:6px;" value="${escopoAtual === "modulo:__outro__" ? escapeHtml(regra?.module_name || "") : ""}" />
         </div>
@@ -891,14 +975,17 @@ export async function renderSimuladosPage(container) {
           let scope, moduleName = null;
           if (escopoRaw === "total") scope = "total";
           else if (escopoRaw === "cada_bloco") scope = "cada_bloco";
-          else {
+          else if (escopoRaw.startsWith("cada_bloco:")) {
+            scope = "cada_bloco";
+            moduleName = escopoRaw.slice("cada_bloco:".length);
+          } else {
             scope = "modulo";
             moduleName = escopoRaw === "modulo:__outro__" ? row.querySelector("[data-c-modulo-outro]").value.trim() : escopoRaw.slice("modulo:".length);
           }
           return { scope, moduleName, kind: row.querySelector("[data-c-unidade]").value, value: Number(row.querySelector("[data-c-valor]").value) };
         });
         for (const r of rules) {
-          if (r.scope === "modulo" && !blocks.some((b) => b.module === r.moduleName)) {
+          if ((r.scope === "modulo" || (r.scope === "cada_bloco" && r.moduleName)) && !blocks.some((b) => b.module === r.moduleName)) {
             tplAlert.innerHTML = `<div class="alert alert--error">O critério aponta pro módulo "${escapeHtml(r.moduleName || "")}", mas nenhum bloco pertence a ele.</div>`;
             return;
           }
@@ -941,13 +1028,16 @@ export async function renderSimuladosPage(container) {
           const blocos = blocksDoModelo(t.id);
           const regras = regrasDoModelo(t.id);
           const totalQ = blocos.reduce((acc, b) => acc + b.questions, 0);
-          const totalPts = blocos.reduce((acc, b) => acc + b.questions * Number(b.weight), 0);
+          const normalizado = t.scoring_mode === "ponderado_normalizado";
+          // Em modo normalizado o máximo é sempre 10, não a soma de questões ×
+          // peso — mostrar "140 pts" num modelo do TJ-CE seria mentira.
+          const totalPts = normalizado ? 10 : blocos.reduce((acc, b) => acc + b.questions * Number(b.weight), 0);
           const nTentativas = attempts.filter((a) => a.template_id === t.id).length;
           return `
             <tr data-tpl-row="${t.id}" style="cursor:pointer;${t.status === "inativo" ? " opacity:0.6;" : ""}">
               <td>${escapeHtml(t.name)}</td>
               <td>${blocos.length} bloco(s) · ${totalQ}q · ${fmtNota(totalPts)} pts${t.duration_minutes ? ` · ${t.duration_minutes} min` : ""}</td>
-              <td class="cel-centro">${t.scoring_mode === "liquido" ? "Líquida" : "Bruta"}</td>
+              <td class="cel-centro">${normalizado ? "Média 0–10" : t.scoring_mode === "liquido" ? "Líquida" : "Bruta"}</td>
               <td class="cel-centro">${nTentativas}</td>
               <td class="cel-centro">
                 <div class="row-actions" style="justify-content:center;">
@@ -959,7 +1049,7 @@ export async function renderSimuladosPage(container) {
             </tr>
             <tr data-tpl-detail="${t.id}" style="display:none;">
               <td colspan="5" style="background:var(--color-bg-subtle, #f5f5f5);">
-                <p style="margin:4px 0; font-size:12px; color:var(--color-text-muted);">${t.duration_minutes ? `Duração: ${t.duration_minutes} min · ` : ""}${t.cutoff_score != null ? `Corte estimado: ${fmtNota(t.cutoff_score)} · ` : ""}${escapeHtml(t.notes || "")}</p>
+                <p style="margin:4px 0; font-size:12px; color:var(--color-text-muted);">${t.duration_minutes ? `Duração: ${t.duration_minutes} min · ` : ""}${t.cutoff_score != null ? `Corte de referência: ${fmtNota(t.cutoff_score)} · ` : ""}${escapeHtml(t.notes || "")}</p>
                 ${regras.length ? `<p style="margin:4px 0;"><strong>Habilitação:</strong> ${regras.map((r) => escapeHtml(descreverRegra(r))).join(" E ")}</p>` : ""}
                 <div style="overflow-x:auto;">
                   <table class="data-table" style="margin:8px 0;">
