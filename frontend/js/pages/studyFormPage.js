@@ -66,7 +66,16 @@ const STUDY_TYPES = [
 // metodologia; um fechamento típico percorre erros de várias disciplinas na
 // mesma sessão, então exigir disciplina única obrigaria a escolher uma
 // arbitrariamente (corrompendo Horas por Disciplina) ou a fatiar em N sessões.
-const STUDY_TYPES_ALLOW_NO_DISCIPLINE = ["caderno_erros", "simulado", "flashcard", "correcao_ativa"];
+// Videoaula (23/09/2026, pedido do usuário): aula que não pertence a uma
+// disciplina do edital — metodologia de estudo, aula introdutória de um
+// concurso novo, painel/legislação avulsa. Trade-off assumido: sessão sem
+// disciplina E sem caderno não entra em Horas por Disciplina nem pode ser
+// atribuída a edital nenhum (v_edital_cobertura navega topico→caderno→sessão).
+// Videoaula já não conta em cobertura em caso algum — a view só soma
+// questao/simulado/discursiva —, então o que se perde aqui é só a atribuição
+// por disciplina. Quando a aula TIVER disciplina clara, escolher a disciplina
+// continua sendo o certo.
+const STUDY_TYPES_ALLOW_NO_DISCIPLINE = ["caderno_erros", "simulado", "flashcard", "correcao_ativa", "videoaula"];
 
 // Tipos que pedem Confiança autodeclarada (28/07/2026, revisão a pedido do
 // usuário). A regra antes era implícita — "exige confiança todo tipo que não
@@ -578,8 +587,9 @@ export async function renderStudyFormPage(container, params) {
     let questionSetId = questionSetSelect.value;
     const boardSelectValue = card.querySelector("#board_id").value;
 
-    // "__nenhuma__" só é selecionável em Caderno de Erros (ver
-    // updateStudyTypeUI) — sem disciplina não existe caderno pra vincular,
+    // "__nenhuma__" só é selecionável nos tipos de
+    // STUDY_TYPES_ALLOW_NO_DISCIPLINE (ver updateStudyTypeUI) — sem
+    // disciplina não existe caderno pra vincular,
     // então força questionSetId junto, ignorando qualquer valor obsoleto que
     // tenha sobrado no <select> escondido de uma disciplina escolhida antes.
     if (disciplineId === "__nenhuma__") {
