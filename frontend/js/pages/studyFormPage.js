@@ -75,7 +75,13 @@ const STUDY_TYPES = [
 // questao/simulado/discursiva —, então o que se perde aqui é só a atribuição
 // por disciplina. Quando a aula TIVER disciplina clara, escolher a disciplina
 // continua sendo o certo.
-const STUDY_TYPES_ALLOW_NO_DISCIPLINE = ["caderno_erros", "simulado", "flashcard", "correcao_ativa", "videoaula"];
+// Revisão (23/09/2026, mesma conversa): revisão que atravessa disciplinas —
+// varredura de véspera, revisão de simulado inteiro, releitura de edital.
+// Mesmo trade-off da Videoaula: revisão também não entra em cobertura
+// (v_edital_cobertura só soma questao/simulado/discursiva), então o custo é
+// só a atribuição por disciplina. Leitura continua EXIGINDO disciplina —
+// decisão pendente do usuário, não esquecimento.
+const STUDY_TYPES_ALLOW_NO_DISCIPLINE = ["caderno_erros", "simulado", "flashcard", "correcao_ativa", "videoaula", "revisao"];
 
 // Tipos que pedem Confiança autodeclarada (28/07/2026, revisão a pedido do
 // usuário). A regra antes era implícita — "exige confiança todo tipo que não
