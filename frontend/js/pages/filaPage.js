@@ -191,24 +191,29 @@ function renderFrentes(box, fr, prod, rit, metaQuestoes) {
         <table class="data-table data-table--fixed" style="min-width:620px;">
           <tr><th>Caderno</th><th style="width:18%;">Disciplina</th><th class="cel-centro" style="width:80px;">Feitas</th><th class="cel-centro" style="width:80px;">Faltam</th><th class="cel-centro" style="width:150px;">Ação</th></tr>
           ${topo.map((c) => linhaFrente(c)).join("")}
+          ${resto.map((c) => linhaFrente(c, true)).join("")}
         </table>
       </div>
       ${resto.length > 0 ? `
-        <button type="button" class="btn-link" id="frentes-mais" style="margin-top:8px;">Ver as outras ${resto.length}</button>
-        <div id="frentes-resto" style="display:none; overflow-x:auto; margin-top:8px;">
-          <table class="data-table data-table--fixed" style="min-width:620px;">
-            ${resto.map((c) => linhaFrente(c)).join("")}
-          </table>
-        </div>` : ""}
+        <button type="button" class="btn-link" id="frentes-mais" style="margin-top:8px;">Ver as outras ${resto.length}</button>` : ""}
     </div>
   `;
 
+  // As linhas extras vivem NA MESMA <table> das primeiras (24/09/2026): antes
+  // ficavam numa segunda tabela sem <th>, e como a classe é data-table--fixed
+  // (table-layout: fixed), a largura das colunas vem da primeira linha — sem
+  // cabeçalho a segunda tabela calculava larguras próprias, desalinhando as
+  // colunas e quebrando "Sinalização (Obras Rodoviárias)" em duas linhas.
+  // Esconder/mostrar <tr> devolvendo display:"" (e não "block", que arruinaria
+  // a linha) preserva o table-row do próprio navegador.
   const btnMais = box.querySelector("#frentes-mais");
   if (btnMais) {
+    const extras = box.querySelectorAll("tr.frente-extra");
     btnMais.addEventListener("click", () => {
-      const d = box.querySelector("#frentes-resto");
-      const abrindo = d.style.display === "none";
-      d.style.display = abrindo ? "block" : "none";
+      const abrindo = extras[0].style.display === "none";
+      extras.forEach((tr) => {
+        tr.style.display = abrindo ? "" : "none";
+      });
       btnMais.textContent = abrindo ? "Recolher" : `Ver as outras ${resto.length}`;
     });
   }
@@ -223,9 +228,9 @@ function renderFrentes(box, fr, prod, rit, metaQuestoes) {
   });
 }
 
-function linhaFrente(c) {
+function linhaFrente(c, extra = false) {
   return `
-    <tr>
+    <tr${extra ? ` class="frente-extra" style="display:none;"` : ""}>
       <td>${escapeHtml(c.cadernoNome)}</td>
       <td style="font-size:12px; color:var(--color-text-muted);">${escapeHtml(c.disciplinaNome)}</td>
       <td class="cel-centro">${c.questoes}</td>
