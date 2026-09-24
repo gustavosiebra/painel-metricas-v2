@@ -159,14 +159,18 @@ export async function renderEditalPage(container) {
     partes.push(n === 0 ? "sem tópicos" : `${n} tópico(s)`);
     return `${e.name} — ${partes.join(" · ")}`;
   };
-  examSelect.innerHTML = exams.map((e) => `<option value="${e.id}">${escapeHtml(rotuloExam(e))}</option>`).join("");
-  // Padrão = concurso que JÁ tem tópicos (o edital em que se está trabalhando).
-  // Empate ou nenhum: cai no primeiro, como antes.
-  const comMaisTopicos = [...exams].sort((a, b) => (topicosPorExam.get(b.id) || 0) - (topicosPorExam.get(a.id) || 0))[0];
-  examId = comMaisTopicos.id;
-  examSelect.value = examId;
+  // Nenhum concurso pré-selecionado (24/09/2026, pedido do usuário). Antes a
+  // tela abria no concurso com mais tópicos, o que virou um problema quando
+  // passaram a existir vários editais ativos: abrir "Edital" e já ver TCE-SP
+  // carregado dá a impressão de que aquele é O edital, e mexer numa aba de
+  // Conteúdo achando que é outro concurso é erro caro de desfazer. Escolha
+  // explícita sempre — a tela abre pedindo qual edital, e só então consulta.
+  examSelect.innerHTML =
+    `<option value="" disabled selected>— Selecione o concurso —</option>` +
+    exams.map((e) => `<option value="${e.id}">${escapeHtml(rotuloExam(e))}</option>`).join("");
+  examId = null;
   examSelect.addEventListener("change", async () => {
-    examId = examSelect.value;
+    examId = examSelect.value || null;
     await carregar();
   });
 
@@ -182,6 +186,16 @@ export async function renderEditalPage(container) {
   await carregar();
 
   async function carregar() {
+    // Sem concurso escolhido não há o que consultar: as três abas pedem a
+    // escolha em vez de mostrarem tabelas vazias (que leriam como "esse edital
+    // não tem nada") ou de dispararem consultas com exam_id nulo.
+    if (!examId) {
+      const aviso = `<div class="card"><p style="color:var(--color-text-muted); margin:0;">Escolha um concurso acima para ver o edital.</p></div>`;
+      tabCobertura.innerHTML = aviso;
+      tabConteudo.innerHTML = aviso;
+      tabCapacidade.innerHTML = aviso;
+      return;
+    }
     try {
       [topicos, vinculos, cobertura] = await Promise.all([listTopics(examId), listVinculos(examId), listCobertura(examId)]);
     } catch (err) {
