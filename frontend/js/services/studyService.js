@@ -76,6 +76,11 @@ export async function createStudySession(payload) {
       wrong_total: payload.wrongTotal ?? 0,
       score: payload.score ?? null,
       score_is_estimate: payload.scoreIsEstimate ?? false,
+      // Benchmark do TEC (15/10/2026, migration 0040). Opcionais: null quando
+      // o caderno não expõe o número ou quando a pessoa não anotou. A view
+      // v_desempenho_relativo simplesmente ignora a sessão nesse caso.
+      peer_correct_pct: payload.peerCorrectPct ?? null,
+      difficulty_pct: payload.difficultyPct ?? null,
     });
     if (resultError) throw resultError;
   }
@@ -125,6 +130,8 @@ export async function updateStudySession(sessionId, payload) {
         wrong_total: payload.wrongTotal ?? 0,
         score: payload.score ?? null,
         score_is_estimate: payload.scoreIsEstimate ?? false,
+        peer_correct_pct: payload.peerCorrectPct ?? null,
+        difficulty_pct: payload.difficultyPct ?? null,
       },
       { onConflict: "session_id" }
     );
@@ -167,7 +174,7 @@ export async function listSessions({ disciplineId, status, limit = 5000 } = {}) 
     let query = supabase
       .from("study_sessions")
       .select(
-        "id, occurred_at, created_at, study_type, duration_minutes, discipline_id, question_set_id, exam_id, board_id, self_confidence, notes, status, session_results(questions_total, correct_total, wrong_total, score, score_is_estimate), study_session_boards(board_id)"
+        "id, occurred_at, created_at, study_type, duration_minutes, discipline_id, question_set_id, exam_id, board_id, self_confidence, notes, status, session_results(questions_total, correct_total, wrong_total, score, score_is_estimate, peer_correct_pct, difficulty_pct), study_session_boards(board_id)"
       )
       // created_at como 2º critério (28/07/2026): occurred_at grava meio-dia
       // local pra todas as sessões do dia (evita o bug de fuso), então

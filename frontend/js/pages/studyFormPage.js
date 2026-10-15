@@ -299,6 +299,15 @@ export async function renderStudyFormPage(container, params) {
             <label for="score">Nota (0–100)</label>
             <input type="number" id="score" min="0" max="100" step="0.01" value="${result?.score ?? ""}" />
           </div>
+          <div class="form-field" id="peer-field" style="display:none;">
+            <label for="peer_correct_pct">Acerto dos demais (%)</label>
+            <input type="number" id="peer_correct_pct" min="0" max="100" step="0.1" value="${result?.peer_correct_pct ?? ""}" />
+            <small style="color:var(--color-text-muted);">Estatísticas do caderno no TEC, com "Apenas Resolvidas" marcado</small>
+          </div>
+          <div class="form-field" id="difficulty-field" style="display:none;">
+            <label for="difficulty_pct">Dificuldade do caderno (%)</label>
+            <input type="number" id="difficulty_pct" min="0" max="100" step="0.1" value="${result?.difficulty_pct ?? ""}" />
+          </div>
         </div>
 
         <div class="form-field">
@@ -342,6 +351,8 @@ export async function renderStudyFormPage(container, params) {
     const studyTypeSelect = card.querySelector("#study_type");
     const measurableFields = card.querySelector("#measurable-fields");
     const scoreField = card.querySelector("#score-field");
+    const peerField = card.querySelector("#peer-field");
+    const difficultyField = card.querySelector("#difficulty-field");
     const questionsTotalInput = card.querySelector("#questions_total");
     const correctTotalInput = card.querySelector("#correct_total");
     const wrongTotalDisplay = card.querySelector("#wrong_total_display");
@@ -508,6 +519,16 @@ export async function renderStudyFormPage(container, params) {
       questionsTotalInput.required = showQuestionCounts;
       correctTotalInput.required = showQuestionCounts;
 
+      // Benchmark do TEC (15/10/2026) — só em Questões e Caderno de Erros.
+      // Simulado fica de fora porque simulado não tem "demais usuários": o
+      // número não existe, e deixar o campo visível convidaria a inventar.
+      // Nunca required: a pessoa pode não ter anotado, e sessão sem benchmark
+      // simplesmente não entra em v_desempenho_relativo (melhor do que zero,
+      // que seria lido como "os outros erraram tudo").
+      const usaBenchmark = ["questao", "caderno_erros"].includes(type);
+      peerField.style.display = usaBenchmark ? "block" : "none";
+      difficultyField.style.display = usaBenchmark ? "block" : "none";
+
       // Confiança: some da tela quando não se aplica ao tipo (ver
       // STUDY_TYPES_WITH_CONFIDENCE). required acompanha a visibilidade —
       // campo required E escondido trava o submit em silêncio (bug já
@@ -615,6 +636,8 @@ export async function renderStudyFormPage(container, params) {
     const questionsTotal = Number(card.querySelector("#questions_total").value || 0);
     const correctTotal = Number(card.querySelector("#correct_total").value || 0);
     const wrongTotal = Math.max(questionsTotal - correctTotal, 0);
+    const peerValue = card.querySelector("#peer_correct_pct").value.trim();
+    const difficultyValue = card.querySelector("#difficulty_pct").value.trim();
 
     const correctTotalInput = card.querySelector("#correct_total");
     if (["questao", "simulado"].includes(studyType) && correctTotal > questionsTotal) {
@@ -783,6 +806,10 @@ export async function renderStudyFormPage(container, params) {
         wrongTotal,
         score: scoreValue ? Number(scoreValue) : null,
         scoreIsEstimate: studyType === "simulado",
+        // Campo vazio vira null, não 0 (ver updateStudyTypeUI): 0 significaria
+        // "os demais acertaram nada", o que distorceria o delta para +70 pp.
+        peerCorrectPct: peerValue === "" ? null : Number(peerValue),
+        difficultyPct: difficultyValue === "" ? null : Number(difficultyValue),
       };
 
       if (editingId) {
