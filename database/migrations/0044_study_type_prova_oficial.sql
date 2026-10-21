@@ -1,0 +1,22 @@
+-- 0044 — Novo valor 'prova_oficial' no enum study_type
+--
+-- POR QUE (21/10/2026):
+-- Provas de concurso efetivamente prestadas estavam gravadas como 'simulado'
+-- por falta de tipo próprio. Consequência medida em 05/10: qualquer agregado
+-- de "simulados" misturava simulados de cursinho com provas reais de bancas e
+-- editais diferentes (450 questões a 56,9% com as duas dentro; 320 a 59,1% só
+-- TCE-SP).
+--
+-- DEFINIÇÃO (decidida pelo usuário em 21/10/2026):
+--   prova_oficial — prova feita de verdade, inscrito, valendo aprovação.
+--   simulado      — feito em casa, não vale nada, apenas simulação.
+--
+-- O critério é a CONDIÇÃO, não a procedência do caderno. Caderno oficial de
+-- banca resolvido fora do certame é simulado: é o caso da prova da Prefeitura
+-- de Santos (IBAM, 21/10), feita sem inscrição, sem fiscalização, em 90 dos
+-- 210 minutos permitidos.
+--
+-- A reclassificação das sessões vai na 0045, porque PostgreSQL não permite
+-- usar um valor de enum na mesma transação em que ele é criado.
+
+alter type public.study_type add value if not exists 'prova_oficial';

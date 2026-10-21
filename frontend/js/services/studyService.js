@@ -16,7 +16,11 @@
 
 import { supabase } from "../supabaseClient.js";
 
-const TYPES_WITH_MEASURABLE_RESULT = ["questao", "simulado", "discursiva", "caderno_erros"];
+// "prova_oficial" (21/10/2026) — prova de concurso efetivamente prestada,
+// inscrito, valendo aprovação. Simulado é o que se faz em casa e não vale
+// nada. O critério é a CONDIÇÃO, não a procedência do caderno: caderno oficial
+// de banca resolvido fora do certame continua sendo simulado.
+const TYPES_WITH_MEASURABLE_RESULT = ["questao", "simulado", "prova_oficial", "discursiva", "caderno_erros"];
 
 export function hasMeasurableResult(studyType) {
   return TYPES_WITH_MEASURABLE_RESULT.includes(studyType);

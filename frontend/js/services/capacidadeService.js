@@ -98,7 +98,7 @@ export async function getRitmo({ nSemanas = 4 } = {}) {
 // questões. Somar as horas de flashcard/leitura/revisão no denominador
 // afundaria a taxa e faria o orçamento de questões parecer muito mais caro do
 // que é — são atividades reais, mas o "custo por questão" não sai delas.
-const TIPOS_COM_QUESTAO = ["questao", "simulado", "discursiva", "caderno_erros"];
+const TIPOS_COM_QUESTAO = ["questao", "simulado", "prova_oficial", "discursiva", "caderno_erros"];
 
 export async function getProdutividade() {
   const { data, error } = await supabase

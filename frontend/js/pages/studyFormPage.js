@@ -46,6 +46,7 @@ const STUDY_TYPES = [
   { value: "discursiva", label: "Discursiva" },
   { value: "flashcard", label: "Flashcard" },
   { value: "leitura", label: "Leitura" },
+  { value: "prova_oficial", label: "Prova Oficial" },
   { value: "questao", label: "Questões" },
   { value: "revisao", label: "Revisão" },
   { value: "simulado", label: "Simulado" },
@@ -81,7 +82,9 @@ const STUDY_TYPES = [
 // (v_edital_cobertura só soma questao/simulado/discursiva), então o custo é
 // só a atribuição por disciplina. Leitura continua EXIGINDO disciplina —
 // decisão pendente do usuário, não esquecimento.
-const STUDY_TYPES_ALLOW_NO_DISCIPLINE = ["caderno_erros", "simulado", "flashcard", "correcao_ativa", "videoaula", "revisao"];
+// Prova Oficial (21/10/2026): mesmo motivo do Simulado — uma prova de concurso
+// cobre o edital inteiro, não uma disciplina.
+const STUDY_TYPES_ALLOW_NO_DISCIPLINE = ["caderno_erros", "simulado", "prova_oficial", "flashcard", "correcao_ativa", "videoaula", "revisao"];
 
 // Tipos que pedem Confiança autodeclarada (28/07/2026, revisão a pedido do
 // usuário). A regra antes era implícita — "exige confiança todo tipo que não
@@ -510,9 +513,9 @@ export async function renderStudyFormPage(container, params) {
       const type = studyTypeSelect.value;
       const measurable = hasMeasurableResult(type);
       measurableFields.style.display = measurable ? "" : "none";
-      scoreField.style.display = ["simulado", "discursiva"].includes(type) ? "block" : "none";
+      scoreField.style.display = ["simulado", "prova_oficial", "discursiva"].includes(type) ? "block" : "none";
 
-      const showQuestionCounts = ["questao", "simulado", "caderno_erros"].includes(type);
+      const showQuestionCounts = ["questao", "simulado", "prova_oficial", "caderno_erros"].includes(type);
       questionsTotalInput.closest(".form-field").style.display = showQuestionCounts ? "block" : "none";
       correctTotalInput.closest(".form-field").style.display = showQuestionCounts ? "block" : "none";
       wrongTotalDisplay.closest(".form-field").style.display = showQuestionCounts ? "block" : "none";

@@ -4,7 +4,7 @@
 
 import { supabase } from "../supabaseClient.js";
 
-const TYPES_WITH_MEASURABLE_RESULT = ["questao", "simulado", "discursiva", "caderno_erros"];
+const TYPES_WITH_MEASURABLE_RESULT = ["questao", "simulado", "prova_oficial", "discursiva", "caderno_erros"];
 
 // 19/07/2026 — helper pra formatar Date como YYYY-MM-DD usando os componentes
 // LOCAIS (getFullYear/getMonth/getDate), nunca .toISOString().slice(0,10).
