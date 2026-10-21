@@ -47,11 +47,59 @@ explicando a decisão por trás da mudança, que o banco não guarda.
 tem o cabeçalho explicativo e é o que vale. A duplicata deve ser apagada —
 a tentativa automática foi barrada pela sincronização do Dropbox.
 
-## Regra a partir daqui
+## Regras a partir daqui
 
-Toda migration aplicada gera o arquivo no mesmo passo. Sem exceção — foi
-justamente pular isso que produziu a divergência.
+As três regras abaixo nasceram de erros reais. Cada uma custou uma correção.
 
-E, desde 30/10/2026, o Supabase não concede mais acesso automático à Data API
-para tabelas novas em `public`. **Toda migration que criar tabela inclui os
-GRANTs na mesma migration** (ver `0042_grants_explicitos_tabelas.sql`).
+### 1. Migration aplicada gera arquivo no mesmo passo
+
+Sem exceção — foi justamente pular isso que produziu a divergência de 43
+arquivos contra 99 migrations descrita acima.
+
+### 2. Migration que cria tabela inclui os GRANTs
+
+Desde 30/10/2026 o Supabase não concede mais acesso automático à Data API para
+tabelas novas em `public`. Sem o GRANT na própria migration, uma reconstrução
+(`supabase db reset`, branch de preview, projeto novo) recria a tabela sem
+permissão e a API devolve "permission denied" em tudo.
+
+Ver `0042_grants_explicitos_tabelas.sql`.
+
+### 3. Toda view carrega `security_invoker` explicitamente
+
+```sql
+create or replace view public.minha_view
+with (security_invoker = true) as
+  select ...;
+```
+
+**`CREATE OR REPLACE VIEW` sem a cláusula `WITH` zera as reloptions da view**,
+e com elas o `security_invoker`. Preserva dependências, GRANTs e COMMENTs —
+mas não as reloptions.
+
+Sem `security_invoker`, a view é avaliada com os privilégios do dono e as
+policies de RLS deixam de ser aplicadas a quem consulta: a view devolve as
+linhas de todos os usuários.
+
+Aconteceu em 21/10/2026. A migration `0046` substituiu 15 views sem o `WITH` e
+derrubou o RLS de todas. O sintoma foi o dashboard quebrar com
+`PGRST116 — JSON object requested, multiple (or no) rows returned`, porque
+`getKpis()` consulta `v_diagnostico_geral` com `.maybeSingle()` e a view, que
+agrupa por `user_id`, passou de 1 linha para 3. Corrigido em
+`0047_restaura_security_invoker_views.sql`.
+
+A mesma investigação revelou que `v_desempenho_relativo`, `_semana` e
+`_disciplina` nunca tiveram `security_invoker` — foram criadas sem a cláusula
+nas migrations `0040` (15/10) e `0041` (20/10), e ficaram seis dias assim. A
+`0047` corrigiu as três junto.
+
+Verificação rápida de que nenhuma view está descoberta:
+
+```sql
+select relname from pg_class c
+join pg_namespace n on n.oid = c.relnamespace
+where n.nspname = 'public' and c.relkind = 'v'
+  and coalesce(array_to_string(c.reloptions, ','), '') not like '%security_invoker=true%';
+```
+
+O resultado esperado é vazio.
