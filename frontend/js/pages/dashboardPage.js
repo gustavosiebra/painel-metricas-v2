@@ -963,6 +963,22 @@ function renderProximaAcao(item) {
   `;
 }
 
+// 21/10/2026 — a coluna Peso NÃO mostra mais o peso_numerico_pct
+// (expected_questions / total de questões do concurso).
+//
+// O número em si estava certo, mas aparecia em 3 de 8 disciplinas, e as 3
+// eram sorteadas: getRankingRisco guarda UMA linha por disciplina entre todos
+// os concursos, mantendo a primeira e só trocando se a nova for 'alto' e a
+// atual não for. Com 7 configurações de concurso no banco, quem ganha depende
+// da ordem das linhas. Resultado: Legislação Específica e Direito
+// Administrativo mostravam % só por serem 'alto' exclusivamente em Curitiba;
+// Edificações, que é a disciplina mais pesada do edital (8 questões, 20%),
+// não mostrava nada, porque a linha da ALECE chegou antes e também era 'alto'.
+//
+// Porcentagem que aparece em algumas linhas e some em outras, por motivo
+// invisível, é pior que porcentagem nenhuma. O campo continua em
+// v_prioridade.peso_numerico_pct e volta quando o Ranking for escopado a um
+// concurso — decisão pendente do usuário.
 function renderRanking(ranking) {
   if (ranking.length === 0) {
     return `<div class="card" style="margin-bottom:24px;"><p style="color:var(--color-text-muted);">Nenhuma disciplina com sessão mensurável ainda.</p></div>`;
@@ -975,7 +991,7 @@ function renderRanking(ranking) {
         <td>${renderBadge(r.classificacao)}</td>
         <td>${formatPct(r.wilsonPct)}</td>
         <td>${r.questoesTotal}</td>
-        <td>${r.weight ? renderPesoBadge(r.weight) : "—"}${r.pesoNumericoPct != null ? ` (${formatPct(r.pesoNumericoPct)})` : ""}</td>
+        <td>${r.weight ? renderPesoBadge(r.weight) : "—"}</td>
       </tr>
     `
     )
