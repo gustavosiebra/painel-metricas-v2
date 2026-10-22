@@ -39,6 +39,29 @@ import { getParam } from "./parameterService.js";
 // O valor exportado abaixo é só o fallback usado antes do parâmetro carregar.
 export const META_QUESTOES_PADRAO = 30;
 
+// Horizonte usado quando o concurso não tem exam_date, ou quando a data já
+// passou (21/10/2026). Não é estimativa de nada — é só um ponto de partida
+// para a tela não abrir vazia. Quando há data, quem manda é semanasAteProva().
+export const HORIZONTE_PADRAO = 26;
+
+// Semanas inteiras entre hoje e a data da prova, arredondando para cima:
+// 46 dias viram 7 semanas, não 6, porque a semana parcial ainda é tempo de
+// estudo. Devolve null quando não há data ou quando a data já passou — nos
+// dois casos a tela cai em HORIZONTE_PADRAO e diz por quê.
+//
+// Comparação em meio-dia local (T12:00:00) de propósito: data pura
+// interpretada como UTC vira o dia anterior em fuso negativo, e o painel
+// inteiro usa componentes locais justamente para não errar o dia.
+export function semanasAteProva(examDate, hoje = new Date()) {
+  if (!examDate) return null;
+  const prova = new Date(examDate + "T12:00:00");
+  if (Number.isNaN(prova.getTime())) return null;
+  const base = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate(), 12, 0, 0);
+  const dias = Math.round((prova - base) / 86400000);
+  if (dias <= 0) return null;
+  return Math.max(1, Math.ceil(dias / 7));
+}
+
 export async function getMetaQuestoes(userId) {
   try {
     const valor = await getParam(userId, "diagnostico_min_n");

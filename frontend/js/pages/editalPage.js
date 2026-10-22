@@ -41,6 +41,8 @@ import {
   getProdutividade,
   calcularCapacidade,
   META_QUESTOES_PADRAO,
+  HORIZONTE_PADRAO,
+  semanasAteProva,
   getMetaQuestoes,
 } from "../services/capacidadeService.js";
 import { getState } from "../state.js";
@@ -121,7 +123,17 @@ export async function renderEditalPage(container) {
   // — renderCapacidade estourava ReferenceError e a aba ficava eternamente em
   // "Carregando…". Declaração de estado tem que vir antes da primeira carga.
   const cap = {
-    horizonte: 26,
+    // 21/10/2026 — o horizonte nasce da DATA DA PROVA do concurso escolhido,
+    // não de um número fixo. Antes era `26` cravado aqui, e a tela anunciava
+    // 587 h disponíveis para Curitiba quando restavam 149: a prova é 06/12 e
+    // faltavam 6,6 semanas, não 26. Orçamento 4x maior que o real não ajuda a
+    // decidir nada — e `exams.exam_date` já estava carregado por listExams(),
+    // só não era lido.
+    // HORIZONTE_PADRAO continua como recurso para concurso sem data cadastrada
+    // ou com data já vencida. O campo segue editável: a data define o ponto de
+    // partida, não prende a simulação de cenário.
+    horizonte: HORIZONTE_PADRAO,
+    horizonteFonte: "padrao", // "prova" | "padrao" | "prova_vencida"
     horasPorSemana: null,
     questoesPorHora: null,
     // Preenchido pelo parâmetro diagnostico_min_n logo após a carga inicial —
@@ -169,8 +181,25 @@ export async function renderEditalPage(container) {
     `<option value="" disabled selected>— Selecione o concurso —</option>` +
     exams.map((e) => `<option value="${e.id}">${escapeHtml(rotuloExam(e))}</option>`).join("");
   examId = null;
+  // Trocar de concurso recalcula o horizonte a partir da data daquela prova.
+  // Edição manual do campo vale enquanto o concurso não muda — trocar de
+  // edital é trocar de contexto, e carregar o horizonte do anterior seria
+  // mais confuso do que preservar a simulação.
+  function aplicarHorizonteDoConcurso() {
+    const exam = exams.find((e) => e.id === examId);
+    const semanas = exam ? semanasAteProva(exam.exam_date) : null;
+    if (semanas != null) {
+      cap.horizonte = semanas;
+      cap.horizonteFonte = "prova";
+    } else {
+      cap.horizonte = HORIZONTE_PADRAO;
+      cap.horizonteFonte = exam?.exam_date ? "prova_vencida" : "padrao";
+    }
+  }
+
   examSelect.addEventListener("change", async () => {
     examId = examSelect.value || null;
+    aplicarHorizonteDoConcurso();
     await carregar();
   });
 
@@ -906,6 +935,21 @@ export async function renderEditalPage(container) {
   }
 
   // ==================== CAPACIDADE ====================
+  // Deixa explícito de onde veio o horizonte. Sem isso o número parece
+  // arbitrado — foi exatamente a dúvida do usuário em 21/10/2026, quando a
+  // tela mostrava 26 semanas para uma prova que estava a 6,6.
+  function horizonteNota() {
+    const exam = exams.find((e) => e.id === examId);
+    const dataFmt = exam?.exam_date ? new Date(exam.exam_date + "T12:00:00").toLocaleDateString("pt-BR") : null;
+    if (cap.horizonteFonte === "prova") {
+      return ` — até a prova de ${dataFmt}`;
+    }
+    if (cap.horizonteFonte === "prova_vencida") {
+      return ` — a prova de ${dataFmt} já passou; valor padrão`;
+    }
+    return " — concurso sem data cadastrada; valor padrão";
+  }
+
   function renderCapacidade() {
     if (cap.horasPorSemana == null) cap.horasPorSemana = ritmo?.horasPorSemana ?? 0;
     if (cap.questoesPorHora == null) cap.questoesPorHora = produtividade?.questoesPorHora ?? 0;
@@ -945,7 +989,7 @@ export async function renderEditalPage(container) {
           <div class="form-field">
             <label>Horizonte (semanas)</label>
             <input type="number" id="cap-horizonte" min="1" max="200" step="1" value="${cap.horizonte}" />
-            <small style="color:var(--color-text-muted);">${(cap.horizonte / 4.345).toFixed(1)} meses</small>
+            <small style="color:var(--color-text-muted);">${(cap.horizonte / 4.345).toFixed(1)} meses${horizonteNota()}</small>
           </div>
           <div class="form-field">
             <label>Horas por semana</label>
