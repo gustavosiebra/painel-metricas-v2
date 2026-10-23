@@ -277,7 +277,18 @@ export async function renderEditalPage(container) {
       porDisciplina.set(k, g);
     }
 
+    const temEsperadas = cobertura.some((c) => c.expectedQuestions != null);
+
     tabCobertura.innerHTML = `
+      ${temEsperadas ? `
+      <div class="card" style="margin-bottom:16px; background:#f0f7ff; border:1px solid #cfe3ff;">
+        <p style="margin:0; font-size:13px;">
+          <strong>Esperadas</strong> é quantas questões daquele tópico a banca tende a cobrar, pela incidência histórica.
+          <strong>Em risco</strong> multiplica esse número pela sua taxa de erro atual — é a fatia de questão que você
+          perderia hoje. Tópico ainda não medido não tem risco calculável e aparece como “—”, que
+          <em>não</em> quer dizer zero. A tabela vem ordenada por risco.
+        </p>
+      </div>` : ""}
       <div class="card" style="margin-bottom:16px;">
         <h3 style="margin-top:0;">Resumo</h3>
         <p style="margin:4px 0;">
@@ -295,13 +306,16 @@ export async function renderEditalPage(container) {
           <h3 style="margin-top:0;">${escapeHtml(disc)} <span style="font-weight:normal; font-size:13px; color:var(--color-text-muted);">— ${g.estudados}/${g.itens.length} tópicos com questões</span></h3>
           <div style="overflow-x:auto;">
             <table class="data-table data-table--fixed" style="min-width:680px;">
-              <tr><th>Tópico</th><th class="cel-centro" style="width:90px;">Cadernos</th><th class="cel-centro" style="width:90px;">Questões</th><th class="cel-centro" style="width:90px;">Wilson</th><th class="cel-centro" style="width:150px;">Situação</th></tr>
-              ${g.itens
+              <tr><th>Tópico</th><th class="cel-centro" style="width:95px;">Esperadas</th><th class="cel-centro" style="width:85px;">Em risco</th><th class="cel-centro" style="width:85px;">Cadernos</th><th class="cel-centro" style="width:85px;">Questões</th><th class="cel-centro" style="width:85px;">Wilson</th><th class="cel-centro" style="width:140px;">Situação</th></tr>
+              ${ordenarItens(g.itens)
                 .map((c) => {
                   const s = SITUACAO[c.situacao] || { label: c.situacao, cor: "var(--color-text-muted)" };
+                  const risco = emRisco(c);
                   return `
                   <tr>
                     <td>${escapeHtml(c.topicoNome)}</td>
+                    <td class="cel-centro">${c.expectedQuestions == null ? "—" : Number(c.expectedQuestions).toFixed(2)}</td>
+                    <td class="cel-centro" style="${risco != null && risco >= 0.3 ? "color:var(--color-error); font-weight:600;" : ""}">${risco == null ? "—" : risco.toFixed(2)}</td>
                     <td class="cel-centro">${c.cadernosVinculados}</td>
                     <td class="cel-centro">${c.questoes}</td>
                     <td class="cel-centro">${formatPct(c.wilson)}</td>
@@ -317,6 +331,38 @@ export async function renderEditalPage(container) {
         )
         .join("")}
     `;
+  }
+
+  // "Em risco" (23/10/2026) — questões esperadas x taxa de erro atual. É a
+  // fatia de questão que o candidato perderia se a prova fosse hoje.
+  //
+  // Usa o Wilson, não o acerto bruto, porque o Wilson já penaliza amostra
+  // pequena: 2 acertos em 2 questões dão 100% bruto e ~34% de Wilson, e tratar
+  // isso como "risco zero" seria o pior erro possível aqui.
+  //
+  // Devolve null quando não há esperadas ou não há medição. Null NÃO é zero —
+  // é "não dá pra calcular", e a tela diz isso em vez de desenhar 0,00, que
+  // leria como "tópico resolvido".
+  function emRisco(c) {
+    if (c.expectedQuestions == null) return null;
+    if (c.wilson == null) return null;
+    return Number(c.expectedQuestions) * (1 - Number(c.wilson) / 100);
+  }
+
+  // Ordena por risco decrescente quando há esperadas gravadas; sem elas,
+  // mantém a ordem do edital (position), que é como o usuário lê o documento.
+  // Tópico sem risco calculável vai para o fim, mas acima dos consolidados
+  // seria mentira — fica no fim mesmo, e o aviso no topo explica.
+  function ordenarItens(itens) {
+    if (!itens.some((c) => c.expectedQuestions != null)) return itens;
+    return [...itens].sort((a, b) => {
+      const ra = emRisco(a);
+      const rb = emRisco(b);
+      if (ra == null && rb == null) return (a.position ?? 0) - (b.position ?? 0);
+      if (ra == null) return 1;
+      if (rb == null) return -1;
+      return rb - ra;
+    });
   }
 
   // ==================== CONTEÚDO ====================

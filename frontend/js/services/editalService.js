@@ -78,7 +78,10 @@ export async function listCobertura(examId) {
     disciplineId: r.discipline_id,
     disciplinaNome: r.disciplina_nome,
     topicoNome: r.topico_nome,
-    expectedQuestions: r.expected_questions,
+    position: r.position,
+    // numeric no banco (migration 0051) — PostgREST devolve string. Converter
+    // aqui evita "0.62" + 1 virar "0.621" lá na frente.
+    expectedQuestions: r.expected_questions == null ? null : Number(r.expected_questions),
     cadernosVinculados: r.cadernos_vinculados,
     questoes: Number(r.questoes || 0),
     acertos: Number(r.acertos || 0),
