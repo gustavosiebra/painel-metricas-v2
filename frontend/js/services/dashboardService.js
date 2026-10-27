@@ -462,7 +462,7 @@ export async function getEstabilidade() {
   const [discResult, cadResult] = await Promise.all([
     supabase
       .from("v_estabilidade_disciplina")
-      .select("discipline_id, disciplina_nome, n_sessoes, questoes_total, pct_acerto_geral, media_sessoes, desvio_padrao, pior_sessao, melhor_sessao, amplitude, amostra_suficiente"),
+      .select("discipline_id, disciplina_nome, n_sessoes, questoes_total, pct_acerto_geral, media_sessoes, desvio_padrao, desvio_acaso, desvio_real, tamanho_medio_sessao, pior_sessao, melhor_sessao, amplitude, amostra_suficiente"),
     supabase
       .from("v_estabilidade_caderno")
       .select("question_set_id, caderno_nome, discipline_id, n_sessoes, media_pct_acerto, desvio_padrao"),
@@ -498,6 +498,13 @@ export async function getEstabilidade() {
         pctGeral: d.pct_acerto_geral == null ? null : Number(d.pct_acerto_geral),
         media: mediaDisc,
         desvio: d.desvio_padrao == null ? null : Number(d.desvio_padrao),
+        // 27/10/2026 — ver migration 0054. desvioAcaso é o que o puro sorteio
+        // binomial produziria dados os tamanhos reais das sessões; desvioReal
+        // é a parte que sobra. Com sessões de 10 questões o acaso sozinho já
+        // gera ~15 pp, então o desvio bruto não distingue oscilação de ruído.
+        desvioAcaso: d.desvio_acaso == null ? null : Number(d.desvio_acaso),
+        desvioReal: d.desvio_real == null ? null : Number(d.desvio_real),
+        tamanhoMedio: d.tamanho_medio_sessao == null ? null : Number(d.tamanho_medio_sessao),
         pior: d.pior_sessao == null ? null : Number(d.pior_sessao),
         melhor: d.melhor_sessao == null ? null : Number(d.melhor_sessao),
         amplitude: d.amplitude == null ? null : Number(d.amplitude),
@@ -505,8 +512,10 @@ export async function getEstabilidade() {
         cadernos,
       };
     })
-    // Mais instável primeiro; sem desvio (1 sessão só) vai pro fim.
-    .sort((a, b) => (b.desvio ?? -1) - (a.desvio ?? -1));
+    // Ordena pela oscilação REAL, não pela bruta (27/10/2026). Pela bruta,
+    // Edificações aparecia acima de Obras Rodoviárias quando a primeira tem
+    // 0,0 de oscilação real e a segunda, 4,8 — o ranking estava invertido.
+    .sort((a, b) => (b.desvioReal ?? -1) - (a.desvioReal ?? -1));
 }
 
 // Retenção em nível de CADERNO (28/07/2026, decidido com o usuário). A versão

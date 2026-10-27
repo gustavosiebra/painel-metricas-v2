@@ -697,25 +697,29 @@ function renderEstabilidade(linhas) {
             <td>${escapeHtml(l.disciplinaNome)}</td>
             <td class="cel-centro">${l.nSessoes}</td>
             <td class="cel-centro">${formatPct(l.pctGeral)}</td>
-            <td colspan="3" style="color:var(--color-text-muted);">Menos de 3 sessões — sem base pra medir oscilação.</td>
+            <td colspan="5" style="color:var(--color-text-muted);">Menos de 3 sessões — sem base pra medir oscilação.</td>
           </tr>
         `;
       }
-      // Faixas escolhidas a partir da distribuição real do usuário (desvios de
-      // 6 a 24 p.p.): acima de 18 é oscilação alta, abaixo de 10 é consistente.
-      const cor = l.desvio >= 18 ? "var(--color-error)" : l.desvio >= 10 ? "#b45309" : "var(--color-success)";
-      const rotulo = l.desvio >= 18 ? "Oscila muito" : l.desvio >= 10 ? "Oscila" : "Consistente";
+      // 27/10/2026 — a classificação passou a usar a oscilação REAL, não o
+      // desvio bruto. Faixas recalibradas sobre a distribuição do desvio real
+      // (0 a 20 p.p.): acima de 12 é oscilação alta, abaixo de 6 é consistente.
+      const real = l.desvioReal ?? 0;
+      const cor = real >= 12 ? "var(--color-error)" : real >= 6 ? "#b45309" : "var(--color-success)";
+      const rotulo = real >= 12 ? "Oscila muito" : real >= 6 ? "Oscila" : "Consistente";
       return `
         <tr data-estab-row="${i}" style="cursor:pointer;">
           <td>${escapeHtml(l.disciplinaNome)}</td>
           <td class="cel-centro">${l.nSessoes}</td>
           <td class="cel-centro">${formatPct(l.pctGeral)}</td>
           <td class="cel-centro">${formatPct(l.pior)} – ${formatPct(l.melhor)}</td>
-          <td class="cel-centro" style="color:${cor}; font-weight:600;">${l.desvio.toFixed(1)}</td>
+          <td class="cel-centro" style="color:var(--color-text-muted);">${l.desvio.toFixed(1)}</td>
+          <td class="cel-centro" style="color:var(--color-text-muted);">${(l.desvioAcaso ?? 0).toFixed(1)}</td>
+          <td class="cel-centro" style="color:${cor}; font-weight:600;">${real.toFixed(1)}</td>
           <td class="cel-centro" style="color:${cor};">${rotulo}</td>
         </tr>
         <tr data-estab-detail="${i}" style="display:none;">
-          <td colspan="6" style="background:var(--color-bg-subtle, #f5f5f5);">
+          <td colspan="8" style="background:var(--color-bg-subtle, #f5f5f5);">
             ${l.cadernos.length === 0
               ? '<p style="margin:4px 0; color:var(--color-text-muted);">Nenhum caderno abaixo da média da disciplina.</p>'
               : `
@@ -746,10 +750,15 @@ function renderEstabilidade(linhas) {
   return `
     <div class="card" style="margin-bottom:24px;">
       <h3 style="margin-top:0;">Estabilidade (o que oscila × o que domino)</h3>
-      <p style="color:var(--color-text-muted); margin-top:0;">Quanto seu acerto varia entre sessões da mesma disciplina. Desvio alto com média baixa é onde há mais ponto a ganhar: você já provou o teto numa sessão boa, então falta consistência, não capacidade. Clique numa linha pra ver quais cadernos puxam a média pra baixo.</p>
+      <p style="color:var(--color-text-muted); margin-top:0;">
+        Sessão pequena oscila sozinha: com 10 questões, o puro acaso já produz desvio de ~15 p.p. mesmo sem nenhuma
+        mudança no seu conhecimento. Por isso a coluna que vale é a <strong>oscilação real</strong> — o desvio observado
+        menos o que o sorteio explica. Quando ela é 0, não há o que corrigir: você já é tão consistente quanto a
+        amostra permite medir. Clique numa linha pra ver quais cadernos puxam a média pra baixo.
+      </p>
       <div style="overflow-x:auto;">
-        <table class="data-table data-table--fixed" style="min-width:720px;">
-          <tr><th>Disciplina</th><th class="cel-centro" style="width:90px;">Sessões</th><th class="cel-centro" style="width:90px;">Acerto</th><th class="cel-centro" style="width:150px;">Pior – Melhor</th><th class="cel-centro" style="width:90px;">Desvio</th><th class="cel-centro" style="width:130px;">Leitura</th></tr>
+        <table class="data-table data-table--fixed" style="min-width:880px;">
+          <tr><th>Disciplina</th><th class="cel-centro" style="width:80px;">Sessões</th><th class="cel-centro" style="width:85px;">Acerto</th><th class="cel-centro" style="width:140px;">Pior – Melhor</th><th class="cel-centro" style="width:85px;">Desvio</th><th class="cel-centro" style="width:85px;">Por acaso</th><th class="cel-centro" style="width:95px;">Oscilação real</th><th class="cel-centro" style="width:120px;">Leitura</th></tr>
           ${rows}
         </table>
       </div>
@@ -810,8 +819,42 @@ function renderJanelaTendenciaDisciplina(linhas) {
 // base de comparação (o maior tem 80 questões), e os 44 apareciam com delta
 // 0,00: a seção inteira era ruído. Agora compara as últimas ~20 questões do
 // caderno com as ~40 anteriores; caderno sem esse histórico não entra.
+// 27/10/2026 — filtro de significância. Medido no acervo: das 9 linhas que o
+// card exibia, SETE tinham delta indistinguível de zero. O problema é
+// estrutural, não de azar: ordenar por delta seleciona justamente as amostras
+// menores, porque é nelas que o acaso produz os extremos. "Propriedades do
+// Concreto" aparecia com −13,3 p.p. comparando 20 questões contra SEIS.
+//
+// Teste: diferença de duas proporções. Mantém a linha só quando
+// |delta| > 1,96 x erro padrão da diferença. O que não passa não é escondido
+// em silêncio — o rodapé diz quantos ficaram de fora e por quê.
+function deltaSignificativo(l) {
+  const n1 = Number(l.questoesRecente || 0);
+  const n0 = Number(l.questoesAnterior || 0);
+  if (n1 < 1 || n0 < 1 || l.pctRecente == null || l.pctAnterior == null) return false;
+  const p1 = Number(l.pctRecente) / 100;
+  const p0 = Number(l.pctAnterior) / 100;
+  const se = Math.sqrt((p1 * (1 - p1)) / n1 + (p0 * (1 - p0)) / n0) * 100;
+  return Math.abs(Number(l.delta)) > 1.96 * se;
+}
+
 function renderJanelaTendenciaCaderno(dados) {
   if (!dados || (dados.subindo.length === 0 && dados.caindo.length === 0)) return "";
+  const brutoSubindo = dados.subindo.length;
+  const brutoCaindo = dados.caindo.length;
+  dados = { subindo: dados.subindo.filter(deltaSignificativo), caindo: dados.caindo.filter(deltaSignificativo) };
+  const omitidos = brutoSubindo + brutoCaindo - dados.subindo.length - dados.caindo.length;
+  if (dados.subindo.length === 0 && dados.caindo.length === 0) {
+    return `
+    <div class="card" style="margin-bottom:24px;">
+      <h3 style="margin-top:0;">Cadernos que mais mudaram (recente vs. anterior)</h3>
+      <p style="color:var(--color-text-muted); margin:0;">
+        Nenhuma mudança se distingue do acaso. ${omitidos} caderno(s) tinham diferença entre as duas levas,
+        mas com o número de questões envolvido essa diferença é compatível com sorteio.
+        Para detectar uma mudança de 15 p.p. com confiança, são necessárias cerca de 40 questões em cada leva.
+      </p>
+    </div>`;
+  }
   // Delta colorido com seta (04/08/2026, pedido do usuário). Mesma convenção
   // já usada na Tendência por Disciplina e no widget de Metas: verde sobe,
   // vermelho cai, cinza neutro. A seta acompanha a cor de propósito — cor
@@ -834,7 +877,11 @@ function renderJanelaTendenciaCaderno(dados) {
   return `
     <div class="card" style="margin-bottom:24px;">
       <h3 style="margin-top:0;">Cadernos que mais mudaram (recente vs. anterior)</h3>
-      <p style="color:var(--color-text-muted); margin-top:0;">Só cadernos que você estudou em mais de uma leva: compara as últimas ~20 questões com as ~40 anteriores. Caderno estudado uma vez só não aparece — não há o que comparar.</p>
+      <p style="color:var(--color-text-muted); margin-top:0;">
+        Compara as últimas ~20 questões do caderno com as ~40 anteriores. Só aparecem as mudanças que
+        <strong>não se explicam por acaso</strong> — diferença maior que o erro amostral das duas levas.
+        ${omitidos > 0 ? `<strong>${omitidos}</strong> caderno(s) tinham delta aparente e ficaram de fora: com o número de questões envolvido, a diferença é compatível com sorteio.` : ""}
+      </p>
       <div style="display:flex; gap:24px; flex-wrap:wrap;">
         <div style="flex:1; min-width:280px; overflow-x:auto;">
           <p style="margin:0 0 4px; color:var(--color-success); font-weight:600;">Maiores avanços</p>
