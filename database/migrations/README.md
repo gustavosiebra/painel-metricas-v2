@@ -40,16 +40,17 @@ conferência: é a fonte, os arquivos são a cópia.
 Arquivos já existentes **não** foram sobrescritos — vários trazem cabeçalho
 explicando a decisão por trás da mudança, que o banco não guarda.
 
-### Pendência
+### Pendência resolvida
 
-`20260913231219_scoring_mode_ponderado_normalizado.sql` é **duplicata** de
-`0039_scoring_mode_ponderado_normalizado.sql`. Mesmo SQL; o arquivo `0039`
-tem o cabeçalho explicativo e é o que vale. A duplicata deve ser apagada —
-a tentativa automática foi barrada pela sincronização do Dropbox.
+`20260913231219_scoring_mode_ponderado_normalizado.sql` era **duplicata** de
+`0039_scoring_mode_ponderado_normalizado.sql`. Mesmo SQL; o arquivo `0039` tem
+o cabeçalho explicativo e é o que vale. A duplicata foi apagada (verificado em
+29/10/2026); a migration segue registrada no banco pelo carimbo
+`20260913231219`.
 
 ## Regras a partir daqui
 
-As três regras abaixo nasceram de erros reais. Cada uma custou uma correção.
+As quatro regras abaixo nasceram de erros reais. Cada uma custou uma correção.
 
 ### 1. Migration aplicada gera arquivo no mesmo passo
 
@@ -103,3 +104,39 @@ where n.nspname = 'public' and c.relkind = 'v'
 ```
 
 O resultado esperado é vazio.
+
+### 4. Valor novo de enum: varrer views **e funções**
+
+Quando entra um valor novo em `study_type` — ou em qualquer enum usado como
+filtro —, a varredura tem de cobrir as duas coisas. Procurar só em `pg_class`
+deixa metade de fora.
+
+```sql
+-- views e matviews que citam o enum
+select c.relname
+from pg_class c
+join pg_namespace n on n.oid = c.relnamespace
+where n.nspname = 'public' and c.relkind in ('v','m')
+  and pg_get_viewdef(c.oid) like '%study_type%';
+
+-- funções e procedures que citam o enum
+select p.proname
+from pg_proc p
+join pg_namespace n on n.oid = p.pronamespace
+where n.nspname = 'public'
+  and p.prosrc like '%study_type%';
+```
+
+Aconteceu em 21/10/2026. A `0045` reclassificou três sessões de `simulado`
+para `prova_oficial`; a `0046` acrescentou o valor novo ao filtro de **15
+views** — e só delas. As funções `media_movel_semanal` e `eficiencia_caderno`
+ficaram para trás por **oito dias**.
+
+O sintoma visível foi a barra da semana de 10 a 16/08 desaparecer da Tendência
+Semanal: a RPC enxergava 38 questões em vez de 108 e caía abaixo do piso de 50
+do parâmetro `tendencia_semanal_min_questoes`. O sintoma invisível era pior —
+as semanas que ficaram acima do piso exibiam percentual mais alto que o real,
+porque as provas oficiais, as medições mais verdadeiras da série, estavam
+fora. Na semana de 03 a 09/08: 69,59% exibido contra 65,87% real.
+
+Corrigido em `0064_funcoes_incluem_prova_oficial.sql`.
