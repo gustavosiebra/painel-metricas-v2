@@ -1,0 +1,9 @@
+-- 0127 - Gabaritos pendentes do caderno e reclassificacao (16/11/2026)
+-- Pedido do usuario: confirmar os gabaritos, classificar corretamente e fazer entrar no calculo.
+-- Fontes: marcador GABARITO PRELIMINAR (quadro verde) nas provas originais FAFIPA, NBR 6122:2022 (acervo do usuario),
+-- Lei 1.100 de Medianeira (art. 8o I e 18), conhecimento tecnico (185).
+-- 102=E (alta) 103=C (alta) 109=C 110=C 115=A (media, preliminar) 185=C (media) 241=D (alta).
+-- 109/110/115: de 2.4 para FORA (regime de pessoal de outro municipio). 185 e 241 ganharam tentativa (acerto).
+-- Resultado: 171-188 -> 18/14/4; 189-250 -> 62/48/14. Segue o mesmo SQL aplicado via apply_migration (DO block com guardas).
+-- Abertos: C013 (Grandes Rios), C167 (Medianeira q38).
+-- (Texto completo do bloco aplicado: ver historico de migrations do Supabase, nome 0127_gabaritos_caderno_pendentes_e_reclassificacao_pessoal.)
